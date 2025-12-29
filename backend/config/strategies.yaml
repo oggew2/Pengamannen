@@ -1,0 +1,161 @@
+# Börslabbet Swedish Strategies Implementation Spec
+# Source: Börslabbet.se public documentation, December 2024
+
+universe:
+  market: "OMX Stockholm"
+  include_large_cap: true
+  include_mid_cap: true
+  include_small_cap: true
+  min_market_cap_msek: 500
+  min_avg_daily_turnover_3m_kr: 100000
+  exclude_etfs: true
+  exclude_preference_shares: true
+  exclude_financials: false
+  currency: "SEK"
+
+strategies:
+  sammansatt_momentum:
+    name: "Sammansatt Momentum"
+    description: "Invests in stocks with highest composite price momentum"
+    type: "momentum"
+    
+    momentum_periods: [3, 6, 12]  # months
+    momentum_weighting: [1, 1, 1]  # equal weight
+    momentum_normalization: "zscore"  # standardize each period
+    
+    quality_filter:
+      type: "piotroski_f_score"
+      min_f_score: 5  # exclude lowest quality
+      
+    rebalance:
+      frequency: "quarterly"
+      months: [3, 6, 9, 12]
+      day_of_month: 31  # end of month
+      
+    portfolio_size: 10
+    position_weighting: "equal"
+    
+    backtest_annual_return_pct: 29.7
+    backtest_sharpe: 1.12
+    backtest_max_drawdown_pct: -50
+    
+  trendande_varde:
+    name: "Trendande Värde"
+    description: "Invests in the cheapest stocks on the market, filtered by momentum"
+    type: "value"
+    
+    valuation_metrics:
+      - "pe"          # Price/Earnings
+      - "pb"          # Price/Book
+      - "ps"          # Price/Sales
+      - "pfcf"        # Price/Free Cash Flow
+      - "ev_ebitda"   # EV/EBITDA
+      - "dividend_yield"
+    
+    valuation_normalization: "zscore"
+    valuation_aggregation: "mean"  # average of standardized scores
+    valuation_direction: "ascending"  # lower is better (cheapest first)
+    
+    momentum_filter:
+      enabled: true
+      periods: [3, 6, 12]
+      min_percentile: 50  # top 50% by momentum among value stocks
+    
+    rebalance:
+      frequency: "annually"
+      month: 3
+      day_of_month: 31
+      
+    portfolio_size: 10
+    position_weighting: "equal"
+    
+    backtest_annual_return_pct: 19.9
+    backtest_sharpe: 0.90
+    backtest_max_drawdown_pct: -54
+    
+  trendande_utdelning:
+    name: "Trendande Utdelning"
+    description: "Invests in stocks with highest dividend yield, filtered by momentum"
+    type: "dividend"
+    
+    dividend_metric: "dividend_yield_ttm"  # TTM = trailing twelve months
+    dividend_normalization: "zscore"
+    dividend_direction: "descending"  # higher is better (highest yield first)
+    
+    dividend_quality_filters:
+      max_payout_ratio: 0.85
+      exclude_recent_cutters: true
+      lookback_years: 3
+    
+    momentum_filter:
+      enabled: true
+      periods: [3, 6, 12]
+      min_percentile: 50
+    
+    rebalance:
+      frequency: "annually"
+      month: 3
+      day_of_month: 31
+      
+    portfolio_size: 10
+    position_weighting: "equal"
+    
+    backtest_annual_return_pct: 23.1
+    backtest_sharpe: 1.05
+    backtest_max_drawdown_pct: -54
+    
+  trendande_kvalitet:
+    name: "Trendande Kvalitet"
+    description: "Invests in high-ROI companies with best momentum (quality + growth)"
+    type: "quality"
+    
+    return_on_investment_metrics:
+      - "roe"    # Return on Equity
+      - "roa"    # Return on Assets
+      - "roic"   # Return on Invested Capital
+      - "fcfroe" # Free Cash Flow Return on Equity
+    
+    roi_normalization: "zscore"
+    roi_aggregation: "mean"
+    roi_direction: "descending"  # higher is better
+    
+    momentum_filter:
+      enabled: true
+      periods: [3, 6, 12]
+      min_percentile: 50
+    
+    rebalance:
+      frequency: "annually"
+      month: 3
+      day_of_month: 31
+      
+    portfolio_size: 10
+    position_weighting: "equal"
+    
+    backtest_annual_return_pct: 22.7
+    backtest_sharpe: 0.96
+    backtest_max_drawdown_pct: -58
+
+portfolio_sverige:
+  name: "Svenska Portföljen"
+  description: "Combined portfolio investing in all four strategies equally"
+  
+  strategies:
+    - sammansatt_momentum
+    - trendande_varde
+    - trendande_utdelning
+    - trendande_kvalitet
+  
+  positions_per_strategy: 10
+  overlap_handling: "double_weight"  # if stock appears in multiple strategies, invest in it twice
+  equal_weighting: true
+  
+  rebalancing:
+    momentum_frequency: "quarterly"
+    momentum_months: [3, 6, 9, 12]
+    trend_strategies_frequency: "annually"
+    trend_strategies_month: 3
+    
+  backtest_annual_return_pct: 25.3
+  backtest_sharpe: 1.13
+  backtest_max_drawdown_pct: -54
