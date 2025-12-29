@@ -15,6 +15,7 @@ export function Navigation() {
           <li><NavLink to="/portfolio/sverige" className={({isActive}) => isActive ? styles.navLinkActive : styles.navLink}>Portfölj</NavLink></li>
           <li><NavLink to="/portfolio/combiner" className={({isActive}) => isActive ? styles.navLinkActive : styles.navLink}>Kombinator</NavLink></li>
           <li><NavLink to="/backtesting" className={({isActive}) => isActive ? styles.navLinkActive : styles.navLink}>Backtest</NavLink></li>
+          <li><NavLink to="/backtesting/historical" className={({isActive}) => isActive ? styles.navLinkActive : styles.navLink}>20+ År</NavLink></li>
         </ul>
       </div>
     </nav>

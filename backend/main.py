@@ -281,6 +281,103 @@ def get_strategy_backtest_results(strategy: str, db: Session = Depends(get_db)):
     return get_backtest_results(db, strategy)
 
 
+@app.post("/backtesting/historical")
+def run_historical_backtest_endpoint(
+    strategy_name: str,
+    start_year: int = 2005,
+    end_year: int = 2024,
+    use_synthetic: bool = True,
+    db: Session = Depends(get_db)
+):
+    """
+    Run long-term historical backtest (e.g., 20 years).
+    
+    Args:
+        strategy_name: Strategy to backtest
+        start_year: Start year (default 2005)
+        end_year: End year (default 2024)
+        use_synthetic: Use synthetic data if real data unavailable
+    """
+    from backend.services.historical_backtest import run_historical_backtest, generate_synthetic_history
+    from backend.services.eodhd_fetcher import get_omx_stockholm_stocks
+    
+    logger.info(f"POST /backtesting/historical: {strategy_name} {start_year}-{end_year}")
+    
+    strategies = STRATEGIES_CONFIG.get("strategies", {})
+    if strategy_name not in strategies:
+        raise HTTPException(status_code=404, detail=f"Strategy '{strategy_name}' not found")
+    
+    start_date = date(start_year, 1, 1)
+    end_date = date(end_year, 12, 31)
+    
+    # Try to get real data first
+    prices = db.query(DailyPrice).filter(
+        DailyPrice.date >= start_date,
+        DailyPrice.date <= end_date
+    ).all()
+    
+    if prices and len(prices) > 1000:
+        # Use real data
+        prices_df = pd.DataFrame([{
+            'ticker': p.ticker, 'date': p.date, 'close': p.close
+        } for p in prices])
+        
+        fundamentals = db.query(Fundamentals).all()
+        fund_df = pd.DataFrame([{
+            'ticker': f.ticker, 'fiscal_date': f.fiscal_date,
+            'pe': f.pe, 'pb': f.pb, 'ps': f.ps, 'ev_ebitda': f.ev_ebitda,
+            'roe': f.roe, 'roa': f.roa, 'roic': f.roic, 'fcfroe': f.fcfroe,
+            'dividend_yield': f.dividend_yield, 'payout_ratio': f.payout_ratio
+        } for f in fundamentals]) if fundamentals else pd.DataFrame()
+        
+        data_source = "real"
+    elif use_synthetic:
+        # Generate synthetic data
+        tickers = [t[0] for t in get_omx_stockholm_stocks()[:30]]
+        prices_df, fund_df = generate_synthetic_history(tickers, start_date, end_date)
+        data_source = "synthetic"
+    else:
+        raise HTTPException(status_code=400, detail="Insufficient real data and synthetic data disabled")
+    
+    result = run_historical_backtest(
+        strategy_name,
+        strategies[strategy_name],
+        start_date,
+        end_date,
+        prices_df,
+        fund_df
+    )
+    
+    result['data_source'] = data_source
+    return result
+
+
+@app.post("/backtesting/historical/compare")
+def compare_all_strategies_historical(
+    start_year: int = 2005,
+    end_year: int = 2024,
+    db: Session = Depends(get_db)
+):
+    """Compare all strategies over a long historical period."""
+    from backend.services.historical_backtest import run_all_strategies_backtest, generate_synthetic_history
+    from backend.services.eodhd_fetcher import get_omx_stockholm_stocks
+    
+    logger.info(f"POST /backtesting/historical/compare: {start_year}-{end_year}")
+    
+    start_date = date(start_year, 1, 1)
+    end_date = date(end_year, 12, 31)
+    
+    # Generate synthetic data for comparison
+    tickers = [t[0] for t in get_omx_stockholm_stocks()[:30]]
+    prices_df, fund_df = generate_synthetic_history(tickers, start_date, end_date)
+    
+    strategies = STRATEGIES_CONFIG.get("strategies", {})
+    
+    return run_all_strategies_backtest(
+        start_date, end_date, strategies, prices_df, fund_df
+    )
+
+
 # Data Sync
 @app.get("/data/sync-status", response_model=SyncStatus)
 def get_data_sync_status(db: Session = Depends(get_db)):
