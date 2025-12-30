@@ -83,7 +83,7 @@ def check_data_freshness(db, max_age_days: int = 7) -> dict:
     Returns:
         Dict with freshness status and details
     """
-    from backend.models import DailyPrice, Fundamentals
+    from models import DailyPrice, Fundamentals
     
     today = date.today()
     cutoff = today - timedelta(days=max_age_days)

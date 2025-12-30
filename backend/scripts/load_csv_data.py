@@ -12,9 +12,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from backend.db import SessionLocal, engine, Base
-from backend.models import Stock, DailyPrice, Fundamentals
-from backend.services.data_fetcher import load_stocks_csv, load_prices_csv, load_fundamentals_csv
+from db import SessionLocal, engine, Base
+from models import Stock, DailyPrice, Fundamentals
+from services.data_fetcher import load_stocks_csv, load_prices_csv, load_fundamentals_csv
 
 def load_all():
     Base.metadata.create_all(bind=engine)

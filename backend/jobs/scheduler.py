@@ -6,9 +6,9 @@ from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from backend.config.settings import get_settings
-from backend.db import SessionLocal
-from backend.services.eodhd_fetcher import sync_all_stocks
+from config.settings import get_settings
+from db import SessionLocal
+from services.optimized_yfinance import optimized_sync_with_guarantee
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ def sync_job(full_refresh: bool = False):
     logger.info(f"Starting scheduled sync (full_refresh={full_refresh})")
     db = SessionLocal()
     try:
-        result = sync_all_stocks(settings.eodhd_api_key, db, full_refresh=full_refresh)
+        result = optimized_sync_with_guarantee(db, region="sweden", market_cap="large")
         logger.info(f"Sync complete: {result}")
     except Exception as e:
         logger.error(f"Sync failed: {e}")

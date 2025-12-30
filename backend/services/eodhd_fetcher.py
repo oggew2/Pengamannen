@@ -222,7 +222,7 @@ def sync_all_stocks(api_key: str, db, full_refresh: bool = False) -> dict:
     Returns:
         Dict with sync statistics
     """
-    from backend.models import Stock, DailyPrice, Fundamentals
+    from models import Stock, DailyPrice, Fundamentals
     
     stocks = get_omx_stockholm_stocks()
     
@@ -350,7 +350,7 @@ def get_historical_prices(ticker: str, db, start_date: date, end_date: date) -> 
     Returns:
         DataFrame with columns [date, open, high, low, close, volume]
     """
-    from backend.models import DailyPrice
+    from models import DailyPrice
     
     prices = db.query(DailyPrice).filter(
         DailyPrice.ticker == ticker,
@@ -373,7 +373,7 @@ def get_historical_prices(ticker: str, db, start_date: date, end_date: date) -> 
 
 def get_sync_status(db) -> dict:
     """Get current sync status from database."""
-    from backend.models import Stock, DailyPrice, Fundamentals
+    from models import Stock, DailyPrice, Fundamentals
     
     stock_count = db.query(Stock).count()
     price_count = db.query(DailyPrice).count()

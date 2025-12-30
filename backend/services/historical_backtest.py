@@ -96,7 +96,7 @@ def run_historical_backtest(
     Returns:
         Comprehensive backtest results
     """
-    from backend.services.ranking import (
+    from services.ranking import (
         calculate_momentum_score, calculate_piotroski_f_score,
         calculate_value_score, calculate_dividend_score, calculate_quality_score
     )

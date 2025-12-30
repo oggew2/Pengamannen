@@ -30,6 +30,9 @@ class RankedStock(BaseModel):
     name: Optional[str] = None
     rank: int
     score: float
+    last_updated: Optional[str] = None
+    data_age_days: Optional[int] = None
+    freshness: Optional[str] = None  # "fresh", "stale", "very_stale", "no_data"
 
 class StrategyMeta(BaseModel):
     name: str

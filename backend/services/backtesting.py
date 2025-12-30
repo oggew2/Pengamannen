@@ -157,8 +157,8 @@ def backtest_strategy(
     Returns:
         Dict with backtest results including equity_curve, monthly_returns, metrics
     """
-    from backend.models import DailyPrice, Fundamentals
-    from backend.services.ranking import (
+    from models import DailyPrice, Fundamentals
+    from services.ranking import (
         calculate_momentum_score, calculate_value_score,
         calculate_dividend_score, calculate_quality_score,
         rank_and_select_top_n
@@ -304,7 +304,7 @@ def backtest_strategy(
 
 def save_backtest_result(db, result: dict):
     """Save backtest result to database."""
-    from backend.models import BacktestResult
+    from models import BacktestResult
     from datetime import datetime
     
     bt = BacktestResult(
@@ -333,7 +333,7 @@ def get_backtest_results(db, strategy_name: str = None) -> list[dict]:
     Returns:
         List of backtest results sorted by date DESC
     """
-    from backend.models import BacktestResult
+    from models import BacktestResult
     
     query = db.query(BacktestResult)
     if strategy_name:

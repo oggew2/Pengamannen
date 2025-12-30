@@ -1,294 +1,358 @@
 """
-Ranking service - strategy scoring functions for Börslabbet strategies.
-Based on strategies.yaml configuration.
+Ranking service - Börslabbet strategy scoring functions.
 
-Börslabbet Strategy Rules (Verified 2024-2025):
-- Sammansatt Momentum: Quarterly, momentum 3/6/12m, F-Score >= 4
-- Trendande Värde: Annual (Jan), P/E + P/B + P/S + EV/EBITDA (lower = better)
-- Trendande Utdelning: Annual (Feb), dividend yield, filters for sustainability
-- Trendande Kvalitet: Annual (Mar), ROIC + momentum, quality filters
+Verified Strategy Rules (from börslabbet.se/borslabbets-strategier):
+- Universe: Top 40% by market cap (for liquidity)
+- Piotroski F-Score: 0-9 scale quality filter
+- All strategies use percentile-based filtering
 """
 import pandas as pd
 import numpy as np
-from scipy import stats
 
 
-def calculate_momentum_score(
-    prices_df: pd.DataFrame,
-    periods: list[int] = [3, 6, 12],
-    weights: list[float] = [0.33, 0.33, 0.34]
-) -> pd.Series:
+def filter_by_market_cap(fund_df: pd.DataFrame, percentile: float = 40) -> pd.DataFrame:
     """
-    Calculate composite momentum score per Börslabbet rules.
+    Filter to top N% of stocks by market cap.
+    Börslabbet uses top 40% for liquidity.
+    """
+    if fund_df.empty or 'market_cap' not in fund_df.columns:
+        return fund_df
     
-    Weights: 3m (33%), 6m (33%), 12m (34%)
-    Normalization: z-score
-    """
+    threshold = fund_df['market_cap'].quantile(1 - percentile / 100)
+    return fund_df[fund_df['market_cap'] >= threshold]
+
+
+def calculate_momentum_score(prices_df: pd.DataFrame) -> pd.Series:
+    """Sammansatt Momentum: average of 3m, 6m, 12m price returns."""
     if prices_df.empty:
         return pd.Series(dtype=float)
     
     latest = prices_df.groupby('ticker')['date'].max()
-    momentum_scores = pd.DataFrame(index=latest.index)
+    scores = pd.DataFrame(index=latest.index)
     
-    for period in periods:
-        days = period * 21  # Trading days per month
+    for period in [3, 6, 12]:
+        days = period * 21
         returns = []
         for ticker in latest.index:
-            ticker_prices = prices_df[prices_df['ticker'] == ticker].sort_values('date')
-            if len(ticker_prices) >= days:
-                current = ticker_prices['close'].iloc[-1]
-                past = ticker_prices['close'].iloc[-days]
-                returns.append((current - past) / past if past != 0 else 0)
+            tp = prices_df[prices_df['ticker'] == ticker].sort_values('date')
+            if len(tp) >= days:
+                returns.append(tp['close'].iloc[-1] / tp['close'].iloc[-days] - 1)
             else:
                 returns.append(np.nan)
-        momentum_scores[f'mom_{period}m'] = returns
+        scores[f'm{period}'] = returns
     
-    # Z-score normalize each period
-    for col in momentum_scores.columns:
-        valid = momentum_scores[col].dropna()
-        if len(valid) > 1:
-            momentum_scores[col] = (momentum_scores[col] - valid.mean()) / valid.std()
-    
-    # Weighted average
-    composite = sum(
-        momentum_scores.iloc[:, i].fillna(0) * weights[i] 
-        for i in range(min(len(periods), len(weights)))
-    )
-    
-    return composite
+    return scores.mean(axis=1)
 
 
-def calculate_piotroski_f_score(fundamentals_df: pd.DataFrame) -> pd.Series:
+def calculate_piotroski_f_score(fund_df: pd.DataFrame, prev_fund_df: pd.DataFrame = None) -> pd.Series:
     """
-    Calculate Piotroski F-Score (simplified 0-4 scale for available data).
+    Full Piotroski F-Score (0-9 scale).
     
-    Original F-Score is 0-9, we use 4 criteria:
-    1. Positive ROA (profitability)
-    2. Positive operating cash flow (FCF > 0)
-    3. ROA above median (improving)
-    4. Cash flow > Net Income (quality of earnings: fcfroe > roe)
+    Profitability (4 points):
+    1. ROA > 0
+    2. Operating Cash Flow > 0
+    3. ROA improving (vs prior year)
+    4. Cash Flow > Net Income (accruals)
     
-    Börslabbet requires F-Score >= 4 (original scale), 
-    which maps to >= 2 on our 0-4 scale.
+    Leverage/Liquidity (3 points):
+    5. Long-term debt ratio decreasing
+    6. Current ratio improving
+    7. No new shares issued (dilution)
+    
+    Operating Efficiency (2 points):
+    8. Gross margin improving
+    9. Asset turnover improving
     """
-    if fundamentals_df.empty:
+    if fund_df.empty:
         return pd.Series(dtype=float)
     
-    df = fundamentals_df.set_index('ticker')
+    df = fund_df.set_index('ticker')
     score = pd.Series(0, index=df.index)
     
+    # === Profitability (4 points) ===
     # 1. Positive ROA
     if 'roa' in df.columns:
         score += (df['roa'].fillna(0) > 0).astype(int)
     
-    # 2. Positive FCF (approximated by fcfroe)
-    if 'fcfroe' in df.columns:
+    # 2. Positive Operating Cash Flow
+    if 'operating_cf' in df.columns:
+        score += (df['operating_cf'].fillna(0) > 0).astype(int)
+    elif 'fcfroe' in df.columns:
         score += (df['fcfroe'].fillna(0) > 0).astype(int)
     
-    # 3. ROA above median (improving profitability proxy)
-    if 'roa' in df.columns:
+    # 3. ROA improving (compare to prior year if available)
+    if prev_fund_df is not None and 'roa' in df.columns:
+        prev = prev_fund_df.set_index('ticker')
+        if 'roa' in prev.columns:
+            common = df.index.intersection(prev.index)
+            improving = df.loc[common, 'roa'] > prev.loc[common, 'roa']
+            score.loc[common] += improving.astype(int)
+    elif 'roa' in df.columns:
         score += (df['roa'].fillna(0) > df['roa'].median()).astype(int)
     
-    # 4. Quality of earnings: cash flow > accruals
-    if 'fcfroe' in df.columns and 'roe' in df.columns:
+    # 4. Cash Flow > Net Income (quality of earnings)
+    if 'operating_cf' in df.columns and 'net_income' in df.columns:
+        score += (df['operating_cf'].fillna(0) > df['net_income'].fillna(0)).astype(int)
+    elif 'fcfroe' in df.columns and 'roe' in df.columns:
         score += (df['fcfroe'].fillna(0) > df['roe'].fillna(0)).astype(int)
+    
+    # === Leverage/Liquidity (3 points) ===
+    # 5. Long-term debt ratio decreasing
+    if prev_fund_df is not None and 'long_term_debt' in df.columns and 'total_assets' in df.columns:
+        prev = prev_fund_df.set_index('ticker')
+        if 'long_term_debt' in prev.columns and 'total_assets' in prev.columns:
+            curr_ratio = df['long_term_debt'] / df['total_assets'].replace(0, np.nan)
+            prev_ratio = prev['long_term_debt'] / prev['total_assets'].replace(0, np.nan)
+            common = df.index.intersection(prev.index)
+            decreasing = curr_ratio.loc[common] < prev_ratio.loc[common]
+            score.loc[common] += decreasing.fillna(False).astype(int)
+    else:
+        score += 1  # Give benefit of doubt if no data
+    
+    # 6. Current ratio improving
+    if prev_fund_df is not None and 'current_ratio' in df.columns:
+        prev = prev_fund_df.set_index('ticker')
+        if 'current_ratio' in prev.columns:
+            common = df.index.intersection(prev.index)
+            improving = df.loc[common, 'current_ratio'] > prev.loc[common, 'current_ratio']
+            score.loc[common] += improving.fillna(False).astype(int)
+    elif 'current_ratio' in df.columns:
+        score += (df['current_ratio'].fillna(0) > 1).astype(int)
+    
+    # 7. No dilution (shares outstanding not increased)
+    if prev_fund_df is not None and 'shares_outstanding' in df.columns:
+        prev = prev_fund_df.set_index('ticker')
+        if 'shares_outstanding' in prev.columns:
+            common = df.index.intersection(prev.index)
+            no_dilution = df.loc[common, 'shares_outstanding'] <= prev.loc[common, 'shares_outstanding']
+            score.loc[common] += no_dilution.fillna(True).astype(int)
+    else:
+        score += 1
+    
+    # === Operating Efficiency (2 points) ===
+    # 8. Gross margin improving
+    if prev_fund_df is not None and 'gross_margin' in df.columns:
+        prev = prev_fund_df.set_index('ticker')
+        if 'gross_margin' in prev.columns:
+            common = df.index.intersection(prev.index)
+            improving = df.loc[common, 'gross_margin'] > prev.loc[common, 'gross_margin']
+            score.loc[common] += improving.fillna(False).astype(int)
+    elif 'gross_margin' in df.columns:
+        score += (df['gross_margin'].fillna(0) > df['gross_margin'].median()).astype(int)
+    
+    # 9. Asset turnover improving
+    if prev_fund_df is not None and 'asset_turnover' in df.columns:
+        prev = prev_fund_df.set_index('ticker')
+        if 'asset_turnover' in prev.columns:
+            common = df.index.intersection(prev.index)
+            improving = df.loc[common, 'asset_turnover'] > prev.loc[common, 'asset_turnover']
+            score.loc[common] += improving.fillna(False).astype(int)
+    elif 'asset_turnover' in df.columns:
+        score += (df['asset_turnover'].fillna(0) > df['asset_turnover'].median()).astype(int)
     
     return score
 
 
+def apply_banding(current_holdings: list, new_rankings: pd.DataFrame, top_pct: float = 10, sell_threshold_pct: float = 20) -> pd.DataFrame:
+    """
+    Apply banding logic for momentum rebalancing.
+    Only sell if stock drops out of top sell_threshold_pct%.
+    
+    Args:
+        current_holdings: List of currently held tickers
+        new_rankings: DataFrame with ticker, rank, score
+        top_pct: Top percentage to buy new stocks from (default 10%)
+        sell_threshold_pct: Only sell if stock drops below this percentile (default 20%)
+    """
+    if new_rankings.empty:
+        return new_rankings
+    
+    total_stocks = len(new_rankings)
+    top_n = max(1, int(total_stocks * top_pct / 100))
+    sell_threshold = max(1, int(total_stocks * sell_threshold_pct / 100))
+    
+    # Keep current holdings if still in top sell_threshold_pct
+    keep = []
+    for ticker in current_holdings:
+        if ticker in new_rankings['ticker'].values:
+            rank = new_rankings[new_rankings['ticker'] == ticker]['rank'].iloc[0]
+            if rank <= sell_threshold:
+                keep.append(ticker)
+    
+    # Fill remaining slots from top_n
+    slots_available = 10 - len(keep)
+    new_buys = new_rankings[~new_rankings['ticker'].isin(keep)].head(slots_available)
+    
+    # Combine
+    keep_df = new_rankings[new_rankings['ticker'].isin(keep)]
+    result = pd.concat([keep_df, new_buys]).head(10)
+    result['rank'] = range(1, len(result) + 1)
+    
+    return result
+
+
+def _filter_top_percentile(scores: pd.Series, percentile: float = 10) -> pd.Index:
+    """Keep top N% of stocks by score."""
+    n = max(1, int(len(scores) * percentile / 100))
+    return scores.nlargest(n).index
+
+
 def calculate_momentum_with_quality_filter(
-    prices_df: pd.DataFrame,
-    fundamentals_df: pd.DataFrame,
-    min_f_score: int = 2
+    prices_df: pd.DataFrame, 
+    fund_df: pd.DataFrame,
+    prev_fund_df: pd.DataFrame = None,
+    current_holdings: list = None
 ) -> pd.DataFrame:
     """
-    Sammansatt Momentum strategy with Piotroski F-Score filter.
+    Sammansatt Momentum strategy with full Piotroski filter.
     
-    Börslabbet rules:
-    - Composite momentum (3m, 6m, 12m equally weighted)
-    - Filter: F-Score >= 4 (original) = >= 2 (our simplified scale)
-    - Select top 10
-    - Rebalance quarterly
+    Step 1: Filter to top 40% by market cap
+    Step 2: Calculate momentum (avg 3m, 6m, 12m)
+    Step 3: Remove stocks with F-Score <= 3 (bottom quality)
+    Step 4: Apply banding if current holdings provided
+    Step 5: Select top 10 by momentum
     """
-    momentum = calculate_momentum_score(prices_df)
-    f_scores = calculate_piotroski_f_score(fundamentals_df)
+    # Market cap filter
+    filtered_fund = filter_by_market_cap(fund_df, 40)
+    valid_tickers = set(filtered_fund['ticker'].values) if not filtered_fund.empty else None
     
-    # Filter by F-Score
-    valid_tickers = f_scores[f_scores >= min_f_score].index
-    filtered_momentum = momentum[momentum.index.isin(valid_tickers)]
+    # Filter prices to valid tickers
+    if valid_tickers:
+        prices_filtered = prices_df[prices_df['ticker'].isin(valid_tickers)]
+    else:
+        prices_filtered = prices_df
     
-    if filtered_momentum.empty:
-        # Fallback: return top momentum without filter if no stocks pass
-        filtered_momentum = momentum
+    momentum = calculate_momentum_score(prices_filtered)
+    f_scores = calculate_piotroski_f_score(filtered_fund, prev_fund_df)
     
-    # Rank and return top 10
-    ranked = filtered_momentum.sort_values(ascending=False).head(10)
-    return pd.DataFrame({
+    # Remove stocks with F-Score <= 3 (out of 9)
+    if not f_scores.empty:
+        valid = f_scores[f_scores > 3].index
+        filtered = momentum[momentum.index.isin(valid)]
+    else:
+        filtered = momentum
+    
+    if filtered.empty:
+        filtered = momentum
+    
+    # Create rankings
+    ranked = filtered.sort_values(ascending=False)
+    rankings = pd.DataFrame({
         'ticker': ranked.index,
         'rank': range(1, len(ranked) + 1),
         'score': ranked.values
     })
-
-
-def calculate_value_score(fundamentals_df: pd.DataFrame) -> pd.Series:
-    """
-    Trendande Värde strategy - cheapest stocks by multiples.
     
-    Börslabbet rules:
-    - Metrics: P/E, P/B, P/S, EV/EBITDA (equal weight 25% each)
-    - Lower multiple = better (inverse ranking)
-    - Z-score normalization
-    - Select top 10
-    - Rebalance annually (January)
-    """
-    if fundamentals_df.empty:
-        return pd.Series(dtype=float)
-    
-    # Per Börslabbet: only these 4 metrics
-    metrics = ['pe', 'pb', 'ps', 'ev_ebitda']
-    df = fundamentals_df.set_index('ticker')
-    
-    scores = pd.DataFrame(index=df.index)
-    for metric in metrics:
-        if metric in df.columns:
-            valid = df[metric].dropna()
-            if len(valid) > 1:
-                # Invert: lower valuation = higher score
-                z = (df[metric].fillna(valid.median()) - valid.mean()) / valid.std()
-                scores[metric] = -z  # Negative because lower is better
-    
-    if scores.empty:
-        return pd.Series(dtype=float)
-    
-    # Equal weight average
-    return scores.mean(axis=1)
-
-
-def calculate_dividend_score(fundamentals_df: pd.DataFrame) -> pd.Series:
-    """
-    Trendande Utdelning strategy - high sustainable dividends.
-    
-    Börslabbet rules:
-    - Primary metric: dividend_yield (higher = better)
-    - CRITICAL FILTERS:
-      * payout_ratio < 100% (sustainable)
-      * ROE > 5% (profitable)
-      * dividend_yield > 1.5% (meaningful)
-    - Select top 10
-    - Rebalance annually (February)
-    """
-    if fundamentals_df.empty:
-        return pd.Series(dtype=float)
-    
-    df = fundamentals_df.set_index('ticker').copy()
-    
-    if 'dividend_yield' not in df.columns:
-        return pd.Series(dtype=float)
-    
-    # Apply sustainability filters
-    mask = pd.Series(True, index=df.index)
-    
-    # Filter 1: Payout ratio < 100%
-    if 'payout_ratio' in df.columns:
-        mask &= (df['payout_ratio'].fillna(0) < 1.0)
-    
-    # Filter 2: ROE > 5%
-    if 'roe' in df.columns:
-        mask &= (df['roe'].fillna(0) > 0.05)
-    
-    # Filter 3: Dividend yield > 1.5%
-    mask &= (df['dividend_yield'].fillna(0) > 0.015)
-    
-    filtered = df[mask]
-    if filtered.empty:
-        return pd.Series(dtype=float)
-    
-    # Rank by dividend yield (higher = better)
-    return filtered['dividend_yield']
-
-
-def calculate_quality_score(fundamentals_df: pd.DataFrame, prices_df: pd.DataFrame = None) -> pd.Series:
-    """
-    Trendande Kvalitet strategy - profitable growth stocks.
-    
-    Börslabbet rules:
-    - Primary: ROIC (50% weight), fallback to ROE
-    - Secondary: Momentum composite (50% weight)
-    - FILTERS:
-      * ROIC > 10% OR ROE > 15%
-    - Select top 10
-    - Rebalance annually (March)
-    """
-    if fundamentals_df.empty:
-        return pd.Series(dtype=float)
-    
-    df = fundamentals_df.set_index('ticker').copy()
-    
-    # Quality filter: ROIC > 10% OR ROE > 15%
-    mask = pd.Series(False, index=df.index)
-    if 'roic' in df.columns:
-        mask |= (df['roic'].fillna(0) > 0.10)
-    if 'roe' in df.columns:
-        mask |= (df['roe'].fillna(0) > 0.15)
-    
-    filtered = df[mask]
-    if filtered.empty:
-        return pd.Series(dtype=float)
-    
-    # Primary score: ROIC (or ROE as fallback)
-    if 'roic' in filtered.columns and filtered['roic'].notna().any():
-        valid = filtered['roic'].dropna()
-        if len(valid) > 1:
-            quality_score = (filtered['roic'].fillna(valid.median()) - valid.mean()) / valid.std()
-        else:
-            quality_score = pd.Series(0.0, index=filtered.index)
-    elif 'roe' in filtered.columns:
-        valid = filtered['roe'].dropna()
-        if len(valid) > 1:
-            quality_score = (filtered['roe'].fillna(valid.median()) - valid.mean()) / valid.std()
-        else:
-            quality_score = pd.Series(0.0, index=filtered.index)
+    # Apply banding if current holdings provided
+    if current_holdings:
+        rankings = apply_banding(current_holdings, rankings)
     else:
-        quality_score = pd.Series(0.0, index=filtered.index)
+        rankings = rankings.head(10)
     
-    # Combine with momentum (50/50) if prices available
+    return rankings
+
+
+def calculate_value_score(fund_df: pd.DataFrame, prices_df: pd.DataFrame = None) -> pd.DataFrame:
+    """
+    Trendande Värde: 6-factor Sammansatt Värde.
+    Now includes P/FCF metric.
+    """
+    if fund_df.empty:
+        return pd.DataFrame(columns=['ticker', 'rank', 'score'])
+    
+    # Market cap filter
+    filtered = filter_by_market_cap(fund_df, 40)
+    if filtered.empty:
+        filtered = fund_df
+    
+    df = filtered.set_index('ticker')
+    ranks = pd.DataFrame(index=df.index)
+    
+    # Lower = better
+    for col in ['pe', 'pb', 'ps', 'p_fcf', 'ev_ebitda']:
+        if col in df.columns:
+            ranks[col] = df[col].rank(ascending=True, na_option='bottom')
+    
+    # Higher = better
+    if 'dividend_yield' in df.columns:
+        ranks['dividend_yield'] = df['dividend_yield'].rank(ascending=False, na_option='bottom')
+    
+    if ranks.empty:
+        return pd.DataFrame(columns=['ticker', 'rank', 'score'])
+    
+    value_score = ranks.mean(axis=1)
+    top_value = _filter_top_percentile(-value_score, 10)
+    
     if prices_df is not None and not prices_df.empty:
         momentum = calculate_momentum_score(prices_df)
-        common = quality_score.index.intersection(momentum.index)
-        if len(common) > 0:
-            # Normalize momentum to same scale
-            mom_subset = momentum.loc[common]
-            if mom_subset.std() > 0:
-                mom_normalized = (mom_subset - mom_subset.mean()) / mom_subset.std()
-            else:
-                mom_normalized = mom_subset
-            
-            # 50% ROIC + 50% Momentum
-            quality_score.loc[common] = quality_score.loc[common] * 0.5 + mom_normalized * 0.5
+        filtered_mom = momentum[momentum.index.isin(top_value)]
+        top10 = filtered_mom.sort_values(ascending=False).head(10)
+    else:
+        top10 = value_score[value_score.index.isin(top_value)].nsmallest(10)
     
-    return quality_score
+    return pd.DataFrame({'ticker': top10.index, 'rank': range(1, len(top10)+1), 'score': top10.values})
+
+
+def calculate_dividend_score(fund_df: pd.DataFrame, prices_df: pd.DataFrame = None) -> pd.DataFrame:
+    """Trendande Utdelning with market cap filter."""
+    if fund_df.empty or 'dividend_yield' not in fund_df.columns:
+        return pd.DataFrame(columns=['ticker', 'rank', 'score'])
+    
+    filtered = filter_by_market_cap(fund_df, 40)
+    if filtered.empty:
+        filtered = fund_df
+    
+    df = filtered.set_index('ticker')
+    top_yield = _filter_top_percentile(df['dividend_yield'], 10)
+    
+    if prices_df is not None and not prices_df.empty:
+        momentum = calculate_momentum_score(prices_df)
+        filtered_mom = momentum[momentum.index.isin(top_yield)]
+        top10 = filtered_mom.sort_values(ascending=False).head(10)
+    else:
+        top10 = df.loc[top_yield, 'dividend_yield'].nlargest(10)
+    
+    return pd.DataFrame({'ticker': top10.index, 'rank': range(1, len(top10)+1), 'score': top10.values})
+
+
+def calculate_quality_score(fund_df: pd.DataFrame, prices_df: pd.DataFrame = None) -> pd.DataFrame:
+    """Trendande Kvalitet with market cap filter."""
+    if fund_df.empty:
+        return pd.DataFrame(columns=['ticker', 'rank', 'score'])
+    
+    filtered = filter_by_market_cap(fund_df, 40)
+    if filtered.empty:
+        filtered = fund_df
+    
+    df = filtered.set_index('ticker')
+    quality_cols = ['roe', 'roa', 'roic', 'fcfroe']
+    
+    ranks = pd.DataFrame(index=df.index)
+    for col in quality_cols:
+        if col in df.columns:
+            ranks[col] = df[col].rank(ascending=False, na_option='bottom')
+    
+    if ranks.empty:
+        return pd.DataFrame(columns=['ticker', 'rank', 'score'])
+    
+    quality_score = ranks.mean(axis=1)
+    top_quality = _filter_top_percentile(-quality_score, 10)
+    
+    if prices_df is not None and not prices_df.empty:
+        momentum = calculate_momentum_score(prices_df)
+        filtered_mom = momentum[momentum.index.isin(top_quality)]
+        top10 = filtered_mom.sort_values(ascending=False).head(10)
+    else:
+        top10 = quality_score[quality_score.index.isin(top_quality)].nsmallest(10)
+    
+    return pd.DataFrame({'ticker': top10.index, 'rank': range(1, len(top10)+1), 'score': top10.values})
 
 
 def rank_and_select_top_n(scores: pd.Series, config: dict, n: int = 10) -> pd.DataFrame:
-    """
-    Rank stocks by score and select top N.
-    
-    Args:
-        scores: Series indexed by ticker with composite scores
-        config: Strategy config (reads 'position_count' or 'portfolio_size')
-        n: Fallback if not in config
-    """
+    """Rank stocks by score and select top N."""
     if scores.empty:
         return pd.DataFrame(columns=['ticker', 'rank', 'score'])
     
-    # Support both old and new config key names
-    n = config.get('position_count', config.get('portfolio_size', n))
-    
-    sorted_scores = scores.sort_values(ascending=False)
-    top_n = sorted_scores.head(n)
-    
-    return pd.DataFrame({
-        'ticker': top_n.index,
-        'rank': range(1, len(top_n) + 1),
-        'score': top_n.values
-    })
+    n = config.get('position_count', n)
+    top = scores.sort_values(ascending=False).head(n)
+    return pd.DataFrame({'ticker': top.index, 'rank': range(1, len(top)+1), 'score': top.values})

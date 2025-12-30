@@ -278,9 +278,57 @@ body {
   .navLinks {
     flex-wrap: wrap;
     justify-content: center;
+    gap: 0.75rem;
+  }
+  .navLink {
+    font-size: 0.75rem;
   }
   .grid {
     grid-template-columns: 1fr;
+  }
+  .pageTitle {
+    font-size: 1.25rem;
+  }
+  .table {
+    font-size: 0.75rem;
+  }
+  .table th, .table td {
+    padding: 0.5rem;
+  }
+  .statsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .statValue {
+    font-size: 1.25rem;
+  }
+  .modalContent {
+    padding: 1rem;
+    width: 95%;
+  }
+  .card {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 0 0.5rem;
+  }
+  .main {
+    padding: 1rem 0;
+  }
+  .navLinks {
+    gap: 0.5rem;
+  }
+  .navLink {
+    font-size: 0.7rem;
+  }
+  .statsGrid {
+    grid-template-columns: 1fr;
+  }
+  .table th, .table td {
+    padding: 0.375rem;
+    font-size: 0.7rem;
   }
 }
 

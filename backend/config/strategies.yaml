@@ -1,150 +1,124 @@
-# Börslabbet Strategy Rules (Verified 2024-2025)
-# Source: https://borslabbet.se
+# Börslabbet Strategy Rules (Verified from börslabbet.se/borslabbets-strategier)
+# Last updated: 2024-2025
 
 strategies:
 
   sammansatt_momentum:
     display_name: "Sammansatt Momentum"
-    description: "Highest momentum stocks filtered by quality (Piotroskis F-Score)"
+    description: "Highest momentum stocks filtered by Piotroski F-Score quality gate"
     category: "momentum"
-    rebalance_frequency: "quarterly"  # CRITICAL: 3 months, not annual
+    rebalance_frequency: "quarterly"  # Monthly also works, annual NOT recommended
     rebalance_months: [3, 6, 9, 12]
     position_count: 10
     weight_method: "equal"
     
+    # Step 1: Calculate momentum
     metrics:
       primary:
         - name: "momentum_3m"
-          weight: 0.33
-          description: "Return past 3 months"
         - name: "momentum_6m"
-          weight: 0.33
-          description: "Return past 6 months"
         - name: "momentum_12m"
-          weight: 0.34
-          description: "Return past 12 months"
-      
+      # Momentum Score = average of 3m, 6m, 12m returns
+    
+    # Step 2: Quality safety filter
     quality_filters:
       - type: "piotroskis_f_score"
-        min_value: 4
-        description: "Exclude low-quality speculation"
+        action: "remove_lowest"  # Remove stocks with lowest F-Score
+        # No exact cutoff published - we use bottom ~20% or F-Score <= 3
     
-    backtest_results:
-      start_year: 2001
-      end_year: 2024
-      annual_return_pct: 29.7
-      sharpe_ratio: 1.12
-      max_drawdown_pct: -50.0
+    # Step 3: Select top 10 by momentum
 
   trendande_varde:
     display_name: "Trendande Värde"
-    description: "Cheapest stocks: lowest multiples (P/E, P/B, P/S, EV/EBITDA)"
+    description: "6-factor Sammansatt Värde, filtered by momentum"
     category: "value"
     rebalance_frequency: "annual"
-    rebalance_month: 1  # January
+    rebalance_month: 3  # March
     position_count: 10
     weight_method: "equal"
     
+    # Step 1: Calculate Sammansatt Värde (6 metrics)
     metrics:
       primary:
         - name: "pe_ratio"
-          inverse: true  # Lower = better
-          weight: 0.25
+          ranking: "ascending"  # Lower = better
         - name: "pb_ratio"
-          inverse: true
-          weight: 0.25
+          ranking: "ascending"
         - name: "ps_ratio"
-          inverse: true
-          weight: 0.25
+          ranking: "ascending"
+        - name: "p_fcf"
+          ranking: "ascending"
         - name: "ev_ebitda"
-          inverse: true
-          weight: 0.25
+          ranking: "ascending"
+        - name: "dividend_yield"
+          ranking: "descending"  # Higher = better
+      # Value Score = average rank of all 6 metrics
     
-    backtest_results:
-      start_year: 2001
-      end_year: 2024
-      annual_return_pct: 22.6
-      sharpe_ratio: 1.04
-      max_drawdown_pct: -54.0
+    # Step 2: Keep top ~10% by Value Score (≈ top 40 stocks)
+    filter_percentile: 10
+    
+    # Step 3: From filtered stocks, rank by Sammansatt Momentum
+    secondary_sort: "sammansatt_momentum"
+    
+    # Step 4: Select top 10 by momentum
 
   trendande_utdelning:
     display_name: "Trendande Utdelning"
-    description: "High dividend yields with sustainable payouts"
+    description: "Highest dividend yield, filtered by momentum"
     category: "dividend"
     rebalance_frequency: "annual"
-    rebalance_month: 2  # February (after dividend season)
+    rebalance_month: 3  # March
     position_count: 10
     weight_method: "equal"
     
+    # Step 1: Rank by dividend yield (higher = better)
     metrics:
       primary:
         - name: "dividend_yield"
-          weight: 1.0
-          description: "Annual dividend / stock price"
+          ranking: "descending"
     
-    quality_filters:
-      - type: "payout_ratio"
-        max_value: 1.0  # CRITICAL: Must be < 100% (sustainable)
-        description: "Exclude unsustainable dividends"
-      - type: "roe"
-        min_value: 0.05  # At least 5% ROE
-        description: "Ensure profitability"
-      - type: "dividend_yield"
-        min_value: 0.015  # At least 1.5%
-        description: "Meaningful yield"
+    # Step 2: Keep top ~10% by dividend yield
+    filter_percentile: 10
     
-    backtest_results:
-      start_year: 2001
-      end_year: 2024
-      annual_return_pct: 23.1
-      sharpe_ratio: 1.05
-      max_drawdown_pct: -54.0
+    # Step 3: From filtered stocks, rank by Sammansatt Momentum
+    secondary_sort: "sammansatt_momentum"
+    
+    # Step 4: Select top 10 by momentum
 
   trendande_kvalitet:
     display_name: "Trendande Kvalitet"
-    description: "Profitable growth stocks: highest ROIC combined with momentum"
+    description: "4-factor Sammansatt ROI (ROE+ROA+ROIC+FCFROE), filtered by momentum"
     category: "quality"
     rebalance_frequency: "annual"
     rebalance_month: 3  # March
     position_count: 10
     weight_method: "equal"
     
+    # Step 1: Calculate Sammansatt ROI (4 metrics)
     metrics:
       primary:
-        - name: "roic"  # Return on Invested Capital (EODHD: roic field)
-          weight: 0.5
-          description: "EBIT(1-tax) / Invested Capital"
-          fallback: "roe"  # Use ROE if ROIC missing
-      secondary:  # Combined with momentum
-        - name: "momentum_3m"
-          weight: 0.167
-        - name: "momentum_6m"
-          weight: 0.167
-        - name: "momentum_12m"
-          weight: 0.166
+        - name: "roe"
+          ranking: "descending"  # Higher = better
+        - name: "roa"
+          ranking: "descending"
+        - name: "roic"
+          ranking: "descending"
+        - name: "fcfroe"
+          ranking: "descending"  # FCF/Equity - the "secret sauce"
+      # Quality Score = average rank of all 4 metrics
     
-    quality_filters:
-      - type: "roic"
-        min_value: 0.10  # At least 10% ROIC
-        description: "Quality threshold"
-      - type: "roe"
-        min_value: 0.15  # At least 15% if ROIC missing
-        description: "Alternative quality check"
+    # Step 2: Keep top ~10% by Quality Score
+    filter_percentile: 10
     
-    backtest_results:
-      start_year: 2001
-      end_year: 2024
-      annual_return_pct: 23.6
-      sharpe_ratio: 1.02
-      max_drawdown_pct: -57.0
+    # Step 3: From filtered stocks, rank by Sammansatt Momentum
+    secondary_sort: "sammansatt_momentum"
+    
+    # Step 4: Select top 10 by momentum
 
-swedish_universe:
-  description: "Top 50 OMX Stockholm Large Cap + First North"
-  rebalance_dates:
-    q1_momentum: [3, 15]   # Mid-March
-    q2_momentum: [6, 15]   # Mid-June
-    q3_momentum: [9, 15]   # Mid-September
-    q4_momentum: [12, 15]  # Mid-December
-    annual_value: [1, 31]  # End of January
-    annual_dividend: [2, 28]  # End of February
-    annual_quality: [3, 31]  # End of March
+# Implementation notes from börslabbet.se:
+# - Universe: Top 40% of stocks by market cap (for liquidity)
+# - Backtests use "topp 10%" which ≈ 10 stocks for practical portfolios
+# - Trendande strategies: "topp 40% efter primära kriteriet → översta fjärdedelen efter momentum"
+# - Momentum is relative ranking (subtracting index doesn't change rankings)
+# - All portfolios equal-weighted, dividends reinvested
+# - Piotroski cutoff not published - academic standard is F-Score >= 4-5

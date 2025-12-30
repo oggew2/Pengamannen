@@ -1,0 +1,12 @@
+# Docker ignore patterns
+node_modules/
+venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+*.log
+.git/
+.gitignore
+README.md
+docker-compose.yml

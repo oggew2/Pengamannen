@@ -1,6 +1,6 @@
 # Börslabbet App
 
-A quantitative Swedish stock strategy platform implementing Börslabbet's proven investment strategies.
+A quantitative Swedish stock strategy platform implementing Börslabbet's proven investment strategies with **free unlimited data** from Yahoo Finance.
 
 ## Features
 
@@ -12,14 +12,47 @@ A quantitative Swedish stock strategy platform implementing Börslabbet's proven
 
 - **Portfolio Management**: Combine strategies, track holdings, view rebalance calendar
 - **Backtesting**: Historical performance simulation with Sharpe ratio, max drawdown
-- **Data Sync**: Automatic daily updates from EODHD API
+- **Free Data**: Unlimited Swedish stock data via Yahoo Finance (no API keys needed)
 
-## Quick Start
+## 🚀 Quick Start with Docker (Recommended)
+
+### Prerequisites
+- Docker and Docker Compose
+- 2GB RAM, 1GB disk space
+
+### One-Command Deployment
+
+```bash
+git clone <your-repo>
+cd borslabbet-app
+docker compose up -d
+```
+
+**That's it!** The application will be available at:
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+- API Documentation: http://localhost:8000/docs
+
+### First Data Sync (Multiple Methods Available)
+
+```bash
+# Ultimate method (recommended): Balanced speed and reliability
+curl -X POST "http://localhost:8000/data/sync-now?method=ultimate"
+
+# Optimized method: Maximum reliability with 100% guarantee
+curl -X POST "http://localhost:8000/data/sync-now?method=optimized"
+
+# Standard method: Basic sync
+curl -X POST "http://localhost:8000/data/sync-now?method=v3"
+```
+
+**Performance**: 30 Swedish stocks sync in 2-3 minutes, 880 Nordic stocks in 45-60 minutes.
+
+## 🛠 Manual Development Setup
 
 ### Prerequisites
 - Python 3.9+
 - Node.js 18+
-- EODHD API key (free tier: https://eodhd.com)
 
 ### Backend Setup
 
@@ -33,15 +66,11 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure environment
-cp .env.example .env
-# Edit .env and add your EODHD_API_KEY
-
 # Start server
-python -m uvicorn backend.main:app --reload
+python -m uvicorn main:app --reload
 ```
 
-Backend runs at http://localhost:8000 (Swagger docs at /docs)
+Backend runs at http://localhost:8000
 
 ### Frontend Setup
 
@@ -73,7 +102,7 @@ borslabbet-app/
 │   │   ├── ranking.py       # Strategy scoring
 │   │   ├── portfolio.py     # Portfolio management
 │   │   ├── backtesting.py   # Historical simulation
-│   │   └── eodhd_fetcher.py # Data fetching
+│   │   └── yfinance_fetcher.py # Yahoo Finance data
 │   └── jobs/
 │       └── scheduler.py     # Automatic sync
 ├── frontend/
@@ -125,10 +154,11 @@ borslabbet-app/
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `EODHD_API_KEY` | - | EODHD API key (required for data) |
 | `DATABASE_URL` | `sqlite:///./app.db` | Database connection |
 | `DATA_SYNC_ENABLED` | `true` | Enable automatic sync |
 | `DATA_SYNC_HOUR` | `18` | Hour for daily sync (UTC) |
+
+**Note**: No API keys required! Yahoo Finance data is completely free.
 
 ## Development
 
