@@ -1,22 +1,23 @@
-# Backend Dockerfile with frontend
-FROM node:18-slim AS frontend-build
+# Build frontend
+FROM node:18-slim AS frontend
 WORKDIR /frontend
-COPY package*.json ./
+COPY frontend/package*.json ./
 RUN npm ci
-COPY . ./
+COPY frontend/ ./
 ENV VITE_API_BASE_URL=""
 RUN npm run build
 
+# Build backend with frontend
 FROM python:3.9-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y gcc curl && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
-COPY --from=frontend-build /frontend/dist ./static
+COPY backend/ .
+COPY --from=frontend /frontend/dist ./static
 
 RUN mkdir -p /app/data
 EXPOSE 8000
