@@ -2,7 +2,7 @@
 FROM node:18-slim AS frontend
 WORKDIR /frontend
 COPY frontend/package*.json ./
-RUN npm ci
+RUN npm install
 COPY frontend/ ./
 ENV VITE_API_BASE_URL=""
 RUN npm run build
