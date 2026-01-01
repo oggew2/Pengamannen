@@ -45,3 +45,10 @@ data/*.csv
 
 # Playwright (large binaries)
 **/playwright/driver/
+
+# Generated/runtime files
+backend/avanza_stocks_scan.json
+backend/scan_state.json
+backend/data_sync_config.json
+backend/reports/
+docs/TEST_RESULTS_*.md
