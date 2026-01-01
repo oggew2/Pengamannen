@@ -1,0 +1,3247 @@
+{
+  "scan_date": "2025-12-30T22:39:17.389688",
+  "stockholmsborsen": [
+    {
+      "id": "5234",
+      "ticker": "ATCO A",
+      "name": "Atlas Copco A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5235",
+      "ticker": "ATCO B",
+      "name": "Atlas Copco B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5236",
+      "ticker": "ALIV SDB",
+      "name": "Autoliv SDB",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5237",
+      "ticker": "ELUX A",
+      "name": "Electrolux A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5238",
+      "ticker": "ELUX B",
+      "name": "Electrolux B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5239",
+      "ticker": "ERIC A",
+      "name": "Ericsson A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5240",
+      "ticker": "ERIC B",
+      "name": "Ericsson B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5241",
+      "ticker": "SWED A",
+      "name": "Swedbank A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5244",
+      "ticker": "INDU A",
+      "name": "Industrivärden A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5245",
+      "ticker": "INDU C",
+      "name": "Industrivärden C",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5246",
+      "ticker": "INVE A",
+      "name": "Investor A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5247",
+      "ticker": "INVE B",
+      "name": "Investor B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5249",
+      "ticker": "NDA SE",
+      "name": "Nordea Bank",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5250",
+      "ticker": "HOLM A",
+      "name": "Holmen A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5251",
+      "ticker": "HOLM B",
+      "name": "Holmen B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5255",
+      "ticker": "SEB A",
+      "name": "SEB A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5256",
+      "ticker": "SEB C",
+      "name": "SEB C",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5257",
+      "ticker": "SKA B",
+      "name": "Skanska B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5258",
+      "ticker": "SKF A",
+      "name": "SKF A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5259",
+      "ticker": "SKF B",
+      "name": "SKF B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5260",
+      "ticker": "SSAB A",
+      "name": "SSAB A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5261",
+      "ticker": "SSAB B",
+      "name": "SSAB B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5262",
+      "ticker": "SCA A",
+      "name": "SCA A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5263",
+      "ticker": "SCA B",
+      "name": "SCA B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5264",
+      "ticker": "SHB A",
+      "name": "Handelsbanken A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5265",
+      "ticker": "SHB B",
+      "name": "Handelsbanken B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5267",
+      "ticker": "TREL B",
+      "name": "Trelleborg B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5268",
+      "ticker": "VOLV A",
+      "name": "Volvo A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5269",
+      "ticker": "VOLV B",
+      "name": "Volvo B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5270",
+      "ticker": "SECU B",
+      "name": "Securitas B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5271",
+      "ticker": "ASSA B",
+      "name": "Assa Abloy B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5274",
+      "ticker": "BEIJ B",
+      "name": "Beijer Ref B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5275",
+      "ticker": "BERG B",
+      "name": "Bergman & Beving B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5276",
+      "ticker": "BILI A",
+      "name": "Bilia A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5277",
+      "ticker": "BURE",
+      "name": "Bure Equity",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5279",
+      "ticker": "CNCJO B",
+      "name": "Concejo B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5280",
+      "ticker": "EKTA B",
+      "name": "Elekta B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5282",
+      "ticker": "GETI B",
+      "name": "Getinge B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5286",
+      "ticker": "HEXA B",
+      "name": "Hexagon B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5287",
+      "ticker": "HUFV A",
+      "name": "Hufvudstaden A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5291",
+      "ticker": "HAKI A",
+      "name": "HAKI Safety A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5292",
+      "ticker": "HAKI B",
+      "name": "HAKI Safety B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5293",
+      "ticker": "NCC A",
+      "name": "NCC A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5294",
+      "ticker": "NCC B",
+      "name": "NCC B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5300",
+      "ticker": "FABG",
+      "name": "Fabege",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5301",
+      "ticker": "AFRY",
+      "name": "AFRY",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5302",
+      "ticker": "ORES",
+      "name": "Öresund",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5303",
+      "ticker": "BEIA B",
+      "name": "Beijer Alma B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5304",
+      "ticker": "ACTI",
+      "name": "Active Biotech",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5307",
+      "ticker": "BONG",
+      "name": "Bong",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5311",
+      "ticker": "ELAN B",
+      "name": "Elanders B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5314",
+      "ticker": "FAG",
+      "name": "Fagerhult Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5319",
+      "ticker": "KABE B",
+      "name": "KABE Group B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5321",
+      "ticker": "LATO B",
+      "name": "Latour B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5324",
+      "ticker": "NEWA B",
+      "name": "New Wave B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5325",
+      "ticker": "NIBE B",
+      "name": "Nibe Industrier B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5327",
+      "ticker": "NOLA B",
+      "name": "Nolato B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5329",
+      "ticker": "OEM B",
+      "name": "OEM International B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5330",
+      "ticker": "PEAB B",
+      "name": "Peab B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5331",
+      "ticker": "PROF B",
+      "name": "ProfilGruppen B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5332",
+      "ticker": "RROS",
+      "name": "Rottneros",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5335",
+      "ticker": "SVED B",
+      "name": "Svedbergs Group B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5336",
+      "ticker": "SVOL A",
+      "name": "Svolder A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5337",
+      "ticker": "SVOL B",
+      "name": "Svolder B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5339",
+      "ticker": "SKIS B",
+      "name": "SkiStar B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5342",
+      "ticker": "VBG B",
+      "name": "VBG Group B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5344",
+      "ticker": "WALL B",
+      "name": "Wallenstam B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5349",
+      "ticker": "BIOG B",
+      "name": "BioGaia B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5353",
+      "ticker": "CAST",
+      "name": "Castellum",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5357",
+      "ticker": "FPAR A",
+      "name": "Fastpartner A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5361",
+      "ticker": "AZA",
+      "name": "Avanza Bank Holding",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5362",
+      "ticker": "HAV B",
+      "name": "Havsfrun Investment B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5363",
+      "ticker": "HEBA B",
+      "name": "Heba B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5364",
+      "ticker": "HM B",
+      "name": "H&M B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5368",
+      "ticker": "KINV A",
+      "name": "Kinnevik A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5369",
+      "ticker": "KINV B",
+      "name": "Kinnevik B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5373",
+      "ticker": "STWK",
+      "name": "Stockwik Förvaltning",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5374",
+      "ticker": "ATRLJ B",
+      "name": "Atrium Ljungberg B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5375",
+      "ticker": "LUND B",
+      "name": "Lundberg B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5380",
+      "ticker": "MVIR",
+      "name": "Medivir",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5382",
+      "ticker": "SAFETY B",
+      "name": "mySafety Group B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5385",
+      "ticker": "TEL2 A",
+      "name": "Tele2 A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5386",
+      "ticker": "TEL2 B",
+      "name": "Tele2 B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5394",
+      "ticker": "PREV B",
+      "name": "Prevas B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5395",
+      "ticker": "PRIC B",
+      "name": "Pricer B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5396",
+      "ticker": "RATO A",
+      "name": "Ratos A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5397",
+      "ticker": "RATO B",
+      "name": "Ratos B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5399",
+      "ticker": "LAMM B",
+      "name": "Lammhults Design Group B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5401",
+      "ticker": "SAAB B",
+      "name": "SAAB B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5406",
+      "ticker": "SINT",
+      "name": "Sintercast",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5408",
+      "ticker": "SWEC A",
+      "name": "Sweco A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5409",
+      "ticker": "SWEC B",
+      "name": "Sweco B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5410",
+      "ticker": "RAY B",
+      "name": "RaySearch Laboratories B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5415",
+      "ticker": "XANO B",
+      "name": "XANO Industri B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5416",
+      "ticker": "ENEA",
+      "name": "Enea",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5418",
+      "ticker": "SOF B",
+      "name": "Softronic B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5421",
+      "ticker": "STE A",
+      "name": "Stora Enso A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5422",
+      "ticker": "STE R",
+      "name": "Stora Enso R",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5425",
+      "ticker": "CTT",
+      "name": "CTT Systems",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5426",
+      "ticker": "SECT B",
+      "name": "Sectra B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5428",
+      "ticker": "KNOW",
+      "name": "Knowit",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5429",
+      "ticker": "MEAB B",
+      "name": "Malmbergs Elektriska B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5431",
+      "ticker": "AZN",
+      "name": "AstraZeneca",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5436",
+      "ticker": "IS",
+      "name": "Image Systems",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5437",
+      "ticker": "MTG A",
+      "name": "MTG A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5438",
+      "ticker": "MTG B",
+      "name": "MTG B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5440",
+      "ticker": "NETI B",
+      "name": "Net Insight B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5442",
+      "ticker": "ANOD B",
+      "name": "Addnode Group B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5443",
+      "ticker": "MSON A",
+      "name": "Midsona A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5444",
+      "ticker": "MSON B",
+      "name": "Midsona B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5447",
+      "ticker": "ABB",
+      "name": "ABB",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5450",
+      "ticker": "PION B",
+      "name": "PION Group B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5452",
+      "ticker": "NTEK B",
+      "name": "Novotek B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5453",
+      "ticker": "PACT",
+      "name": "Proact IT Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5454",
+      "ticker": "DURC B",
+      "name": "Duroc B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5455",
+      "ticker": "TIETOS",
+      "name": "Tietoevry",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5457",
+      "ticker": "CLAS B",
+      "name": "Clas Ohlson B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5459",
+      "ticker": "BALD B",
+      "name": "Balder B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5465",
+      "ticker": "AXFO",
+      "name": "Axfood",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5466",
+      "ticker": "MYCR",
+      "name": "Mycronic",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5468",
+      "ticker": "FING B",
+      "name": "Fingerprint Cards B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5471",
+      "ticker": "SAND",
+      "name": "Sandvik",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5472",
+      "ticker": "TRAC B",
+      "name": "Traction B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5474",
+      "ticker": "MEKO",
+      "name": "MEKO",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5478",
+      "ticker": "EPEN",
+      "name": "Ependion",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5479",
+      "ticker": "TELIA",
+      "name": "Telia Company",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5480",
+      "ticker": "ANOT",
+      "name": "Anoto Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5482",
+      "ticker": "BETS B",
+      "name": "Betsson B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5490",
+      "ticker": "PREC",
+      "name": "Precise Biometrics",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5491",
+      "ticker": "ENRO",
+      "name": "Eniro Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5497",
+      "ticker": "SGG",
+      "name": "Sensys Gatso Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5500",
+      "ticker": "SVIK",
+      "name": "Studsvik",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5501",
+      "ticker": "JM",
+      "name": "JM",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5503",
+      "ticker": "BTS B",
+      "name": "BTS Group B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5505",
+      "ticker": "BINV",
+      "name": "BioInvent International",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5508",
+      "ticker": "VITR",
+      "name": "Vitrolife",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5510",
+      "ticker": "XACT OMXS30",
+      "name": "XACT OMXS30 ESG (UCITS ETF)",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5526",
+      "ticker": "VIT B",
+      "name": "Vitec Software Group B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5528",
+      "ticker": "STAR B",
+      "name": "Starbreeze B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5534",
+      "ticker": "AQ",
+      "name": "AQ Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5536",
+      "ticker": "LAGR B",
+      "name": "Lagercrantz Group B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5537",
+      "ticker": "ADDT B",
+      "name": "Addtech B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5556",
+      "ticker": "BILL",
+      "name": "Billerud",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5564",
+      "ticker": "BOL",
+      "name": "Boliden",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5580",
+      "ticker": "ALFA",
+      "name": "Alfa Laval",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5583",
+      "ticker": "INTRUM",
+      "name": "Intrum",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5586",
+      "ticker": "NOBI",
+      "name": "Nobia",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5649",
+      "ticker": "XACT Sverige",
+      "name": "XACT Sverige (UCITS ETF)",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "5698",
+      "ticker": "ORRON",
+      "name": "Orrön Energy",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "6331",
+      "ticker": "NOTE",
+      "name": "Note",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "7010",
+      "ticker": "LUMI",
+      "name": "Lundin Mining Corporation",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "12251",
+      "ticker": "XACT BEAR",
+      "name": "XACT Bear (ETF)",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "12252",
+      "ticker": "XACT BULL",
+      "name": "XACT Bull (ETF)",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "18813",
+      "ticker": "WIHL",
+      "name": "Wihlborgs Fastigheter",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "26268",
+      "ticker": "AAK",
+      "name": "AAK",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "26607",
+      "ticker": "INDT",
+      "name": "Indutrade",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "28527",
+      "ticker": "TRAD",
+      "name": "TradeDoubler",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "28567",
+      "ticker": "ORX",
+      "name": "Orexo",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "33127",
+      "ticker": "MOMENT",
+      "name": "Moment Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "41007",
+      "ticker": "CATE",
+      "name": "Catena",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "43267",
+      "ticker": "DIOS",
+      "name": "Diös Fastigheter",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "43788",
+      "ticker": "IVSO",
+      "name": "INVISIO",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "45188",
+      "ticker": "HUSQ A",
+      "name": "Husqvarna A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "45189",
+      "ticker": "HUSQ B",
+      "name": "Husqvarna B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "46487",
+      "ticker": "MCAP",
+      "name": "MedCap",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "51308",
+      "ticker": "SOBI",
+      "name": "Swedish Orphan Biovitrum",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "59050",
+      "ticker": "BEGR",
+      "name": "BE Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "59810",
+      "ticker": "LIAB",
+      "name": "Lindab International",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "62367",
+      "ticker": "REJL B",
+      "name": "Rejlers B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "68827",
+      "ticker": "VISC",
+      "name": "Viscaria",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "74787",
+      "ticker": "WISE",
+      "name": "Wise Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "78529",
+      "ticker": "BORG",
+      "name": "Björn Borg",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "79667",
+      "ticker": "NAXS",
+      "name": "NAXS",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "80187",
+      "ticker": "NMAN",
+      "name": "Nederman Holding",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "81967",
+      "ticker": "CEVI",
+      "name": "CellaVision",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "82987",
+      "ticker": "NOKIA SEK",
+      "name": "Nokia",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "85228",
+      "ticker": "LOGI A",
+      "name": "Logistea A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "87027",
+      "ticker": "VNV",
+      "name": "VNV Global",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "88447",
+      "ticker": "CRAD B",
+      "name": "C-RAD B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "96768",
+      "ticker": "SAGA A",
+      "name": "Sagax A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "97407",
+      "ticker": "SYSR",
+      "name": "Systemair",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "98087",
+      "ticker": "HNSA",
+      "name": "Hansa Biopharma",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "98412",
+      "ticker": "HMS",
+      "name": "HMS Networks",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "100687",
+      "ticker": "EAST",
+      "name": "Eastnine",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "102327",
+      "ticker": "DUNI",
+      "name": "Duni",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "117108",
+      "ticker": "NEOBO",
+      "name": "Neobo Fastigheter",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "126555",
+      "ticker": "VESTUM",
+      "name": "Vestum",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "127201",
+      "ticker": "EWRK",
+      "name": "Ework Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "130828",
+      "ticker": "HPOL B",
+      "name": "Hexpol B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "132471",
+      "ticker": "SEZI",
+      "name": "Senzime",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "134988",
+      "ticker": "ITAB",
+      "name": "ITAB Shop Concept",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "152492",
+      "ticker": "G5EN",
+      "name": "G5 Entertainment",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "154930",
+      "ticker": "LOOMIS",
+      "name": "Loomis",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "159464",
+      "ticker": "XACT Norden",
+      "name": "XACT Norden (UCITS ETF)",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "159628",
+      "ticker": "CAT A",
+      "name": "Catella A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "159629",
+      "ticker": "CAT B",
+      "name": "Catella B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "163148",
+      "ticker": "CLA B",
+      "name": "Cloetta",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "178628",
+      "ticker": "EOLU B",
+      "name": "Eolus B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "178908",
+      "ticker": "ELON",
+      "name": "Elon",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "181790",
+      "ticker": "CORE A",
+      "name": "Corem Property Group A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "199531",
+      "ticker": "XACT BEAR 2",
+      "name": "XACT Bear 2 (ETF)",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "199532",
+      "ticker": "XACT BULL 2",
+      "name": "XACT Bull 2 (ETF)",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "210208",
+      "ticker": "FPIP",
+      "name": "Formpipe Software",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "216649",
+      "ticker": "CORE PREF",
+      "name": "Corem Property Group Pref",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "220127",
+      "ticker": "ARISE",
+      "name": "Arise",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "221118",
+      "ticker": "XDAX",
+      "name": "Xtrackers DAX UCITS ETF 1C",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "233288",
+      "ticker": "BMAX",
+      "name": "Byggmax Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "237353",
+      "ticker": "VIVE",
+      "name": "Vivesto",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "250993",
+      "ticker": "MER",
+      "name": "Meren Energy",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "255388",
+      "ticker": "EPIS B",
+      "name": "Episurf Medical B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "262018",
+      "ticker": "MOB",
+      "name": "Moberg Pharma",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "262988",
+      "ticker": "NELLY",
+      "name": "Nelly Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "273449",
+      "ticker": "STEF B",
+      "name": "Stendörren Fastigheter B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "283294",
+      "ticker": "EGTX",
+      "name": "Egetis Therapeutics",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "285632",
+      "ticker": "KDEV",
+      "name": "Karolinska Development B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "286778",
+      "ticker": "DEDI",
+      "name": "Dedicare B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "290011",
+      "ticker": "BULTEN",
+      "name": "Bulten",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "299736",
+      "ticker": "BOUL",
+      "name": "Boule Diagnostics",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "299737",
+      "ticker": "HTRO",
+      "name": "Hexatronic Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "330177",
+      "ticker": "MSAB B",
+      "name": "Micro Systemation B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "338588",
+      "ticker": "CRED A",
+      "name": "Creades A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "346549",
+      "ticker": "FASTAT",
+      "name": "Fastator",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "362522",
+      "ticker": "MANG",
+      "name": "Mangold",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "376275",
+      "ticker": "XVIVO",
+      "name": "Xvivo Perfusion",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "388806",
+      "ticker": "ARP",
+      "name": "Arctic Paper",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "405815",
+      "ticker": "SAGA B",
+      "name": "Sagax B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "409455",
+      "ticker": "IMMU",
+      "name": "Mendus",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "445784",
+      "ticker": "PLAZ B",
+      "name": "Platzer Fastigheter Holding B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "449644",
+      "ticker": "EQL",
+      "name": "EQL Pharma",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "462932",
+      "ticker": "BUFAB",
+      "name": "Bufab",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "475457",
+      "ticker": "SANION",
+      "name": "Saniona",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "488231",
+      "ticker": "BACTI B",
+      "name": "Bactiguard Holding B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "488235",
+      "ticker": "HANZA",
+      "name": "HANZA",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "488741",
+      "ticker": "FOI B",
+      "name": "Fenix Outdoor B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "488892",
+      "ticker": "SCST",
+      "name": "Scandi Standard",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "507540",
+      "ticker": "INWI",
+      "name": "Inwido",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "510194",
+      "ticker": "GRNG",
+      "name": "Gränges",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "513577",
+      "ticker": "BERNER B",
+      "name": "Berner Industrier B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "517315",
+      "ticker": "HUMBLE",
+      "name": "Humble Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "517316",
+      "ticker": "SBB B",
+      "name": "SBB Norden B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "520898",
+      "ticker": "LIFCO B",
+      "name": "Lifco B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "521491",
+      "ticker": "THULE",
+      "name": "Thule Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "522855",
+      "ticker": "NP3",
+      "name": "NP3 Fastigheter",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "527998",
+      "ticker": "PCELL",
+      "name": "PowerCell Sweden",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "528238",
+      "ticker": "LUG",
+      "name": "Lundin Gold",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "528935",
+      "ticker": "AJA B",
+      "name": "Byggmästare Anders J Ahlström Holding B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "537416",
+      "ticker": "ELTEL",
+      "name": "Eltel",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "538819",
+      "ticker": "DUST",
+      "name": "Dustin Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "544199",
+      "ticker": "SDIP PREF",
+      "name": "Sdiptech Pref",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "549022",
+      "ticker": "CANTA",
+      "name": "Cantargia",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "549768",
+      "ticker": "EVO",
+      "name": "Evolution",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "550518",
+      "ticker": "HOFI",
+      "name": "Hoist Finance",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "551073",
+      "ticker": "TROAX",
+      "name": "Troax Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "552344",
+      "ticker": "K2A PREF",
+      "name": "K2A Knaust & Andersson Fastigheter Pref",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "556803",
+      "ticker": "TOBII",
+      "name": "Tobii",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "564938",
+      "ticker": "TRANS",
+      "name": "Transtema Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "568098",
+      "ticker": "VOLO PREF",
+      "name": "Volati Pref",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "568622",
+      "ticker": "INISS B",
+      "name": "Inission B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "569319",
+      "ticker": "STAR A",
+      "name": "Starbreeze A",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "569438",
+      "ticker": "NIL B",
+      "name": "Nilörngruppen B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "572375",
+      "ticker": "COOR",
+      "name": "Coor Service Management Holding",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "572678",
+      "ticker": "ALIG",
+      "name": "Alimak Group",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "572898",
+      "ticker": "PNDX B",
+      "name": "Pandox B",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "579702",
+      "ticker": "VEFAB",
+      "name": "VEF",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "596241",
+      "ticker": "XD3E",
+      "name": "Xtrackers Euro Stoxx Quality Dividend UCITS ETF 1D",
+      "market": "Stockholmsbörsen"
+    },
+    {
+      "id": "599956",
+      "ticker": "SINCH",
+      "name": "Sinch",
+      "market": "Stockholmsbörsen"
+    }
+  ],
+  "first_north": [
+    {
+      "id": "5341",
+      "ticker": "RO",
+      "name": "Rolling Optics Holding",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "5352",
+      "ticker": "VSSAB B",
+      "name": "Viking Supply Ships B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "5389",
+      "ticker": "ORTI A",
+      "name": "Ortivus A",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "5390",
+      "ticker": "ORTI B",
+      "name": "Ortivus B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "5512",
+      "ticker": "ADDV A",
+      "name": "ADDvise Group A",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "5513",
+      "ticker": "SKMO",
+      "name": "Skåne-möllan",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "5517",
+      "ticker": "AVEN",
+      "name": "Avensia",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "5644",
+      "ticker": "JLT",
+      "name": "JLT Mobile Computers",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "6047",
+      "ticker": "BRE2",
+      "name": "Bredband2",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "7074",
+      "ticker": "IMPC",
+      "name": "Impact Coatings",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "13481",
+      "ticker": "SILEON",
+      "name": "Sileon",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "16384",
+      "ticker": "KAKEL",
+      "name": "Kakel Max",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "18928",
+      "ticker": "SAXG",
+      "name": "Saxlund Group",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "25635",
+      "ticker": "TAGM B",
+      "name": "TagMaster B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "30017",
+      "ticker": "STIL",
+      "name": "Stille",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "32227",
+      "ticker": "GGEO",
+      "name": "Guideline Geo",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "32576",
+      "ticker": "STORY B",
+      "name": "Storytel B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "48127",
+      "ticker": "DRIL",
+      "name": "Drillcon",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "51227",
+      "ticker": "GENO",
+      "name": "Genovis",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "53311",
+      "ticker": "WIRTEK",
+      "name": "Wirtek",
+      "market": "First North Köpenhamn"
+    },
+    {
+      "id": "62248",
+      "ticker": "UTG",
+      "name": "Unlimited Travel Group",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "65247",
+      "ticker": "NNH",
+      "name": "New Nordic Healthbrands",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "71447",
+      "ticker": "OGUN B",
+      "name": "Ogunsen B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "74788",
+      "ticker": "OBAB",
+      "name": "Online Brands Nordic",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "87487",
+      "ticker": "BINERO",
+      "name": "Binero Group",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "92707",
+      "ticker": "PCOM B",
+      "name": "Precomp Solutions B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "92747",
+      "ticker": "LNFI",
+      "name": "LN Future Invest",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "97608",
+      "ticker": "FASTPC",
+      "name": "FastPassCorp",
+      "market": "First North Köpenhamn"
+    },
+    {
+      "id": "98570",
+      "ticker": "NFGAB",
+      "name": "Nordic Flanges Group",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "99147",
+      "ticker": "WPAY",
+      "name": "Westpay",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "100467",
+      "ticker": "ERRIA",
+      "name": "Erria",
+      "market": "First North Köpenhamn"
+    },
+    {
+      "id": "106733",
+      "ticker": "BAHN B",
+      "name": "Bahnhof B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "110031",
+      "ticker": "GOTL A",
+      "name": "Gotlandsbolaget A",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "110036",
+      "ticker": "GOTL B",
+      "name": "Gotlandsbolaget B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "118370",
+      "ticker": "GRANGX",
+      "name": "GRANGEX",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "122068",
+      "ticker": "EGNETY",
+      "name": "EgnsINVEST Ejd Tyskland",
+      "market": "First North Köpenhamn"
+    },
+    {
+      "id": "144568",
+      "ticker": "HULT B",
+      "name": "Hultström Group B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "145081",
+      "ticker": "MAV",
+      "name": "Mavshack",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "149742",
+      "ticker": "FIRE",
+      "name": "Firefly",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "151277",
+      "ticker": "GENI",
+      "name": "Generic Sweden",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "158470",
+      "ticker": "PRCO B",
+      "name": "Precio Fishbone B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "171738",
+      "ticker": "CLS B",
+      "name": "Clinical Laserthermia Systems B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "184054",
+      "ticker": "ARCT",
+      "name": "Arctic Minerals",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "187248",
+      "ticker": "K33",
+      "name": "K33",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "202888",
+      "ticker": "BRIGHT",
+      "name": "BrightBid Group",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "221008",
+      "ticker": "SBOK",
+      "name": "ScandBook Holding",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "221752",
+      "ticker": "BEAR BOL X2 H",
+      "name": "BEAR BOL X2 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "221754",
+      "ticker": "BEAR VOLV X2 H",
+      "name": "BEAR VOLV X2 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "221756",
+      "ticker": "BULL BOL X2 H",
+      "name": "BULL BOL X2 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "221758",
+      "ticker": "BULL VOLV X2 H",
+      "name": "BULL VOLV X2 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "235512",
+      "ticker": "BEAR GULD X3 H",
+      "name": "BEAR GULD X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "235513",
+      "ticker": "BULL GULD X3 H",
+      "name": "BULL GULD X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "249109",
+      "ticker": "ZZ B",
+      "name": "Zinzino B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "259310",
+      "ticker": "BULL SEB X2 H",
+      "name": "BULL SEB X2 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "259311",
+      "ticker": "BEAR SEB X2 H",
+      "name": "BEAR SEB X2 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "267388",
+      "ticker": "HOTEL",
+      "name": "Hotel Fast SSE",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "273591",
+      "ticker": "AXIC A",
+      "name": "aXichem A",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "278389",
+      "ticker": "NOVKAN",
+      "name": "Novakand Pharma",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "283034",
+      "ticker": "IZAFE B",
+      "name": "iZafe Group B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "286000",
+      "ticker": "DIST",
+      "name": "DistIT",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "290669",
+      "ticker": "IDLDX",
+      "name": "IDL Diagnostics",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "293975",
+      "ticker": "ENZY",
+      "name": "Enzymatica",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "299178",
+      "ticker": "SNM",
+      "name": "ShaMaran Petroleum",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "300770",
+      "ticker": "BEAR SWED X2 H",
+      "name": "BEAR SWED X2 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "300771",
+      "ticker": "BULL SWED X2 H",
+      "name": "BULL SWED X2 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "325050",
+      "ticker": "LUC",
+      "name": "Lucara Diamond Corp",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "325138",
+      "ticker": "LEVEL",
+      "name": "Nordic LEVEL Group",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "338017",
+      "ticker": "AVT B",
+      "name": "AVTECH Sweden B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "342950",
+      "ticker": "BULL OMX X2 N",
+      "name": "BULL OMX X2 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "342951",
+      "ticker": "BULL OMX X3 N",
+      "name": "BULL OMX X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "342952",
+      "ticker": "BEAR OMX X2 N",
+      "name": "BEAR OMX X2 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "342953",
+      "ticker": "BEAR OMX X3 N",
+      "name": "BEAR OMX X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "342958",
+      "ticker": "BULL DAX X3 N",
+      "name": "BULL DAX X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "342959",
+      "ticker": "BEAR DAX X3 N",
+      "name": "BEAR DAX X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "342960",
+      "ticker": "BULL EUROBANKX2N",
+      "name": "BULL EUROBANKX2N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "342961",
+      "ticker": "BEAR EUROBANKX2N",
+      "name": "BEAR EUROBANKX2N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "342962",
+      "ticker": "BULL VOLVO X3 N",
+      "name": "BULL VOLVO X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "342964",
+      "ticker": "BULL BOLIDEN X3N",
+      "name": "BULL BOLIDEN X3N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "342966",
+      "ticker": "BULL HM X3 N",
+      "name": "BULL HM X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "342967",
+      "ticker": "BEAR HM X3 N",
+      "name": "BEAR HM X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "342968",
+      "ticker": "BULL SSAB X3 N",
+      "name": "BULL SSAB X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "344182",
+      "ticker": "BULL SANDVIK X3N",
+      "name": "BULL SANDVIK X3N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "344186",
+      "ticker": "BULL SKF X3 N",
+      "name": "BULL SKF X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "344188",
+      "ticker": "BULL SWEDBANKX3N",
+      "name": "BULL SWEDBANKX3N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "344189",
+      "ticker": "BEAR SWEDBANKX3N",
+      "name": "BEAR SWEDBANKX3N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "344191",
+      "ticker": "BEAR OMX X4 N",
+      "name": "BEAR OMX X4 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "344192",
+      "ticker": "BULL OMX X5 N",
+      "name": "BULL OMX X5 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "348368",
+      "ticker": "BULL ATLAS X3 N",
+      "name": "BULL ATLAS X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "348370",
+      "ticker": "BULL GETINGE X3N",
+      "name": "BULL GETINGE X3N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "348376",
+      "ticker": "BULL NOKIA X3 N",
+      "name": "BULL NOKIA X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "348378",
+      "ticker": "BULL NORDEA X3 N",
+      "name": "BULL NORDEA X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "348384",
+      "ticker": "BULL SEB X3 N",
+      "name": "BULL SEB X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "348386",
+      "ticker": "BULL SKANSKA X3N",
+      "name": "BULL SKANSKA X3N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "348387",
+      "ticker": "BEAR SKANSKA X3N",
+      "name": "BEAR SKANSKA X3N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "348388",
+      "ticker": "BULL SHB X3 N",
+      "name": "BULL SHB X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "348389",
+      "ticker": "BEAR SHB X3 N",
+      "name": "BEAR SHB X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "348392",
+      "ticker": "BULL TELE2 X3 N",
+      "name": "BULL TELE2 X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "348393",
+      "ticker": "BEAR TELE2 X3 N",
+      "name": "BEAR TELE2 X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "348394",
+      "ticker": "BULL ERICSSONX3N",
+      "name": "BULL ERICSSONX3N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "348395",
+      "ticker": "BEAR ERICSSONX3N",
+      "name": "BEAR ERICSSONX3N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "348396",
+      "ticker": "BULL TELIA X3 N",
+      "name": "BULL TELIA X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "352141",
+      "ticker": "BULL HEXAGON X3N",
+      "name": "BULL HEXAGON X3N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "353445",
+      "ticker": "ALM PREF",
+      "name": "ALM Equity Pref",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "353446",
+      "ticker": "ALM",
+      "name": "ALM Equity",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "369255",
+      "ticker": "NANOC B",
+      "name": "NanoCap Group B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "370177",
+      "ticker": "BEAR GULD X4 H",
+      "name": "BEAR GULD X4 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "370178",
+      "ticker": "BULL GULD X4 H",
+      "name": "BULL GULD X4 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "393036",
+      "ticker": "SPAGO",
+      "name": "Spago Nanomedical",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "399180",
+      "ticker": "CI",
+      "name": "Cell Impact",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "399718",
+      "ticker": "BULL AZN X3 N",
+      "name": "BULL AZN X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "399723",
+      "ticker": "BULL INVE X3 N",
+      "name": "BULL INVE X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "405356",
+      "ticker": "GUARD",
+      "name": "Guard Therapeutics International",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409458",
+      "ticker": "SHRT OMX H",
+      "name": "SHRT OMX H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409459",
+      "ticker": "SHRT VOLV H",
+      "name": "SHRT VOLV H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409460",
+      "ticker": "SHRT TLSN H",
+      "name": "SHRT TLSN H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409461",
+      "ticker": "SHRT TEL2 H",
+      "name": "SHRT TEL2 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409464",
+      "ticker": "SHRT SWED H",
+      "name": "SHRT SWED H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409465",
+      "ticker": "SHRT SSAB H",
+      "name": "SHRT SSAB H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409466",
+      "ticker": "SHRT SKF H",
+      "name": "SHRT SKF H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409467",
+      "ticker": "SHRT SKA H",
+      "name": "SHRT SKA H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409468",
+      "ticker": "SHRT SEB H",
+      "name": "SHRT SEB H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409469",
+      "ticker": "SHRT SECU H",
+      "name": "SHRT SECU H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409471",
+      "ticker": "SHRT SAND H",
+      "name": "SHRT SAND H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409472",
+      "ticker": "SHRT NDA H",
+      "name": "SHRT NDA H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409473",
+      "ticker": "SHRT NOKI H",
+      "name": "SHRT NOKI H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409474",
+      "ticker": "SHRT MTG H",
+      "name": "SHRT MTG H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409476",
+      "ticker": "SHRT INVE H",
+      "name": "SHRT INVE H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409477",
+      "ticker": "SHRT HM H",
+      "name": "SHRT HM H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409478",
+      "ticker": "SHRT GETI H",
+      "name": "SHRT GETI H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409479",
+      "ticker": "SHRT ERIC H",
+      "name": "SHRT ERIC H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409480",
+      "ticker": "SHRT ELUX H",
+      "name": "SHRT ELUX H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409481",
+      "ticker": "SHRT BOL H",
+      "name": "SHRT BOL H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409482",
+      "ticker": "SHRT ATCO H",
+      "name": "SHRT ATCO H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409483",
+      "ticker": "SHRT AZN H",
+      "name": "SHRT AZN H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409484",
+      "ticker": "SHRT ASSA H",
+      "name": "SHRT ASSA H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409485",
+      "ticker": "SHRT ALFA H",
+      "name": "SHRT ALFA H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409486",
+      "ticker": "SHRT ABB H",
+      "name": "SHRT ABB H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409487",
+      "ticker": "BULL VOLV X3 H",
+      "name": "BULL VOLV X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409488",
+      "ticker": "BULL TLSN X3 H",
+      "name": "BULL TLSN X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409489",
+      "ticker": "BULL TEL2 X3 H",
+      "name": "BULL TEL2 X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409492",
+      "ticker": "BULL SWED X3 H",
+      "name": "BULL SWED X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409493",
+      "ticker": "BULL SSAB X3 H",
+      "name": "BULL SSAB X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409494",
+      "ticker": "BULL SKF X3 H",
+      "name": "BULL SKF X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409495",
+      "ticker": "BULL SKA X3 H",
+      "name": "BULL SKA X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409496",
+      "ticker": "BULL SEB X3 H",
+      "name": "BULL SEB X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409497",
+      "ticker": "BULL SECU X3 H",
+      "name": "BULL SECU X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409499",
+      "ticker": "BULL SAND X3 H",
+      "name": "BULL SAND X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409500",
+      "ticker": "BULL NDA X3 H",
+      "name": "BULL NDA X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409501",
+      "ticker": "BULL NOKI X3 H",
+      "name": "BULL NOKI X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409502",
+      "ticker": "BULL MTG X3 H",
+      "name": "BULL MTG X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409504",
+      "ticker": "BULL INVE X3 H",
+      "name": "BULL INVE X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409505",
+      "ticker": "BULL HM X3 H",
+      "name": "BULL HM X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409506",
+      "ticker": "BULL GETI X3 H",
+      "name": "BULL GETI X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409507",
+      "ticker": "BULL ERIC X3 H",
+      "name": "BULL ERIC X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409508",
+      "ticker": "BULL ELUX X3 H",
+      "name": "BULL ELUX X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409509",
+      "ticker": "BULL BOL X3 H",
+      "name": "BULL BOL X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409510",
+      "ticker": "BULL ATCO X3 H",
+      "name": "BULL ATCO X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409511",
+      "ticker": "BULL AZN X3 H",
+      "name": "BULL AZN X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409512",
+      "ticker": "BULL ASSA X3 H",
+      "name": "BULL ASSA X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409513",
+      "ticker": "BULL ALFA X3 H",
+      "name": "BULL ALFA X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409514",
+      "ticker": "BULL ABB X3 H",
+      "name": "BULL ABB X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409515",
+      "ticker": "BEAR VOLV X3 H",
+      "name": "BEAR VOLV X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409516",
+      "ticker": "BEAR TLSN X3 H",
+      "name": "BEAR TLSN X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409517",
+      "ticker": "BEAR TEL2 X3 H",
+      "name": "BEAR TEL2 X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409520",
+      "ticker": "BEAR SWED X3 H",
+      "name": "BEAR SWED X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409521",
+      "ticker": "BEAR SSAB X3 H",
+      "name": "BEAR SSAB X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409522",
+      "ticker": "BEAR SKF X3 H",
+      "name": "BEAR SKF X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409523",
+      "ticker": "BEAR SKA X3 H",
+      "name": "BEAR SKA X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409524",
+      "ticker": "BEAR SEB X3 H",
+      "name": "BEAR SEB X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409527",
+      "ticker": "BEAR SAND X3 H",
+      "name": "BEAR SAND X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409528",
+      "ticker": "BEAR NDA X3 H",
+      "name": "BEAR NDA X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409532",
+      "ticker": "BEAR INVE X3 H",
+      "name": "BEAR INVE X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409533",
+      "ticker": "BEAR HM X3 H",
+      "name": "BEAR HM X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409534",
+      "ticker": "BEAR GETI X3 H",
+      "name": "BEAR GETI X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409535",
+      "ticker": "BEAR ERIC X3 H",
+      "name": "BEAR ERIC X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409536",
+      "ticker": "BEAR ELUX X3 H",
+      "name": "BEAR ELUX X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409537",
+      "ticker": "BEAR BOL X3 H",
+      "name": "BEAR BOL X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409538",
+      "ticker": "BEAR ATCO X3 H",
+      "name": "BEAR ATCO X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409541",
+      "ticker": "BEAR ALFA X3 H",
+      "name": "BEAR ALFA X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409542",
+      "ticker": "BEAR ABB X3 H",
+      "name": "BEAR ABB X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "409855",
+      "ticker": "NEXAM",
+      "name": "Nexam Chemical Holding",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "414975",
+      "ticker": "DMYD B",
+      "name": "Diamyd Medical B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "417759",
+      "ticker": "LONG KAFFE H",
+      "name": "LONG KAFFE H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "417763",
+      "ticker": "LONG MAJS H",
+      "name": "LONG MAJS H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "417773",
+      "ticker": "LONG SOJA H",
+      "name": "LONG SOJA H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "417787",
+      "ticker": "SHRT KAFFE H",
+      "name": "SHRT KAFFE H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "417791",
+      "ticker": "SHRT MAJS H",
+      "name": "SHRT MAJS H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "417801",
+      "ticker": "SHRT SOJA H",
+      "name": "SHRT SOJA H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "420109",
+      "ticker": "KENH",
+      "name": "Kentima Holding B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "426115",
+      "ticker": "BULL INVEST X3 H",
+      "name": "BULL INVEST X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "426116",
+      "ticker": "LONG INVEST H",
+      "name": "LONG INVEST H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "426779",
+      "ticker": "BEAR ALFA X1 N",
+      "name": "BEAR ALFA X1 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "426780",
+      "ticker": "BEAR ASSA X1 N",
+      "name": "BEAR ASSA X1 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "426783",
+      "ticker": "BEARBOLIDEN X1 N",
+      "name": "BEAR BOLIDEN X1 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "426784",
+      "ticker": "BEAR ELUX X1 N",
+      "name": "BEAR ELUX X1 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "426785",
+      "ticker": "BEAR ERIC X1 N",
+      "name": "BEAR ERIC X1 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "426787",
+      "ticker": "BEAR HM X1 N",
+      "name": "BEAR HM X1 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "426791",
+      "ticker": "BEAR NORDEA X1 N",
+      "name": "BEAR NORDEA X1 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "429897",
+      "ticker": "SERT",
+      "name": "Serstech",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "431438",
+      "ticker": "BEAR OMX X1 N",
+      "name": "BEAR OMX X1 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "438637",
+      "ticker": "IRIS",
+      "name": "Irisity",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "444896",
+      "ticker": "BEAR KINVB X1 N",
+      "name": "BEAR KINVB X1 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "444897",
+      "ticker": "BEAR HUSQB X1 N",
+      "name": "BEAR HUSQB X1 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "445141",
+      "ticker": "LONG BANK H",
+      "name": "LONG BANK H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "445142",
+      "ticker": "LONG BASIND H",
+      "name": "LONG BASIND H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "445143",
+      "ticker": "LONG BYGG H",
+      "name": "LONG BYGG H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "445144",
+      "ticker": "LONG KRAFT H",
+      "name": "LONG KRAFT H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "445145",
+      "ticker": "LONG RETAIL H",
+      "name": "LONG RETAIL H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "445146",
+      "ticker": "LONG SJUKV H",
+      "name": "LONG SJUKV H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "445147",
+      "ticker": "LONG TELE H",
+      "name": "LONG TELE H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "445148",
+      "ticker": "LONG TRANSP H",
+      "name": "LONG TRANSP H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "450638",
+      "ticker": "CLEM",
+      "name": "Clemondo Group",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "452879",
+      "ticker": "BIM",
+      "name": "BIMobject",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "465571",
+      "ticker": "BEAR JPYSEK X3 H",
+      "name": "BEAR JPYSEK X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "465572",
+      "ticker": "BULL JPYSEK X3 H",
+      "name": "BULL JPYSEK X3 H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "471295",
+      "ticker": "KAPIAB",
+      "name": "Kallebäck Property Invest",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "471436",
+      "ticker": "ORT B",
+      "name": "Ortoma B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "472376",
+      "ticker": "DOXA",
+      "name": "Doxa",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "474237",
+      "ticker": "SDOS",
+      "name": "ScandiDos",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "476915",
+      "ticker": "BRAIN",
+      "name": "BrainCool",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "479776",
+      "ticker": "AGES B",
+      "name": "Ages Industri B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "480188",
+      "ticker": "CLAV",
+      "name": "Clavister",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "482657",
+      "ticker": "KAMBI",
+      "name": "Kambi Group",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "483938",
+      "ticker": "GREAT",
+      "name": "Greater Than",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "487396",
+      "ticker": "SES",
+      "name": "Scandinavian Enviro Systems",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "487398",
+      "ticker": "HELIO",
+      "name": "Heliospectra",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "488229",
+      "ticker": "OPTI",
+      "name": "OptiCept Technologies",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "489330",
+      "ticker": "NICO",
+      "name": "Nicoccino Holding",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "495224",
+      "ticker": "LIDDS",
+      "name": "LIDDS",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "506463",
+      "ticker": "ADVE",
+      "name": "Advenica",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "508325",
+      "ticker": "PADEL",
+      "name": "Acenta Group",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "512741",
+      "ticker": "SFTR",
+      "name": "Safeture",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "512876",
+      "ticker": "ABSO",
+      "name": "Absolent Air Care Group",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "516410",
+      "ticker": "BULL AOI X3 N",
+      "name": "BULL AOI X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "516415",
+      "ticker": "BULL EKTA X3 N",
+      "name": "BULL EKTA X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "516419",
+      "ticker": "BULL JM X3 N",
+      "name": "BULL JM X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "516420",
+      "ticker": "BULL KINV X3 N",
+      "name": "BULL KINV X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "516421",
+      "ticker": "BULL LATO X3 N",
+      "name": "BULL LATO X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "516423",
+      "ticker": "BULL LUMI X3 N",
+      "name": "BULL LUMI X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "516424",
+      "ticker": "BULL MEKO X3 N",
+      "name": "BULL MEKO X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "516427",
+      "ticker": "BULL PEAB X3 N",
+      "name": "BULL PEAB X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "516428",
+      "ticker": "BULL RATO X3 N",
+      "name": "BULL RATO X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "516434",
+      "ticker": "BEAR FABG X3 N",
+      "name": "BEAR FABG X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "516436",
+      "ticker": "BEAR JM X3 N",
+      "name": "BEAR JM X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "516439",
+      "ticker": "BEAR PEAB X3 N",
+      "name": "BEAR PEAB X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "516541",
+      "ticker": "SPRINT",
+      "name": "Sprint Bioscience",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "517828",
+      "ticker": "ARCOMA",
+      "name": "Arcoma",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "521492",
+      "ticker": "HEART",
+      "name": "Scandinavian Real Heart",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "527862",
+      "ticker": "FREJA",
+      "name": "Freja eID Group",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "539659",
+      "ticker": "ORGC",
+      "name": "OrganoClick",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "543341",
+      "ticker": "SB NORD LOWVOL H",
+      "name": "SB NORD LOWVOL H",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "552343",
+      "ticker": "SUMMAS",
+      "name": "Summa Defence",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "556359",
+      "ticker": "SALT B",
+      "name": "SaltX Technology Holding B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "563966",
+      "ticker": "BITCOIN XBT",
+      "name": "CoinShares XBT Provider Bitcoin Tracker One",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "565875",
+      "ticker": "LARK",
+      "name": "Lärkberget",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "567182",
+      "ticker": "SCIB",
+      "name": "Scibase Holding",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "567480",
+      "ticker": "CLBIO",
+      "name": "Corline Biomedical",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "567623",
+      "ticker": "GCOR",
+      "name": "Gaming Corps",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "568303",
+      "ticker": "SPEONE",
+      "name": "SpectrumOne",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "569316",
+      "ticker": "HEIM PREF",
+      "name": "Heimstaden Pref",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "569442",
+      "ticker": "STUDBO",
+      "name": "Studentbostäder i Norden",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "572681",
+      "ticker": "NANEXA",
+      "name": "Nanexa",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "573769",
+      "ticker": "NAVIGO PREF",
+      "name": "Navigo Invest Pref",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "573878",
+      "ticker": "SOLT",
+      "name": "SolTech Energy Sweden",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "573881",
+      "ticker": "INSP",
+      "name": "Insplorion",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "574898",
+      "ticker": "SPEC",
+      "name": "SpectraCure AB",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "575378",
+      "ticker": "BONAS",
+      "name": "Bonäsudden Holding",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "591607",
+      "ticker": "BULL SOBI X3 N",
+      "name": "BULL SOBI X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "591608",
+      "ticker": "BULL NOVO X3 N",
+      "name": "BULL NOVO X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "591609",
+      "ticker": "BULL PANDOR X3 N",
+      "name": "BULL PANDOR X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "591611",
+      "ticker": "BEAR NOVO X3 N",
+      "name": "BEAR NOVO X3 N",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "593870",
+      "ticker": "ADDV B",
+      "name": "ADDvise Group B",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "598297",
+      "ticker": "VIMAB",
+      "name": "Vimab Group",
+      "market": "First North Stockholm"
+    },
+    {
+      "id": "599180",
+      "ticker": "Bitcoin XBTE",
+      "name": "CoinShares XBT Provider Bitcoin Tracker Euro",
+      "market": "First North Stockholm"
+    }
+  ]
+}

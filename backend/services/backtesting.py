@@ -126,7 +126,8 @@ def get_rebalance_dates(start_date: date, end_date: date, config: dict) -> list[
                 dates.append(last_day.date() if hasattr(last_day, 'date') else last_day)
             current += relativedelta(months=1)
     else:  # annually
-        month = rebalance.get('month', 3)
+        rebalance_config = config.get('rebalance', {})
+        month = config.get('rebalance_month', rebalance_config.get('month', 3))
         while current <= end_date:
             if current.month == month:
                 next_month = current.replace(day=28) + timedelta(days=4)
@@ -135,6 +136,104 @@ def get_rebalance_dates(start_date: date, end_date: date, config: dict) -> list[
             current += relativedelta(months=1)
     
     return [d for d in dates if start_date <= d <= end_date]
+
+
+def get_historical_market_caps(db, as_of_date: date) -> dict:
+    """Get historical market caps from FinBas for a specific date."""
+    from sqlalchemy import text
+    
+    # Find closest date with market cap data (monthly, end of month)
+    result = db.execute(text('''
+        SELECT t.normalized_ticker as ticker, f.market_cap
+        FROM ticker_all_isins t
+        JOIN finbas_historical f ON f.isin = t.isin
+        WHERE f.market_cap IS NOT NULL 
+        AND f.date <= :as_of_date
+        AND f.date >= date(:as_of_date, '-35 days')
+        ORDER BY f.date DESC
+    '''), {'as_of_date': as_of_date.isoformat()}).fetchall()
+    
+    # Return latest market cap per ticker
+    mcaps = {}
+    for row in result:
+        if row[0] not in mcaps:
+            mcaps[row[0]] = row[1]
+    return mcaps
+
+
+def preload_all_market_caps(db, start_date: date, end_date: date) -> pd.DataFrame:
+    """Pre-load all market caps for date range to avoid repeated queries."""
+    from sqlalchemy import text
+    
+    result = db.execute(text('''
+        SELECT t.normalized_ticker as ticker, f.date, f.market_cap
+        FROM ticker_all_isins t
+        JOIN finbas_historical f ON f.isin = t.isin
+        WHERE f.market_cap IS NOT NULL 
+        AND f.date >= :start_date AND f.date <= :end_date
+    '''), {'start_date': start_date.isoformat(), 'end_date': end_date.isoformat()}).fetchall()
+    
+    if not result:
+        return pd.DataFrame()
+    return pd.DataFrame([{'ticker': r[0], 'date': r[1], 'market_cap': r[2]} for r in result])
+
+
+def get_market_caps_for_date(mcap_df: pd.DataFrame, as_of_date: date, financial_tickers: set) -> set:
+    """Get valid tickers (top 40% by market cap) for a date from pre-loaded data."""
+    if mcap_df.empty:
+        return set()
+    
+    # Get data within 35 days before as_of_date
+    mask = (mcap_df['date'] <= as_of_date) & (mcap_df['date'] >= as_of_date - timedelta(days=35))
+    recent = mcap_df[mask]
+    if recent.empty:
+        return set()
+    
+    # Get latest market cap per ticker
+    latest = recent.loc[recent.groupby('ticker')['date'].idxmax()]
+    latest = latest[~latest['ticker'].isin(financial_tickers)]
+    
+    # Top 40% by market cap
+    sorted_df = latest.sort_values('market_cap', ascending=False)
+    top_40_pct = int(len(sorted_df) * 0.4)
+    return set(sorted_df.head(top_40_pct)['ticker'])
+
+
+def get_finbas_prices(db, start_date: date, end_date: date) -> pd.DataFrame:
+    """Load historical prices from FinBas (includes delisted stocks)."""
+    from sqlalchemy import text
+    
+    result = db.execute(text('''
+        SELECT t.normalized_ticker as ticker, f.date, f.close
+        FROM ticker_all_isins t
+        JOIN finbas_historical f ON f.isin = t.isin
+        WHERE f.date >= :start_date AND f.date <= :end_date
+        AND f.close IS NOT NULL AND f.close > 0
+        ORDER BY f.date
+    '''), {'start_date': start_date.isoformat(), 'end_date': end_date.isoformat()}).fetchall()
+    
+    if not result:
+        return pd.DataFrame()
+    
+    df = pd.DataFrame([{'ticker': r[0], 'date': r[1], 'close': r[2]} for r in result])
+    df['date'] = pd.to_datetime(df['date']).dt.date  # Convert string to date
+    return df
+
+
+def get_financial_tickers(db) -> set:
+    """Get set of financial sector tickers to exclude."""
+    from sqlalchemy import text
+    
+    result = db.execute(text('''
+        SELECT DISTINCT t.normalized_ticker
+        FROM ticker_all_isins t
+        JOIN stocks s ON s.ticker = t.normalized_ticker
+        WHERE s.sector IN (
+            'Traditionell Bankverksamhet', 'Investmentbolag', 'Försäkring',
+            'Sparande & Investering', 'Kapitalförvaltning', 'Konsumentkredit'
+        )
+    ''')).fetchall()
+    return {row[0] for row in result}
 
 
 def backtest_strategy(
@@ -147,126 +246,190 @@ def backtest_strategy(
     """
     Run backtest for a strategy on historical data.
     
-    Args:
-        strategy_name: Name of strategy from config
-        start_date: Backtest start date
-        end_date: Backtest end date
-        db: Database session
-        config: Strategy configuration from strategies.yaml
-    
-    Returns:
-        Dict with backtest results including equity_curve, monthly_returns, metrics
+    Uses FinBas historical data for market cap filtering (no look-ahead bias).
     """
-    from models import DailyPrice, Fundamentals
+    from models import DailyPrice, Fundamentals, Stock
     from services.ranking import (
         calculate_momentum_score, calculate_value_score,
         calculate_dividend_score, calculate_quality_score,
-        rank_and_select_top_n
+        rank_and_select_top_n, filter_by_market_cap
     )
     
     logger.info(f"Starting backtest: {strategy_name} from {start_date} to {end_date}")
     
-    # Get all prices in date range
-    prices = db.query(DailyPrice).filter(
-        DailyPrice.date >= start_date,
-        DailyPrice.date <= end_date
-    ).all()
+    # Check if we should use historical data (before June 2023)
+    use_finbas = end_date <= date(2023, 6, 30)
     
-    if not prices:
+    # Get financial tickers to exclude (applies to all periods)
+    financial_tickers = get_financial_tickers(db)
+    
+    # Pre-load all market caps for the date range (avoids repeated queries)
+    mcap_df = pd.DataFrame()
+    if use_finbas:
+        mcap_df = preload_all_market_caps(db, start_date - timedelta(days=35), end_date)
+        logger.info(f"Pre-loaded {len(mcap_df)} market cap records")
+    
+    # 1. Load price data - use FinBas for historical periods (includes delisted stocks)
+    logger.info("Loading price data from database...")
+    if use_finbas:
+        prices_df = get_finbas_prices(db, start_date - timedelta(days=400), end_date)
+        logger.info(f"Loaded {len(prices_df)} FinBas price records (includes delisted stocks)")
+    else:
+        prices = db.query(
+            DailyPrice.ticker, DailyPrice.date, DailyPrice.close
+        ).filter(
+            DailyPrice.date >= start_date - timedelta(days=400),
+            DailyPrice.date <= end_date
+        ).all()
+        prices_df = pd.DataFrame([{'ticker': p.ticker, 'date': p.date, 'close': p.close} for p in prices])
+        logger.info(f"Loaded {len(prices_df)} Avanza price records")
+    
+    if prices_df.empty:
         return {"error": f"No price data available for {start_date} to {end_date}"}
     
-    prices_df = pd.DataFrame([{
-        'ticker': p.ticker, 'date': p.date, 'close': p.close
-    } for p in prices])
+    # Pre-compute price pivot table once
+    price_pivot = prices_df.pivot_table(index='date', columns='ticker', values='close', aggfunc='last').sort_index()
+    trading_dates = price_pivot.index
+    trading_dates_in_range = trading_dates[(trading_dates >= start_date) & (trading_dates <= end_date)]
     
-    # Get fundamentals
+    if len(trading_dates_in_range) == 0:
+        return {"error": "No trading dates in range"}
+    
+    # Cache current fundamentals (used for non-market-cap metrics)
     fundamentals = db.query(Fundamentals).all()
+    stocks = {s.ticker: s.market_cap_msek for s in db.query(Stock).all()}
     fund_df = pd.DataFrame([{
         'ticker': f.ticker, 'pe': f.pe, 'pb': f.pb, 'ps': f.ps,
-        'pfcf': f.pfcf, 'ev_ebitda': f.ev_ebitda, 'dividend_yield': f.dividend_yield,
+        'p_fcf': f.p_fcf, 'ev_ebitda': f.ev_ebitda, 'dividend_yield': f.dividend_yield,
         'roe': f.roe, 'roa': f.roa, 'roic': f.roic, 'fcfroe': f.fcfroe,
-        'payout_ratio': f.payout_ratio
+        'payout_ratio': f.payout_ratio, 'market_cap': stocks.get(f.ticker, 0)
     } for f in fundamentals]) if fundamentals else pd.DataFrame()
     
-    # Get rebalance dates
+    # For historical backtests, we'll filter by market cap at each rebalance date
+    filtered_fund_df = filter_by_market_cap(fund_df, 40) if not fund_df.empty else fund_df
+    
+    # 2. Map rebalance dates to actual trading days
     rebalance_dates = get_rebalance_dates(start_date, end_date, config)
     if not rebalance_dates:
         return {"error": "No rebalance dates in the specified range"}
     
-    logger.info(f"Rebalance dates: {rebalance_dates}")
+    def next_trading_day(d):
+        idx = trading_dates.searchsorted(d)
+        return trading_dates[min(idx, len(trading_dates) - 1)]
     
-    # Get unique trading dates
-    trading_dates = sorted(prices_df['date'].unique())
+    actual_rebal_dates = sorted(set(next_trading_day(rb) for rb in rebalance_dates))
     
-    # Initialize portfolio
-    portfolio_value = INITIAL_CAPITAL
+    # Handle initial period - rebalance on first trading day if before first scheduled rebalance
+    first_trading = trading_dates_in_range[0]
+    if first_trading < actual_rebal_dates[0]:
+        actual_rebal_dates = [first_trading] + actual_rebal_dates
+    
+    logger.info(f"Actual rebalance dates: {[d.strftime('%Y-%m-%d') for d in actual_rebal_dates]}")
+    
+    # 3. Initialize
+    strategy_type = config.get('type', config.get('category', ''))
     holdings = {}  # ticker -> shares
-    equity_curve = [(start_date, INITIAL_CAPITAL)]
-    monthly_values = {start_date.strftime('%Y-%m'): INITIAL_CAPITAL}
+    portfolio_value = INITIAL_CAPITAL
+    equity_curve = []
+    monthly_values = {}
+    total_transaction_costs = 0.0
     
-    strategy_type = config.get('type', '')
-    
-    for i, current_date in enumerate(trading_dates):
-        if current_date < start_date:
+    # 4. Iterate rebalance periods
+    for i, rebal_date in enumerate(actual_rebal_dates):
+        # Determine period end
+        if i + 1 < len(actual_rebal_dates):
+            next_rebal = actual_rebal_dates[i + 1]
+            period_mask = (trading_dates_in_range >= rebal_date) & (trading_dates_in_range < next_rebal)
+        else:
+            period_mask = trading_dates_in_range >= rebal_date
+        period_dates = trading_dates_in_range[period_mask]
+        
+        if len(period_dates) == 0:
             continue
-        if current_date > end_date:
-            break
         
-        # Check if rebalance needed
-        should_rebalance = any(
-            rb <= current_date and (i == 0 or trading_dates[i-1] < rb)
-            for rb in rebalance_dates
-        )
+        # Calculate rankings using sliced pivot (prices up to rebal_date)
+        pivot_to_date = price_pivot.loc[:rebal_date]
         
-        if should_rebalance or not holdings:
-            # Calculate scores based on strategy type
-            prices_to_date = prices_df[prices_df['date'] <= current_date]
-            
-            if strategy_type == 'momentum':
-                scores = calculate_momentum_score(prices_to_date)
-            elif strategy_type == 'value':
-                scores = calculate_value_score(fund_df) if not fund_df.empty else pd.Series()
-            elif strategy_type == 'dividend':
-                scores = calculate_dividend_score(fund_df) if not fund_df.empty else pd.Series()
-            elif strategy_type == 'quality':
-                scores = calculate_quality_score(fund_df) if not fund_df.empty else pd.Series()
+        # Get valid tickers based on historical market cap (if using FinBas)
+        if use_finbas and not mcap_df.empty:
+            valid_tickers = get_market_caps_for_date(mcap_df, rebal_date, financial_tickers)
+            logger.info(f"FinBas: top 40% = {len(valid_tickers)} stocks (excl financials) on {rebal_date}")
+        else:
+            valid_tickers = set(filtered_fund_df['ticker'].values) if not filtered_fund_df.empty else None
+            if valid_tickers:
+                valid_tickers = valid_tickers - financial_tickers
+        
+        if strategy_type == 'momentum':
+            # Filter pivot to only include stocks meeting market cap threshold
+            if valid_tickers:
+                valid_cols = [c for c in pivot_to_date.columns if c in valid_tickers]
+                pivot_filtered = pivot_to_date[valid_cols]
             else:
-                scores = pd.Series()
+                pivot_filtered = pivot_to_date
+            scores = calculate_momentum_score(None, price_pivot=pivot_filtered)
+            ranked = rank_and_select_top_n(scores, config, n=10) if not scores.empty else pd.DataFrame()
+        elif strategy_type == 'value':
+            ranked = calculate_value_score(filtered_fund_df, None, pivot_to_date) if not filtered_fund_df.empty else pd.DataFrame()
+        elif strategy_type == 'dividend':
+            ranked = calculate_dividend_score(filtered_fund_df, None, pivot_to_date) if not filtered_fund_df.empty else pd.DataFrame()
+        elif strategy_type == 'quality':
+            ranked = calculate_quality_score(filtered_fund_df, None, pivot_to_date) if not filtered_fund_df.empty else pd.DataFrame()
+        else:
+            ranked = pd.DataFrame()
+        
+        # Update holdings
+        if not ranked.empty and 'ticker' in ranked.columns:
+            selected_tickers = ranked['ticker'].tolist()[:10]
+            rebal_prices = pivot_to_date.iloc[-1]
             
-            if not scores.empty:
-                # Select top 10
-                ranked = rank_and_select_top_n(scores, config, n=10)
-                selected_tickers = ranked['ticker'].tolist()
+            if selected_tickers:
+                # Calculate old weights for transaction cost calculation
+                old_weights = {}
+                if holdings:
+                    for ticker, shares in holdings.items():
+                        price = rebal_prices.get(ticker, 0)
+                        if price and portfolio_value > 0:
+                            old_weights[ticker] = (shares * price) / portfolio_value
                 
-                # Get current prices for selected stocks
-                current_prices = prices_to_date.groupby('ticker')['close'].last()
+                # New weights (equal weight)
+                new_weights = {t: 1.0 / len(selected_tickers) for t in selected_tickers}
                 
-                # Equal weight allocation
-                if selected_tickers:
-                    weight_per_stock = portfolio_value / len(selected_tickers)
-                    holdings = {}
-                    for ticker in selected_tickers:
-                        if ticker in current_prices.index and current_prices[ticker] > 0:
-                            holdings[ticker] = weight_per_stock / current_prices[ticker]
-                    
-                    logger.info(f"Rebalanced on {current_date}: {list(holdings.keys())}")
+                # Calculate and deduct transaction costs
+                costs = calculate_transaction_costs(old_weights, new_weights, portfolio_value)
+                if not np.isnan(costs):
+                    portfolio_value -= costs
+                    total_transaction_costs += costs
+                
+                # Allocate to new positions
+                weight_per_stock = portfolio_value / len(selected_tickers)
+                holdings = {}
+                for ticker in selected_tickers:
+                    price = rebal_prices.get(ticker, 0)
+                    if price and price > 0:
+                        holdings[ticker] = weight_per_stock / price
+                
+                logger.info(f"Rebalanced on {rebal_date}: {list(holdings.keys())} (costs: {costs:.2f})")
         
-        # Calculate portfolio value
-        current_prices = prices_df[prices_df['date'] == current_date].set_index('ticker')['close']
-        portfolio_value = sum(
-            shares * current_prices.get(ticker, 0)
-            for ticker, shares in holdings.items()
-        )
+        if not holdings:
+            continue
         
-        if portfolio_value > 0:
-            equity_curve.append((current_date, portfolio_value))
-            month_key = current_date.strftime('%Y-%m')
-            monthly_values[month_key] = portfolio_value
+        # Vectorized portfolio values for period
+        held_tickers = list(holdings.keys())
+        period_prices = price_pivot.loc[period_dates, held_tickers].ffill()
+        holdings_arr = np.array([holdings[t] for t in held_tickers])
+        period_values = (period_prices.values * holdings_arr).sum(axis=1)
+        
+        # Record equity curve and monthly values
+        for d, v in zip(period_dates, period_values):
+            if v > 0:
+                equity_curve.append((d, v))
+                monthly_values[d.strftime('%Y-%m')] = v
+                portfolio_value = v
     
     if len(equity_curve) < 2:
         return {"error": "Insufficient data to calculate returns"}
     
-    # Calculate monthly returns
+    # 5. Calculate metrics
     months = sorted(monthly_values.keys())
     monthly_returns = []
     for i in range(1, len(months)):
@@ -275,14 +438,16 @@ def backtest_strategy(
         if prev_val > 0:
             monthly_returns.append((curr_val - prev_val) / prev_val)
     
-    # Calculate metrics
     final_value = equity_curve[-1][1]
     total_return_pct = ((final_value - INITIAL_CAPITAL) / INITIAL_CAPITAL) * 100
     equity_values = [e[1] for e in equity_curve]
     max_drawdown_pct = calculate_max_drawdown(equity_values)
     sharpe = calculate_sharpe_ratio(monthly_returns)
     
-    logger.info(f"Backtest complete: Return={total_return_pct:.2f}%, Sharpe={sharpe}, MaxDD={max_drawdown_pct}%")
+    logger.info(f"Backtest complete: Return={total_return_pct:.2f}%, Sharpe={sharpe}, MaxDD={max_drawdown_pct}%, Costs={total_transaction_costs:.2f}")
+    
+    # Determine if strategy has look-ahead bias
+    has_look_ahead_bias = strategy_type in ['value', 'dividend', 'quality']
     
     result = {
         "strategy_name": strategy_name,
@@ -291,14 +456,22 @@ def backtest_strategy(
         "total_return_pct": round(total_return_pct, 2),
         "sharpe": sharpe,
         "max_drawdown_pct": max_drawdown_pct,
-        "equity_curve": [(d.isoformat(), round(v, 2)) for d, v in equity_curve[::5]],  # Sample every 5 days
+        "equity_curve": [(d.isoformat(), round(v, 2)) for d, v in equity_curve[::5]],
         "monthly_returns": [round(r * 100, 2) for r in monthly_returns],
-        "portfolio_values": [round(v, 2) for v in equity_values[::21]]  # Monthly samples
+        "portfolio_values": [round(v, 2) for v in equity_values[::21]],
+        "total_transaction_costs": round(total_transaction_costs, 2),
+        "transaction_cost_pct": round((total_transaction_costs / INITIAL_CAPITAL) * 100, 2),
     }
     
-    # Save to database
-    save_backtest_result(db, result)
+    # Add look-ahead bias warning for strategies using current fundamentals
+    if has_look_ahead_bias:
+        result["warnings"] = [{
+            "type": "look_ahead_bias",
+            "message": f"This backtest uses current fundamental data (P/E, ROE, dividend yield, etc.) for historical periods. Results may be overly optimistic and not reflect actual historical performance.",
+            "details": "Historical fundamental data requires Börsdata API integration. Only momentum-based strategies use purely historical price data."
+        }]
     
+    save_backtest_result(db, result)
     return result
 
 

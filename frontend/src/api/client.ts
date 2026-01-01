@@ -1,6 +1,11 @@
 import type { StrategyMeta, RankedStock, PortfolioResponse, RebalanceDate, StockDetail, BacktestRequest, BacktestResult, CombinerRequest } from '../types';
 
-const BASE_URL = import.meta.env.DEV ? '/api' : '/api';
+const BASE_URL = import.meta.env.DEV ? '/api/v1' : '/api/v1';
+
+function getAuthHeaders(): HeadersInit {
+  const token = localStorage.getItem('authToken');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -9,7 +14,10 @@ class ApiError extends Error {
 }
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${url}`, options);
+  const res = await fetch(`${BASE_URL}${url}`, {
+    ...options,
+    headers: { ...getAuthHeaders(), ...options?.headers }
+  });
   if (!res.ok) {
     throw new ApiError(res.status, `API error: ${res.status} ${res.statusText}`);
   }
@@ -25,15 +33,82 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 }
 
 export const api = {
+  get: <T>(url: string) => fetchJson<T>(url),
+  post: <T>(url: string, body: unknown) => postJson<T>(url, body),
+  
   getStrategies: () => fetchJson<StrategyMeta[]>('/strategies'),
   getStrategyRankings: (name: string) => fetchJson<RankedStock[]>(`/strategies/${name}`),
   getStrategyTop10: (name: string) => fetchJson<RankedStock[]>(`/strategies/${name}/top10`),
   getPortfolio: () => fetchJson<PortfolioResponse>('/portfolio/sverige'),
   getRebalanceDates: () => fetchJson<RebalanceDate[]>('/portfolio/rebalance-dates'),
-  getStock: (ticker: string) => fetchJson<StockDetail>(`/stocks/${ticker}`),
+  getStock: (ticker: string) => fetchJson<StockDetail>(`/stocks/${encodeURIComponent(ticker)}`),
+  getStockPrices: (ticker: string, days?: number) => fetchJson<{prices: Array<{date: string; close: number}>}>(`/stocks/${encodeURIComponent(ticker)}/prices${days ? `?days=${days}` : ''}`),
   
-  // New endpoints
+  // Data integrity - CRITICAL for trading
+  getDataIntegrity: () => fetchJson<DataIntegrityResponse>('/data/integrity/quick'),
+  getDataIntegrityFull: () => fetchJson<DataIntegrityFullResponse>('/data/integrity'),
+  validateStrategy: (name: string) => fetchJson<StrategyValidation>(`/strategies/${name}/validate`),
+  
+  // Rebalancing endpoints
+  getRebalanceTrades: (strategy: string, portfolioValue: number, currentHoldings?: Array<{ticker: string; shares: number; value: number}>) => 
+    postJson<RebalanceTradesResponse>(`/rebalance/trades?strategy=${encodeURIComponent(strategy)}&portfolio_value=${portfolioValue}`, currentHoldings || []),
+  sendRebalanceReminder: (email: string, strategy: string) =>
+    postJson<{message: string}>(`/notifications/rebalance-reminder?email=${encodeURIComponent(email)}&strategy=${encodeURIComponent(strategy)}`, {}),
+  
+  // Other endpoints
   combinePortfolio: (req: CombinerRequest) => postJson<PortfolioResponse>('/portfolio/combiner', req),
   runBacktest: (req: BacktestRequest) => postJson<BacktestResult>('/backtesting/run', req),
   getBacktestResults: (strategy: string) => fetchJson<BacktestResult[]>(`/backtesting/results/${strategy}`),
 };
+
+// Rebalancing types
+export interface RebalanceTrade {
+  ticker: string;
+  action: 'BUY' | 'SELL';
+  shares: number;
+  amount_sek: number;
+  price: number | null;
+  isin: string | null;
+}
+
+export interface RebalanceTradesResponse {
+  strategy: string;
+  portfolio_value: number;
+  target_stocks: string[];
+  trades: RebalanceTrade[];
+  total_buys: number;
+  total_sells: number;
+  costs: {
+    courtage: number;
+    spread_estimate: number;
+    total: number;
+    percentage: number;
+  };
+}
+
+// Data integrity types
+export interface DataIntegrityResponse {
+  safe_to_trade: boolean;
+  status: 'OK' | 'WARNING' | 'CRITICAL';
+  recommendation: string;
+  critical_issues: Array<{ type: string; message: string }>;
+  warning_count: number;
+}
+
+export interface DataIntegrityFullResponse {
+  status: 'OK' | 'WARNING' | 'CRITICAL';
+  recommendation: string;
+  safe_to_trade: boolean;
+  checked_at: string;
+  checks: Record<string, { status: string; message: string }>;
+  issues: Array<{ type: string; message: string }>;
+  warnings: Array<{ type: string; message: string }>;
+}
+
+export interface StrategyValidation {
+  strategy: string;
+  safe_to_trade: boolean;
+  message: string;
+  issues: Array<{ type: string; message: string }>;
+  checked_at: string;
+}

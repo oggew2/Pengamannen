@@ -13,6 +13,12 @@ logger = logging.getLogger(__name__)
 class SmartCache:
     """Smart cache with adaptive TTL and data age indicators."""
     
+    # TTL settings optimized for monthly rebalancing with occasional check-ins
+    TTL_PRICES = 6  # hours - current prices for casual viewing
+    TTL_FUNDAMENTALS = 168  # hours (7 days) - P/E, ROE etc. change quarterly
+    TTL_RANKINGS = 24  # hours - strategy rankings
+    TTL_BACKTEST = 720  # hours (30 days) - historical backtests
+    
     def __init__(self, cache_db_path: str = "smart_cache.db"):
         self.cache_db_path = cache_db_path
         self._init_cache_db()
@@ -66,10 +72,21 @@ class SmartCache:
             return 'old'
     
     def set(self, endpoint: str, params: dict, data: Any, 
-            ttl_hours: float = 24, sync_generation: int = 0):
-        """Store data with smart TTL."""
+            ttl_hours: float = None, sync_generation: int = 0):
+        """Store data with smart TTL. Auto-selects TTL based on endpoint if not specified."""
         cache_key = self._generate_cache_key(endpoint, params)
         params_hash = hashlib.md5(json.dumps(params or {}, sort_keys=True).encode()).hexdigest()[:8]
+        
+        # Auto-select TTL based on endpoint type
+        if ttl_hours is None:
+            if 'price' in endpoint.lower() or 'quote' in endpoint.lower():
+                ttl_hours = self.TTL_PRICES
+            elif 'backtest' in endpoint.lower():
+                ttl_hours = self.TTL_BACKTEST
+            elif any(x in endpoint.lower() for x in ['fundamental', 'metric', 'ratio']):
+                ttl_hours = self.TTL_FUNDAMENTALS
+            else:
+                ttl_hours = self.TTL_RANKINGS
         
         expires_at = datetime.now() + timedelta(hours=ttl_hours)
         
@@ -91,8 +108,18 @@ class SmartCache:
             logger.error(f"Cache set error: {e}")
     
     def get(self, endpoint: str, params: dict = None, 
-            include_stale: bool = True) -> Optional[Dict]:
-        """Get cached data with age information."""
+            include_stale: bool = True, force_refresh: bool = False) -> Optional[Dict]:
+        """Get cached data with age information.
+        
+        Args:
+            endpoint: Cache endpoint key
+            params: Optional parameters
+            include_stale: Return expired data if available (with is_expired flag)
+            force_refresh: If True, always return None to force a fresh fetch
+        """
+        if force_refresh:
+            return None
+            
         cache_key = self._generate_cache_key(endpoint, params)
         
         try:

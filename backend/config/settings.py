@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     data_sync_enabled: bool = True
     data_sync_hour: int = 18
     
+    # Email alerts (optional)
+    alert_email: str = ""  # Email to send alerts to
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "alerts@borslabbet.local"
+    
     class Config:
         env_file = ".env"
         extra = "ignore"

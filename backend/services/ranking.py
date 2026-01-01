@@ -2,46 +2,90 @@
 Ranking service - Börslabbet strategy scoring functions.
 
 Verified Strategy Rules (from börslabbet.se/borslabbets-strategier):
+- Universe: Minimum 2B SEK market cap (since June 2023)
 - Universe: Top 40% by market cap (for liquidity)
+- Excludes: Financial companies (nyckeltal don't apply well)
 - Piotroski F-Score: 0-9 scale quality filter
-- All strategies use percentile-based filtering
+- Trendande strategies: Top 40% by primary factor, then top 25% by momentum
+- Banding: For momentum, only sell if stock drops out of top 20%
 """
 import pandas as pd
 import numpy as np
 
+# Minimum market cap threshold (2 billion SEK since June 2023)
+MIN_MARKET_CAP_MSEK = 2000  # 2B SEK = 2000 MSEK
+
+# Valid stock types for strategy calculations (excludes ETFs, certificates, etc.)
+VALID_STOCK_TYPES = ['stock', 'sdb']  # Regular stocks and Swedish Depository Receipts
+
+# Financial sectors to exclude (nyckeltal don't apply well to these)
+FINANCIAL_SECTORS = [
+    'Traditionell Bankverksamhet',
+    'Investmentbolag',
+    'Försäkring',
+    'Sparande & Investering',
+    'Kapitalförvaltning',
+    'Konsumentkredit',
+]
+
+
+def filter_real_stocks(df: pd.DataFrame, include_preference: bool = False) -> pd.DataFrame:
+    """Filter out ETFs, certificates, and leveraged products."""
+    if df.empty or 'stock_type' not in df.columns:
+        return df
+    valid_types = VALID_STOCK_TYPES + (['preference'] if include_preference else [])
+    # Case-insensitive comparison
+    return df[df['stock_type'].str.lower().isin([t.lower() for t in valid_types])]
+
+
+def filter_financial_companies(df: pd.DataFrame) -> pd.DataFrame:
+    """Exclude financial companies where valuation metrics don't apply well."""
+    if df.empty or 'sector' not in df.columns:
+        return df
+    # Case-insensitive comparison
+    financial_lower = [s.lower() for s in FINANCIAL_SECTORS]
+    return df[~df['sector'].fillna('').str.lower().isin(financial_lower)]
+
+
+def filter_by_min_market_cap(df: pd.DataFrame, min_cap_msek: float = MIN_MARKET_CAP_MSEK) -> pd.DataFrame:
+    """Filter stocks below minimum market cap threshold (2B SEK since June 2023)."""
+    if df.empty or 'market_cap' not in df.columns:
+        return df
+    return df[df['market_cap'] >= min_cap_msek]
+
 
 def filter_by_market_cap(fund_df: pd.DataFrame, percentile: float = 40) -> pd.DataFrame:
-    """
-    Filter to top N% of stocks by market cap.
-    Börslabbet uses top 40% for liquidity.
-    """
+    """Filter to top N% of stocks by market cap (Börslabbet uses top 40%)."""
     if fund_df.empty or 'market_cap' not in fund_df.columns:
         return fund_df
-    
     threshold = fund_df['market_cap'].quantile(1 - percentile / 100)
     return fund_df[fund_df['market_cap'] >= threshold]
 
 
-def calculate_momentum_score(prices_df: pd.DataFrame) -> pd.Series:
+def calculate_momentum_score(prices_df: pd.DataFrame, price_pivot: pd.DataFrame = None) -> pd.Series:
     """Sammansatt Momentum: average of 3m, 6m, 12m price returns."""
-    if prices_df.empty:
+    if price_pivot is None:
+        if prices_df is None or prices_df.empty:
+            return pd.Series(dtype=float)
+        price_pivot = prices_df.pivot_table(index='date', columns='ticker', values='close', aggfunc='last').sort_index()
+    
+    if price_pivot.empty:
         return pd.Series(dtype=float)
     
-    latest = prices_df.groupby('ticker')['date'].max()
+    latest = price_pivot.iloc[-1]
     scores = pd.DataFrame(index=latest.index)
     
     for period in [3, 6, 12]:
         days = period * 21
-        returns = []
-        for ticker in latest.index:
-            tp = prices_df[prices_df['ticker'] == ticker].sort_values('date')
-            if len(tp) >= days:
-                returns.append(tp['close'].iloc[-1] / tp['close'].iloc[-days] - 1)
-            else:
-                returns.append(np.nan)
-        scores[f'm{period}'] = returns
+        if len(price_pivot) >= days:
+            past = price_pivot.iloc[-days].replace(0, np.nan)  # Prevent division by zero
+            scores[f'm{period}'] = (latest / past) - 1
+        else:
+            scores[f'm{period}'] = np.nan
     
-    return scores.mean(axis=1)
+    result = scores.mean(axis=1)
+    result = result.replace([np.inf, -np.inf], np.nan)  # Filter infinity values
+    return result.dropna()
 
 
 def calculate_piotroski_f_score(fund_df: pd.DataFrame, prev_fund_df: pd.DataFrame = None) -> pd.Series:
@@ -204,16 +248,18 @@ def calculate_momentum_with_quality_filter(
     current_holdings: list = None
 ) -> pd.DataFrame:
     """
-    Sammansatt Momentum strategy with full Piotroski filter.
+    Sammansatt Momentum strategy with Piotroski F-Score filter.
+    Excludes financial companies.
     
-    Step 1: Filter to top 40% by market cap
+    Step 1: Filter to top 40% by market cap, exclude financials
     Step 2: Calculate momentum (avg 3m, 6m, 12m)
     Step 3: Remove stocks with F-Score <= 3 (bottom quality)
     Step 4: Apply banding if current holdings provided
     Step 5: Select top 10 by momentum
     """
-    # Market cap filter
+    # Market cap filter + exclude financials
     filtered_fund = filter_by_market_cap(fund_df, 40)
+    filtered_fund = filter_financial_companies(filtered_fund)
     valid_tickers = set(filtered_fund['ticker'].values) if not filtered_fund.empty else None
     
     # Filter prices to valid tickers
@@ -252,75 +298,100 @@ def calculate_momentum_with_quality_filter(
     return rankings
 
 
-def calculate_value_score(fund_df: pd.DataFrame, prices_df: pd.DataFrame = None) -> pd.DataFrame:
+def calculate_value_score(fund_df: pd.DataFrame, prices_df: pd.DataFrame = None, price_pivot: pd.DataFrame = None) -> pd.DataFrame:
     """
-    Trendande Värde: 6-factor Sammansatt Värde.
-    Now includes P/FCF metric.
+    Trendande Värde: Top 40% by value (6 factors), then top 25% by momentum.
+    Excludes financial companies.
     """
     if fund_df.empty:
         return pd.DataFrame(columns=['ticker', 'rank', 'score'])
     
-    # Market cap filter
+    # Market cap filter + exclude financials
     filtered = filter_by_market_cap(fund_df, 40)
+    filtered = filter_financial_companies(filtered)
     if filtered.empty:
         filtered = fund_df
     
     df = filtered.set_index('ticker')
     ranks = pd.DataFrame(index=df.index)
     
-    # Lower = better
+    # Lower = better (keep NaN as NaN, don't penalize)
     for col in ['pe', 'pb', 'ps', 'p_fcf', 'ev_ebitda']:
         if col in df.columns:
-            ranks[col] = df[col].rank(ascending=True, na_option='bottom')
+            ranks[col] = df[col].rank(ascending=True)
     
     # Higher = better
     if 'dividend_yield' in df.columns:
-        ranks['dividend_yield'] = df['dividend_yield'].rank(ascending=False, na_option='bottom')
+        ranks['dividend_yield'] = df['dividend_yield'].rank(ascending=False)
     
     if ranks.empty:
         return pd.DataFrame(columns=['ticker', 'rank', 'score'])
     
-    value_score = ranks.mean(axis=1)
-    top_value = _filter_top_percentile(-value_score, 10)
+    # Average only non-NaN metrics per stock
+    value_score = ranks.mean(axis=1, skipna=True)
+    # Top 40% by value
+    top_value = _filter_top_percentile(-value_score, 40)
     
-    if prices_df is not None and not prices_df.empty:
-        momentum = calculate_momentum_score(prices_df)
-        filtered_mom = momentum[momentum.index.isin(top_value)]
-        top10 = filtered_mom.sort_values(ascending=False).head(10)
-    else:
-        top10 = value_score[value_score.index.isin(top_value)].nsmallest(10)
+    if price_pivot is None and (prices_df is None or prices_df.empty):
+        return pd.DataFrame(columns=['ticker', 'rank', 'score'])
     
+    momentum = calculate_momentum_score(prices_df, price_pivot=price_pivot)
+    filtered_mom = momentum[momentum.index.isin(top_value)]
+    if filtered_mom.empty:
+        return pd.DataFrame(columns=['ticker', 'rank', 'score'])
+    
+    # Take top 25% by momentum (from the 40% value pool = ~10% of universe)
+    n_select = max(10, int(len(filtered_mom) * 0.25))
+    top_n = filtered_mom.sort_values(ascending=False).head(n_select)
+    top10 = top_n.head(10)
     return pd.DataFrame({'ticker': top10.index, 'rank': range(1, len(top10)+1), 'score': top10.values})
 
 
-def calculate_dividend_score(fund_df: pd.DataFrame, prices_df: pd.DataFrame = None) -> pd.DataFrame:
-    """Trendande Utdelning with market cap filter."""
+def calculate_dividend_score(fund_df: pd.DataFrame, prices_df: pd.DataFrame = None, price_pivot: pd.DataFrame = None) -> pd.DataFrame:
+    """
+    Trendande Utdelning: Top 40% by dividend yield, then top 25% by momentum.
+    Excludes financial companies.
+    """
     if fund_df.empty or 'dividend_yield' not in fund_df.columns:
         return pd.DataFrame(columns=['ticker', 'rank', 'score'])
     
+    # Market cap filter + exclude financials
     filtered = filter_by_market_cap(fund_df, 40)
+    filtered = filter_financial_companies(filtered)
     if filtered.empty:
         filtered = fund_df
     
     df = filtered.set_index('ticker')
-    top_yield = _filter_top_percentile(df['dividend_yield'], 10)
     
-    if prices_df is not None and not prices_df.empty:
-        momentum = calculate_momentum_score(prices_df)
-        filtered_mom = momentum[momentum.index.isin(top_yield)]
-        top10 = filtered_mom.sort_values(ascending=False).head(10)
-    else:
-        top10 = df.loc[top_yield, 'dividend_yield'].nlargest(10)
+    # Top 40% by dividend yield
+    top_yield = _filter_top_percentile(df['dividend_yield'], 40)
     
+    if price_pivot is None and (prices_df is None or prices_df.empty):
+        return pd.DataFrame(columns=['ticker', 'rank', 'score'])
+    
+    momentum = calculate_momentum_score(prices_df, price_pivot=price_pivot)
+    filtered_mom = momentum[momentum.index.isin(top_yield)]
+    if filtered_mom.empty:
+        return pd.DataFrame(columns=['ticker', 'rank', 'score'])
+    
+    # Take top 25% by momentum
+    n_select = max(10, int(len(filtered_mom) * 0.25))
+    top_n = filtered_mom.sort_values(ascending=False).head(n_select)
+    top10 = top_n.head(10)
     return pd.DataFrame({'ticker': top10.index, 'rank': range(1, len(top10)+1), 'score': top10.values})
 
 
-def calculate_quality_score(fund_df: pd.DataFrame, prices_df: pd.DataFrame = None) -> pd.DataFrame:
-    """Trendande Kvalitet with market cap filter."""
+def calculate_quality_score(fund_df: pd.DataFrame, prices_df: pd.DataFrame = None, price_pivot: pd.DataFrame = None) -> pd.DataFrame:
+    """
+    Trendande Kvalitet: Top 40% by quality (ROE/ROA/ROIC/FCFROE), then top 25% by momentum.
+    Excludes financial companies.
+    """
     if fund_df.empty:
         return pd.DataFrame(columns=['ticker', 'rank', 'score'])
     
+    # Market cap filter + exclude financials
     filtered = filter_by_market_cap(fund_df, 40)
+    filtered = filter_financial_companies(filtered)
     if filtered.empty:
         filtered = fund_df
     
@@ -336,15 +407,21 @@ def calculate_quality_score(fund_df: pd.DataFrame, prices_df: pd.DataFrame = Non
         return pd.DataFrame(columns=['ticker', 'rank', 'score'])
     
     quality_score = ranks.mean(axis=1)
-    top_quality = _filter_top_percentile(-quality_score, 10)
+    # Top 40% by quality
+    top_quality = _filter_top_percentile(-quality_score, 40)
     
-    if prices_df is not None and not prices_df.empty:
-        momentum = calculate_momentum_score(prices_df)
-        filtered_mom = momentum[momentum.index.isin(top_quality)]
-        top10 = filtered_mom.sort_values(ascending=False).head(10)
-    else:
-        top10 = quality_score[quality_score.index.isin(top_quality)].nsmallest(10)
+    if price_pivot is None and (prices_df is None or prices_df.empty):
+        return pd.DataFrame(columns=['ticker', 'rank', 'score'])
     
+    momentum = calculate_momentum_score(prices_df, price_pivot=price_pivot)
+    filtered_mom = momentum[momentum.index.isin(top_quality)]
+    if filtered_mom.empty:
+        return pd.DataFrame(columns=['ticker', 'rank', 'score'])
+    
+    # Take top 25% by momentum
+    n_select = max(10, int(len(filtered_mom) * 0.25))
+    top_n = filtered_mom.sort_values(ascending=False).head(n_select)
+    top10 = top_n.head(10)
     return pd.DataFrame({'ticker': top10.index, 'rank': range(1, len(top10)+1), 'score': top10.values})
 
 

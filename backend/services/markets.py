@@ -153,8 +153,9 @@ def get_us_stocks() -> List[Tuple[str, str]]:
 def get_stocks_for_market(market: str) -> List[Tuple[str, str]]:
     """Get stock list for a specific market."""
     if market == "sweden":
-        from services.eodhd_fetcher import get_omx_stockholm_stocks
-        return get_omx_stockholm_stocks()
+        from services.live_universe import get_live_stock_universe
+        tickers = get_live_stock_universe('sweden', 'large')
+        return [(t, t) for t in tickers]
     elif market == "nordic":
         return get_nordic_stocks()
     elif market == "us":

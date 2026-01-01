@@ -56,6 +56,7 @@ def load_all():
                 db.add(Fundamentals(
                     ticker=row['ticker'],
                     fiscal_date=row.get('fiscal_date'),
+                    market_cap=row.get('market_cap'),
                     pe=row.get('pe'),
                     pb=row.get('pb'),
                     ps=row.get('ps'),

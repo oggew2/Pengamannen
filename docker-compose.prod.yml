@@ -1,0 +1,80 @@
+version: '3.8'
+
+# Production deployment with Cloudflare Tunnel and auto-updates
+# Usage: docker compose -f docker-compose.prod.yml up -d
+
+services:
+  backend:
+    image: ghcr.io/${GITHUB_USER:-local}/borslabbet-app-backend:latest
+    build: ./backend
+    container_name: borslabbet-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./data/app.db
+      - DATA_SYNC_ENABLED=true
+      - DATA_SYNC_HOUR=6
+      - TZ=Europe/Stockholm
+    volumes:
+      - app-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  frontend:
+    image: ghcr.io/${GITHUB_USER:-local}/borslabbet-app-frontend:latest
+    build:
+      context: ./frontend
+      args:
+        - VITE_API_BASE_URL=${API_URL:-http://localhost:8000}
+    container_name: borslabbet-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # Auto-update containers when new images are pushed to GHCR
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.docker/config.json:/config.json:ro
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=300
+      - WATCHTOWER_INCLUDE_STOPPED=true
+      - WATCHTOWER_ROLLING_RESTART=true
+      - TZ=Europe/Stockholm
+      - DOCKER_CONFIG=/config.json
+    restart: unless-stopped
+
+  # Cloudflare Tunnel - secure external access without port forwarding
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - default
+
+volumes:
+  app-data:
+    driver: local
+
+networks:
+  default:
+    driver: bridge

@@ -180,8 +180,14 @@ def run_historical_backtest(
                 scores = pd.Series()
             
             if not scores.empty:
-                # Select top 10
-                top_stocks = scores.sort_values(ascending=False).head(10).index.tolist()
+                # Select top 10 - handle both Series and DataFrame returns
+                if isinstance(scores, pd.DataFrame):
+                    if 'ticker' in scores.columns:
+                        top_stocks = scores['ticker'].head(10).tolist()
+                    else:
+                        top_stocks = scores.head(10).index.tolist()
+                else:
+                    top_stocks = scores.sort_values(ascending=False).head(10).index.tolist()
                 
                 # Calculate transaction costs for turnover
                 old_tickers = set(holdings.keys())
@@ -316,6 +322,14 @@ def run_historical_backtest(
         'equity_curve': equity_curve[::21],  # Monthly samples
         'trades': trades[-20:]  # Last 20 trades
     }
+    
+    # Add look-ahead bias warning for strategies using fundamentals
+    if strategy_type in ['value', 'dividend', 'quality']:
+        result["warnings"] = [{
+            "type": "look_ahead_bias",
+            "message": "This backtest uses current fundamental data for historical periods. Results may be overly optimistic.",
+            "details": "Historical fundamental data requires Börsdata API. Only momentum strategies use purely historical price data."
+        }]
     
     logger.info(f"Backtest complete: CAGR={cagr:.1f}%, Sharpe={sharpe:.2f}, MaxDD={max_dd*100:.1f}%")
     

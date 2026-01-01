@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Simple in-memory cache
 _cache: dict[str, tuple[Any, datetime]] = {}
-_cache_ttl = timedelta(minutes=15)
+_cache_ttl = timedelta(hours=24)  # Increased from 15 min - rankings only matter at rebalance
 
 
 def cache_key(*args, **kwargs) -> str:

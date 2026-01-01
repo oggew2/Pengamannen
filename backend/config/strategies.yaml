@@ -1,6 +1,13 @@
 # Börslabbet Strategy Rules (Verified from börslabbet.se/borslabbets-strategier)
 # Last updated: 2024-2025
 
+universe:
+  combined_exchanges: ["Stockholmsbörsen", "First North"]
+  minimum_market_cap_sek: 2_000_000_000  # UPDATED: was 500M SEK until June 2023
+  minimum_threshold_date: "2023-06-01"
+  target_percentile: "Top 40% of stocks by market cap (for liquidity)"
+  note: "Same 2B SEK threshold applies to both Stockholmsbörsen and First North - no separate rules"
+
 strategies:
 
   sammansatt_momentum:
@@ -116,9 +123,18 @@ strategies:
     # Step 4: Select top 10 by momentum
 
 # Implementation notes from börslabbet.se:
-# - Universe: Top 40% of stocks by market cap (for liquidity)
+# - Universe: Top 40% of stocks by market cap (for liquidity) [THRESHOLD: 2B SEK minimum since June 2023]
+# - Applies to: Stockholmsbörsen + First North (combined universe, same threshold for both)
 # - Backtests use "topp 10%" which ≈ 10 stocks for practical portfolios
 # - Trendande strategies: "topp 40% efter primära kriteriet → översta fjärdedelen efter momentum"
 # - Momentum is relative ranking (subtracting index doesn't change rankings)
 # - All portfolios equal-weighted, dividends reinvested
 # - Piotroski cutoff not published - academic standard is F-Score >= 4-5
+#
+# CRITICAL UPDATE (December 2025):
+# - Market cap minimum: 500M SEK → 2 BILLION SEK (effective June 1, 2023)
+# - Reason: Liquidity improvement - spread reduced from ~2% to 0.2-0.3%, ~75% cost reduction
+# - First North: Included in universe since ~2020
+# - Core strategy logic: Unchanged since 2020-2021 (only universe threshold updated)
+# - Trading cost estimate: 0.5% per rebalance (down from ~2% pre-June 2023)
+# - Sources: 15+ official Börslabbet pages verified December 2025

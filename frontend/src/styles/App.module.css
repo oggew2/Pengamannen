@@ -9,6 +9,16 @@
   --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+[data-theme="dark"] {
+  --color-bg: #1a1a2e;
+  --color-surface: #252542;
+  --color-text: #f8f9fa;
+  --color-text-muted: #a0a0b0;
+  --color-border: #3a3a5a;
+  --color-primary: #14b8a6;
+  --color-primary-light: #2dd4bf;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -16,6 +26,7 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   line-height: 1.5;
+  transition: background-color 0.3s, color 0.3s;
 }
 
 .container {
@@ -28,6 +39,9 @@ body {
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
   padding: 1rem 0;
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 
 .navInner {
@@ -53,10 +67,56 @@ body {
   color: var(--color-text-muted);
   text-decoration: none;
   font-size: 0.875rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  transition: background 0.2s;
 }
 
 .navLink:hover, .navLinkActive {
   color: var(--color-primary);
+  background: var(--color-bg);
+}
+
+/* Mobile menu button */
+.menuBtn {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  color: var(--color-text);
+}
+
+/* Mobile nav overlay */
+.mobileNav {
+  display: none;
+  position: fixed;
+  inset: 0;
+  top: 60px;
+  background: var(--color-surface);
+  z-index: 40;
+  padding: 1rem;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mobileNav.open {
+  display: flex;
+}
+
+.mobileNavLink {
+  display: block;
+  padding: 1rem;
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+}
+
+.mobileNavLink:active {
+  background: var(--color-bg);
 }
 
 .main {
@@ -272,16 +332,13 @@ body {
 
 @media (max-width: 640px) {
   .navInner {
-    flex-direction: column;
-    gap: 1rem;
+    justify-content: space-between;
   }
   .navLinks {
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 0.75rem;
+    display: none;
   }
-  .navLink {
-    font-size: 0.75rem;
+  .menuBtn {
+    display: block;
   }
   .grid {
     grid-template-columns: 1fr;
@@ -290,7 +347,7 @@ body {
     font-size: 1.25rem;
   }
   .table {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
   }
   .table th, .table td {
     padding: 0.5rem;
@@ -307,6 +364,26 @@ body {
   }
   .card {
     padding: 1rem;
+  }
+  /* Touch-friendly buttons */
+  .btn {
+    padding: 1rem;
+    font-size: 1rem;
+    min-height: 48px;
+  }
+  .btnSmall {
+    padding: 0.5rem 0.75rem;
+    min-height: 44px;
+  }
+  .input, .select {
+    padding: 0.75rem;
+    font-size: 1rem;
+    min-height: 48px;
+  }
+  /* Horizontal scroll for tables */
+  .tableWrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }
 
@@ -480,4 +557,131 @@ body {
   .statsGrid {
     grid-template-columns: 1fr;
   }
+}
+
+
+/* Dark mode toggle */
+.themeToggle {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.5rem;
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--color-text);
+  margin-left: auto;
+}
+
+.themeToggle:hover {
+  background: var(--color-bg);
+}
+
+
+/* Market filter */
+.marketFilter {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.filterLabel {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+}
+
+@media (max-width: 640px) {
+  .marketFilter {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+}
+
+
+/* Table wrapper for mobile horizontal scroll */
+.tableWrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Pull to refresh indicator area */
+.pullRefresh {
+  text-align: center;
+  padding: 0.5rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+/* Bottom navigation for mobile (optional future use) */
+.bottomNav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  padding: 0.5rem;
+  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  z-index: 50;
+}
+
+@media (max-width: 640px) {
+  /* Add bottom padding when bottom nav is shown */
+  .main {
+    padding-bottom: 80px;
+  }
+}
+
+/* Swipeable cards */
+.swipeCard {
+  touch-action: pan-y;
+}
+
+/* Loading skeleton */
+.skeleton {
+  background: linear-gradient(90deg, var(--color-border) 25%, var(--color-bg) 50%, var(--color-border) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 4px;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Responsive typography */
+@media (max-width: 480px) {
+  .pageTitle { font-size: 1.125rem; }
+  .cardTitle { font-size: 0.9rem; }
+  h2 { font-size: 1rem; }
+}
+
+/* Landscape phone adjustments */
+@media (max-height: 500px) and (orientation: landscape) {
+  .nav { padding: 0.5rem 0; }
+  .main { padding: 1rem 0; }
+  .mobileNav { top: 50px; }
 }

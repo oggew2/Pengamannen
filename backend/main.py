@@ -1,6 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, Header, UploadFile, File, Request
 from sqlalchemy.orm import Session
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from contextlib import asynccontextmanager
 import pandas as pd
 import json
@@ -9,7 +9,7 @@ import asyncio
 from typing import List, Dict, Optional
 
 from db import get_db, engine, Base, text
-from models import Stock, DailyPrice, Fundamentals, SavedCombination as SavedCombinationModel
+from models import Stock, DailyPrice, Fundamentals, SavedCombination as SavedCombinationModel, UserGoal
 # from models.user_storage import UserProfile, UserPortfolio, AvanzaImport, UserSession
 from schemas import (
     StrategyMeta, RankedStock, StockDetail, 
@@ -25,14 +25,12 @@ from services.ranking import (
 from services.portfolio import get_next_rebalance_dates, combine_strategies
 from services.backtesting import backtest_strategy, get_backtest_results
 from services.avanza_fetcher_v2 import AvanzaDirectFetcher
-from services.eodhd_fetcher import get_sync_status
 from services.enhanced_backtesting import long_term_backtester
 from services.auto_rebalancing import auto_rebalancer
 from services.portfolio_comparison import PortfolioComparisonService
 from services.validation import check_data_freshness
 from services.cache import invalidate_cache, get_cache_stats
 from services.export import export_rankings_to_csv, export_backtest_to_csv, export_comparison_to_csv
-from services.auto_rebalancing import auto_rebalancer
 from services.transaction_costs import (
     calculate_total_transaction_cost, calculate_rebalance_costs,
     calculate_annual_cost_impact, get_available_brokers
@@ -59,11 +57,23 @@ from services.custom_strategy import (
 )
 from services.markets import get_available_markets, get_stocks_for_market, get_market_config
 from services.csv_import import parse_broker_csv, calculate_holdings_from_transactions
+from services.user_portfolio import (
+    get_portfolio_value, calculate_portfolio_performance, 
+    get_portfolio_history, save_snapshot, calculate_rebalance_trades
+)
 from config.settings import get_settings, load_strategies_config
 from jobs.scheduler import start_scheduler, stop_scheduler, get_scheduler_status
 from fastapi.responses import PlainTextResponse
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging with both console and file handlers
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s|%(levelname)s|%(name)s|%(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('app.log')
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # WebSocket connection manager
@@ -115,12 +125,107 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Börslabbet Strategy API", lifespan=lifespan)
 
+# Create v1 API router
+from fastapi import APIRouter
+v1_router = APIRouter(prefix="/v1")
+
+# Rate limiting setup
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Enable CORS for frontend
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Security headers middleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+# GZip compression for responses > 1KB
+from starlette.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 # Initialize services
 portfolio_comparison_service = PortfolioComparisonService()
 
 
+# Auth endpoints
+@v1_router.post("/auth/register")
+@limiter.limit("5/minute")
+def register(request: Request, email: str, password: str, name: str = None, db: Session = Depends(get_db)):
+    """Register a new user."""
+    from services.auth import register_user
+    from services.audit import log_auth
+    try:
+        user = register_user(db, email, password, name)
+        log_auth("REGISTER", user.id, email, True, request.client.host if request.client else None)
+        return {"user_id": user.id, "email": user.email, "name": user.name}
+    except Exception as e:
+        log_auth("REGISTER", None, email, False, request.client.host if request.client else None)
+        raise
+
+@v1_router.post("/auth/login")
+@limiter.limit("5/minute")
+def login(request: Request, email: str, password: str, db: Session = Depends(get_db)):
+    """Login and get session token."""
+    from services.auth import login_user
+    from services.audit import log_auth
+    try:
+        result = login_user(db, email, password)
+        log_auth("LOGIN", result.get("user_id"), email, True, request.client.host if request.client else None)
+        return result
+    except Exception as e:
+        log_auth("LOGIN", None, email, False, request.client.host if request.client else None)
+        raise
+
+@v1_router.post("/auth/logout")
+def logout(token: str, db: Session = Depends(get_db)):
+    """Logout and invalidate token."""
+    from services.auth import logout_user
+    logout_user(db, token)
+    return {"status": "logged out"}
+
+@v1_router.get("/auth/me")
+def get_me(db: Session = Depends(get_db), authorization: str = Header(None)):
+    """Get current user info."""
+    from services.auth import get_current_user
+    user = get_current_user(db, authorization)
+    if not user:
+        return {"authenticated": False}
+    return {"authenticated": True, "user_id": user.id, "email": user.email, "name": user.name, "market_filter": user.market_filter}
+
+@v1_router.put("/auth/market-filter")
+def update_market_filter(market_filter: str, db: Session = Depends(get_db), authorization: str = Header(...)):
+    """Update user's market filter preference."""
+    from services.auth import require_auth, update_user_market_filter
+    user = require_auth(db, authorization)
+    user = update_user_market_filter(db, user, market_filter)
+    return {"market_filter": user.market_filter}
+
+
 # Health
-@app.get("/health")
+@v1_router.get("/health")
 def health_check(db: Session = Depends(get_db)):
     """Health check with database connectivity."""
     try:
@@ -136,8 +241,97 @@ def health_check(db: Session = Depends(get_db)):
     }
 
 
+# Prometheus metrics endpoint
+@v1_router.get("/metrics", response_class=PlainTextResponse)
+def metrics(db: Session = Depends(get_db)):
+    """Prometheus-compatible metrics endpoint."""
+    from models import Stock, DailyPrice, StrategySignal
+    
+    stock_count = db.query(Stock).count()
+    price_count = db.query(DailyPrice).count()
+    signal_count = db.query(StrategySignal).count()
+    
+    lines = [
+        "# HELP borslabbet_stocks_total Total number of stocks in database",
+        "# TYPE borslabbet_stocks_total gauge",
+        f"borslabbet_stocks_total {stock_count}",
+        "# HELP borslabbet_prices_total Total price records",
+        "# TYPE borslabbet_prices_total gauge",
+        f"borslabbet_prices_total {price_count}",
+        "# HELP borslabbet_signals_total Strategy signal records",
+        "# TYPE borslabbet_signals_total gauge",
+        f"borslabbet_signals_total {signal_count}",
+    ]
+    return "\n".join(lines)
+
+
+# Alerts endpoint
+@v1_router.get("/alerts")
+def get_alerts(db: Session = Depends(get_db)):
+    """Get current system alerts."""
+    from services.alerts import get_all_alerts
+    return {"alerts": get_all_alerts(db)}
+
+
+# Data integrity check - CRITICAL for trading
+@v1_router.get("/data/integrity")
+def check_data_integrity_endpoint(db: Session = Depends(get_db)):
+    """
+    Check data integrity before trading.
+    Returns comprehensive report on data freshness, coverage, and issues.
+    
+    IMPORTANT: Always check this before executing trades!
+    """
+    from services.data_integrity import check_data_integrity
+    return check_data_integrity(db)
+
+
+@v1_router.get("/data/integrity/quick")
+def quick_integrity_check(db: Session = Depends(get_db)):
+    """Quick integrity check - returns just safe_to_trade boolean and critical issues."""
+    from services.data_integrity import check_data_integrity
+    result = check_data_integrity(db)
+    return {
+        "safe_to_trade": result["safe_to_trade"],
+        "status": result["status"],
+        "recommendation": result["recommendation"],
+        "critical_issues": [i for i in result["issues"] if True],  # All issues are critical
+        "warning_count": len(result["warnings"])
+    }
+
+
+@v1_router.get("/data/alerts")
+def get_alerts_history(
+    limit: int = Query(50, ge=1, le=200),
+    include_resolved: bool = Query(False),
+    db: Session = Depends(get_db)
+):
+    """Get historical data alerts."""
+    from services.alerting import get_alert_history
+    return get_alert_history(db, limit=limit, include_resolved=include_resolved)
+
+
+@v1_router.get("/strategies/{name}/validate")
+def validate_strategy_data(name: str, db: Session = Depends(get_db)):
+    """
+    Validate data integrity for a specific strategy before running it.
+    Returns whether it's safe to use this strategy for trading.
+    """
+    from services.data_integrity import validate_before_strategy
+    
+    is_safe, message, issues = validate_before_strategy(db, name)
+    
+    return {
+        "strategy": name,
+        "safe_to_trade": is_safe,
+        "message": message,
+        "issues": issues,
+        "checked_at": datetime.now().isoformat()
+    }
+
+
 # Strategies
-@app.get("/strategies", response_model=list[StrategyMeta])
+@v1_router.get("/strategies", response_model=list[StrategyMeta])
 def list_strategies():
     logger.info("GET /strategies")
     result = []
@@ -153,7 +347,73 @@ def list_strategies():
     return result
 
 
-@app.get("/strategies/{name}", response_model=list[RankedStock])
+@v1_router.get("/strategies/compare")
+def compare_all_strategies(db: Session = Depends(get_db)):
+    """Get top 10 from all strategies side by side."""
+    strategies = STRATEGIES_CONFIG.get("strategies", {})
+    result = {}
+    for name, config in strategies.items():
+        try:
+            rankings = _compute_strategy_rankings(name, config, db)[:10]
+            result[name] = [{"rank": i+1, "ticker": r.ticker, "name": r.name, "score": r.score} for i, r in enumerate(rankings)]
+        except:
+            result[name] = []
+    return result
+
+
+@v1_router.get("/strategies/performance")
+def get_all_strategies_performance(db: Session = Depends(get_db)):
+    """Get YTD performance for all strategies."""
+    logger.info("GET /strategies/performance")
+    from services.avanza_fetcher_v2 import AvanzaDirectFetcher
+    
+    fetcher = AvanzaDirectFetcher()
+    strategies = STRATEGIES_CONFIG.get("strategies", {})
+    results = []
+    
+    for name, config in strategies.items():
+        try:
+            # Get top 10 stocks for this strategy
+            rankings = _compute_strategy_rankings(name, config, db)
+            if not rankings or len(rankings) == 0:
+                results.append({"strategy": name, "ytd_return": None, "error": "No rankings"})
+                continue
+            
+            # Calculate equal-weighted YTD return
+            total_return = 0
+            count = 0
+            top_stocks = rankings[:10] if hasattr(rankings, '__getitem__') else []
+            
+            for stock in top_stocks:
+                ticker = stock.ticker if hasattr(stock, 'ticker') else stock.get('ticker')
+                stock_id = fetcher.known_stocks.get(ticker)
+                if stock_id:
+                    hist = fetcher.get_historical_prices(stock_id, days=365)
+                    if hist is not None and len(hist) > 20:
+                        # YTD return from Jan 1
+                        jan_prices = hist[hist['date'].dt.month == 1]
+                        if len(jan_prices) > 0:
+                            start_price = jan_prices.iloc[0]['close']
+                            end_price = hist.iloc[-1]['close']
+                            stock_return = (end_price / start_price - 1) * 100
+                            total_return += stock_return
+                            count += 1
+            
+            ytd_return = total_return / count if count > 0 else None
+            results.append({
+                "strategy": name,
+                "display_name": config.get("display_name", name),
+                "ytd_return": round(ytd_return, 2) if ytd_return else None,
+                "stocks_counted": count
+            })
+        except Exception as e:
+            logger.error(f"Error calculating performance for {name}: {e}")
+            results.append({"strategy": name, "ytd_return": None, "error": str(e)})
+    
+    return {"strategies": results, "as_of": datetime.now().isoformat()}
+
+
+@v1_router.get("/strategies/{name}", response_model=list[RankedStock])
 def get_strategy_rankings(name: str, db: Session = Depends(get_db)):
     logger.info(f"GET /strategies/{name}")
     strategies = STRATEGIES_CONFIG.get("strategies", {})
@@ -162,7 +422,7 @@ def get_strategy_rankings(name: str, db: Session = Depends(get_db)):
     return _compute_strategy_rankings(name, strategies[name], db)
 
 
-@app.get("/strategies/{name}/top10", response_model=list[RankedStock])
+@v1_router.get("/strategies/{name}/top10", response_model=list[RankedStock])
 def get_strategy_top10(name: str, db: Session = Depends(get_db)):
     logger.info(f"GET /strategies/{name}/top10")
     strategies = STRATEGIES_CONFIG.get("strategies", {})
@@ -172,7 +432,7 @@ def get_strategy_top10(name: str, db: Session = Depends(get_db)):
 
 
 # Enhanced Strategy Rankings with Manual/Auto Toggle
-@app.get("/strategies/{strategy_name}/enhanced")
+@v1_router.get("/strategies/{strategy_name}/enhanced")
 def get_strategy_rankings_enhanced(
     strategy_name: str,
     manual_mode: bool = True,
@@ -214,7 +474,7 @@ def get_strategy_rankings_enhanced(
         raise HTTPException(status_code=500, detail=f"Rankings failed: {str(e)}")
 
 
-@app.post("/portfolio/analyze-rebalancing")
+@v1_router.post("/portfolio/analyze-rebalancing")
 def analyze_portfolio_rebalancing(
     strategy_name: str,
     current_holdings: List[Dict]
@@ -253,7 +513,7 @@ def analyze_portfolio_rebalancing(
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
-@app.post("/portfolio/compare-all-strategies")
+@v1_router.post("/portfolio/compare-all-strategies")
 def compare_portfolio_to_all_strategies(
     current_holdings: List[dict],
     db: Session = Depends(get_db)
@@ -291,7 +551,7 @@ def compare_portfolio_to_all_strategies(
 
 
 # Portfolio
-@app.get("/portfolio/sverige", response_model=PortfolioResponse)
+@v1_router.get("/portfolio/sverige", response_model=PortfolioResponse)
 def get_portfolio_sverige(db: Session = Depends(get_db)):
     logger.info("GET /portfolio/sverige")
     portfolio_config = STRATEGIES_CONFIG.get("portfolio_sverige", {})
@@ -317,7 +577,7 @@ def get_portfolio_sverige(db: Session = Depends(get_db)):
     return PortfolioResponse(holdings=holdings, as_of_date=date.today(), next_rebalance_date=next_rebalance)
 
 
-@app.get("/portfolio/rebalance-dates", response_model=list[RebalanceDate])
+@v1_router.get("/portfolio/rebalance-dates", response_model=list[RebalanceDate])
 def get_rebalance_dates_endpoint():
     logger.info("GET /portfolio/rebalance-dates")
     strategies = STRATEGIES_CONFIG.get("strategies", {})
@@ -325,7 +585,7 @@ def get_rebalance_dates_endpoint():
     return [RebalanceDate(strategy_name=name, next_date=d) for name, d in dates.items()]
 
 
-@app.post("/portfolio/combiner", response_model=PortfolioResponse)
+@v1_router.post("/portfolio/combiner", response_model=PortfolioResponse)
 def combine_portfolio(request: CombinerRequest, db: Session = Depends(get_db)):
     logger.info(f"POST /portfolio/combiner: {request.strategies}")
     strategies = STRATEGIES_CONFIG.get("strategies", {})
@@ -346,7 +606,7 @@ def combine_portfolio(request: CombinerRequest, db: Session = Depends(get_db)):
     return PortfolioResponse(holdings=holdings, as_of_date=date.today(), next_rebalance_date=None)
 
 
-@app.post("/portfolio/combiner/preview", response_model=CombinerPreviewResponse)
+@v1_router.post("/portfolio/combiner/preview", response_model=CombinerPreviewResponse)
 def preview_combination(request: CombinerPreviewRequest, db: Session = Depends(get_db)):
     logger.info(f"POST /portfolio/combiner/preview: {request.name}")
     strategies = STRATEGIES_CONFIG.get("strategies", {})
@@ -374,16 +634,26 @@ def preview_combination(request: CombinerPreviewRequest, db: Session = Depends(g
                                    holdings=holdings, overlaps=overlaps)
 
 
-@app.post("/portfolio/combiner/save", response_model=SavedCombination)
-def save_combination(request: CombinerSaveRequest, db: Session = Depends(get_db)):
+@v1_router.post("/portfolio/combiner/save", response_model=SavedCombination)
+def save_combination(request: CombinerSaveRequest, db: Session = Depends(get_db), authorization: str = Header(None)):
     logger.info(f"POST /portfolio/combiner/save: {request.name}")
+    from services.auth import get_current_user
+    user = get_current_user(db, authorization)
+    user_id = user.id if user else None
     
-    existing = db.query(SavedCombinationModel).filter(SavedCombinationModel.name == request.name).first()
-    if existing:
+    # Check for duplicate name within user's combinations
+    query = db.query(SavedCombinationModel).filter(SavedCombinationModel.name == request.name)
+    if user_id:
+        query = query.filter(SavedCombinationModel.user_id == user_id)
+    else:
+        query = query.filter(SavedCombinationModel.user_id == None)
+    
+    if query.first():
         raise HTTPException(status_code=400, detail=f"Combination '{request.name}' already exists")
     
     combo = SavedCombinationModel(
         name=request.name,
+        user_id=user_id,
         strategies_json=json.dumps([{"name": s.name, "weight": s.weight} for s in request.strategies])
     )
     db.add(combo)
@@ -394,10 +664,21 @@ def save_combination(request: CombinerSaveRequest, db: Session = Depends(get_db)
                            created_at=combo.created_at.isoformat())
 
 
-@app.get("/portfolio/combiner/list", response_model=list[SavedCombination])
-def list_combinations(db: Session = Depends(get_db)):
+@v1_router.get("/portfolio/combiner/list", response_model=list[SavedCombination])
+def list_combinations(db: Session = Depends(get_db), authorization: str = Header(None)):
     logger.info("GET /portfolio/combiner/list")
-    combos = db.query(SavedCombinationModel).all()
+    from services.auth import get_current_user
+    user = get_current_user(db, authorization)
+    user_id = user.id if user else None
+    
+    # Filter by user_id - show only user's combinations (or anonymous if no user)
+    query = db.query(SavedCombinationModel)
+    if user_id:
+        query = query.filter(SavedCombinationModel.user_id == user_id)
+    else:
+        query = query.filter(SavedCombinationModel.user_id == None)
+    
+    combos = query.all()
     from schemas import StrategyWeight
     return [
         SavedCombination(
@@ -409,10 +690,21 @@ def list_combinations(db: Session = Depends(get_db)):
     ]
 
 
-@app.delete("/portfolio/combiner/{combo_id}")
-def delete_combination(combo_id: int, db: Session = Depends(get_db)):
+@v1_router.delete("/portfolio/combiner/{combo_id}")
+def delete_combination(combo_id: int, db: Session = Depends(get_db), authorization: str = Header(None)):
     logger.info(f"DELETE /portfolio/combiner/{combo_id}")
-    combo = db.query(SavedCombinationModel).filter(SavedCombinationModel.id == combo_id).first()
+    from services.auth import get_current_user
+    user = get_current_user(db, authorization)
+    user_id = user.id if user else None
+    
+    # Only allow deleting own combinations
+    query = db.query(SavedCombinationModel).filter(SavedCombinationModel.id == combo_id)
+    if user_id:
+        query = query.filter(SavedCombinationModel.user_id == user_id)
+    else:
+        query = query.filter(SavedCombinationModel.user_id == None)
+    
+    combo = query.first()
     if not combo:
         raise HTTPException(status_code=404, detail=f"Combination {combo_id} not found")
     db.delete(combo)
@@ -420,10 +712,276 @@ def delete_combination(combo_id: int, db: Session = Depends(get_db)):
     return {"status": "deleted", "id": combo_id}
 
 
+# User Portfolio Management (Multi-user)
+@v1_router.post("/user/portfolio/import-avanza")
+async def import_avanza_csv(
+    file_content: str,
+    portfolio_name: str = "Avanza Import",
+    db: Session = Depends(get_db),
+    authorization: str = Header(...)
+):
+    """Import Avanza CSV and create portfolio for authenticated user."""
+    from services.auth import require_auth
+    from services.csv_import import parse_avanza_csv
+    from models import AvanzaImport, UserPortfolio, PortfolioTransaction
+    
+    user = require_auth(db, authorization)
+    
+    # Parse CSV
+    transactions = parse_avanza_csv(file_content)
+    if not transactions:
+        raise HTTPException(status_code=400, detail="No transactions found in CSV")
+    
+    # Create portfolio
+    portfolio = UserPortfolio(user_id=user.id, name=portfolio_name)
+    db.add(portfolio)
+    db.flush()
+    
+    # Store import record
+    avanza_import = AvanzaImport(
+        user_id=user.id,
+        filename=f"{portfolio_name}.csv",
+        transactions_count=len(transactions),
+        holdings_json=json.dumps(transactions),
+        raw_csv=file_content
+    )
+    db.add(avanza_import)
+    
+    # Create transactions
+    for txn in transactions:
+        db.add(PortfolioTransaction(
+            user_id=user.id,
+            portfolio_id=portfolio.id,
+            ticker=txn.get('ticker'),
+            transaction_type=txn.get('type', 'BUY'),
+            shares=txn.get('shares', 0),
+            price=txn.get('price', 0),
+            fees=txn.get('fees', 0),
+            transaction_date=datetime.strptime(txn.get('date'), '%Y-%m-%d').date() if txn.get('date') else date.today()
+        ))
+    
+    db.commit()
+    
+    return {
+        "portfolio_id": portfolio.id,
+        "transactions_imported": len(transactions),
+        "message": f"Successfully imported {len(transactions)} transactions"
+    }
+
+
+@v1_router.get("/user/portfolios")
+def get_user_portfolios(db: Session = Depends(get_db), authorization: str = Header(...)):
+    """Get all portfolios for authenticated user."""
+    from services.auth import require_auth
+    from models import UserPortfolio
+    
+    user = require_auth(db, authorization)
+    portfolios = db.query(UserPortfolio).filter(UserPortfolio.user_id == user.id).all()
+    
+    return [{
+        "id": p.id,
+        "name": p.name,
+        "description": p.description,
+        "created_at": p.created_at.isoformat() if p.created_at else None
+    } for p in portfolios]
+
+
+@v1_router.get("/user/portfolio/{portfolio_id}")
+def get_user_portfolio(portfolio_id: int, db: Session = Depends(get_db), authorization: str = Header(...)):
+    """Get portfolio details with transactions."""
+    from services.auth import require_auth
+    from models import UserPortfolio, PortfolioTransaction
+    
+    user = require_auth(db, authorization)
+    portfolio = db.query(UserPortfolio).filter(
+        UserPortfolio.id == portfolio_id,
+        UserPortfolio.user_id == user.id
+    ).first()
+    
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    
+    transactions = db.query(PortfolioTransaction).filter(
+        PortfolioTransaction.portfolio_id == portfolio_id
+    ).order_by(PortfolioTransaction.transaction_date.desc()).all()
+    
+    return {
+        "id": portfolio.id,
+        "name": portfolio.name,
+        "transactions": [{
+            "id": t.id,
+            "ticker": t.ticker,
+            "type": t.transaction_type,
+            "shares": t.shares,
+            "price": t.price,
+            "fees": t.fees,
+            "date": t.transaction_date.isoformat() if t.transaction_date else None
+        } for t in transactions]
+    }
+
+
+@v1_router.get("/user/watchlists")
+def get_user_watchlists(db: Session = Depends(get_db), authorization: str = Header(...)):
+    """Get all watchlists for authenticated user."""
+    from services.auth import require_auth
+    from models import Watchlist, WatchlistItem
+    
+    user = require_auth(db, authorization)
+    watchlists = db.query(Watchlist).filter(Watchlist.user_id == user.id).all()
+    
+    result = []
+    for w in watchlists:
+        items = db.query(WatchlistItem).filter(WatchlistItem.watchlist_id == w.id).all()
+        result.append({
+            "id": w.id,
+            "name": w.name,
+            "items": [{"ticker": i.ticker, "notes": i.notes} for i in items]
+        })
+    
+    return result
+
+
+@v1_router.post("/user/watchlist")
+def create_user_watchlist(name: str, db: Session = Depends(get_db), authorization: str = Header(...)):
+    """Create a new watchlist."""
+    from services.auth import require_auth
+    from models import Watchlist
+    
+    user = require_auth(db, authorization)
+    watchlist = Watchlist(user_id=user.id, name=name)
+    db.add(watchlist)
+    db.commit()
+    
+    return {"id": watchlist.id, "name": watchlist.name}
+
+
+@v1_router.post("/user/watchlist/{watchlist_id}/add")
+def add_to_watchlist(watchlist_id: int, ticker: str, notes: str = None, db: Session = Depends(get_db), authorization: str = Header(...)):
+    """Add stock to watchlist."""
+    from services.auth import require_auth
+    from models import Watchlist, WatchlistItem
+    
+    user = require_auth(db, authorization)
+    watchlist = db.query(Watchlist).filter(Watchlist.id == watchlist_id, Watchlist.user_id == user.id).first()
+    
+    if not watchlist:
+        raise HTTPException(status_code=404, detail="Watchlist not found")
+    
+    item = WatchlistItem(watchlist_id=watchlist_id, ticker=ticker, notes=notes)
+    db.add(item)
+    db.commit()
+    
+    return {"status": "added", "ticker": ticker}
+
+
+# Analytics & Visualization
+@v1_router.get("/analytics/sector-allocation")
+def get_sector_allocation(strategy: str = None, db: Session = Depends(get_db)):
+    """Get sector allocation for portfolio or strategy."""
+    stocks = db.query(Stock).all()
+    
+    if strategy:
+        # Get top 10 from strategy
+        rankings = _get_strategy_rankings(strategy, db)[:10]
+        tickers = {r.ticker for r in rankings}
+        stocks = [s for s in stocks if s.ticker in tickers]
+    
+    holdings = [{"ticker": s.ticker, "sector": s.sector or "Unknown", "weight": 1/len(stocks)} for s in stocks]
+    return calculate_sector_exposure(holdings)
+
+
+@v1_router.get("/analytics/performance-metrics")
+def get_performance_metrics(strategy: str, period: str = "1y", db: Session = Depends(get_db)):
+    """Get rolling performance metrics for a strategy."""
+    days = {"1m": 21, "3m": 63, "6m": 126, "1y": 252, "3y": 756}.get(period, 252)
+    
+    rankings = _get_strategy_rankings(strategy, db)[:10]
+    if not rankings:
+        raise HTTPException(status_code=404, detail="No data for strategy")
+    
+    # Get price history for top holdings
+    tickers = [r.ticker for r in rankings]
+    prices = db.query(DailyPrice).filter(
+        DailyPrice.ticker.in_(tickers)
+    ).order_by(DailyPrice.date.desc()).limit(days * len(tickers)).all()
+    
+    # Build portfolio value series (equal weight)
+    from collections import defaultdict
+    price_by_date = defaultdict(dict)
+    for p in prices:
+        price_by_date[p.date][p.ticker] = p.close
+    
+    dates = sorted(price_by_date.keys())[-days:]
+    if len(dates) < 20:
+        return {"error": "Insufficient price data"}
+    
+    # Calculate equal-weight portfolio values
+    values = []
+    for d in dates:
+        day_prices = [price_by_date[d].get(t) for t in tickers]
+        valid = [p for p in day_prices if p]
+        if valid:
+            values.append(sum(valid) / len(valid))
+    
+    if len(values) < 20:
+        return {"error": "Insufficient data"}
+    
+    metrics = calculate_risk_metrics(values)
+    metrics["drawdown"] = calculate_drawdown_analysis(values)
+    
+    # Add rolling data for charts
+    returns = [(values[i] - values[i-1]) / values[i-1] for i in range(1, len(values))]
+    metrics["rolling_sharpe"] = calculate_rolling_sharpe(returns, min(63, len(returns)//2))
+    
+    return metrics
+
+
+@v1_router.get("/analytics/drawdown-periods")
+def get_drawdown_periods(strategy: str, db: Session = Depends(get_db)):
+    """Get detailed drawdown analysis for a strategy."""
+    rankings = _get_strategy_rankings(strategy, db)[:10]
+    tickers = [r.ticker for r in rankings]
+    
+    prices = db.query(DailyPrice).filter(
+        DailyPrice.ticker.in_(tickers)
+    ).order_by(DailyPrice.date).all()
+    
+    from collections import defaultdict
+    price_by_date = defaultdict(dict)
+    for p in prices:
+        price_by_date[p.date][p.ticker] = p.close
+    
+    dates = sorted(price_by_date.keys())
+    values = []
+    chart_data = []
+    
+    for d in dates:
+        day_prices = [price_by_date[d].get(t) for t in tickers]
+        valid = [p for p in day_prices if p]
+        if valid:
+            val = sum(valid) / len(valid)
+            values.append(val)
+            chart_data.append({"date": d.isoformat(), "value": round(val, 2)})
+    
+    analysis = calculate_drawdown_analysis(values)
+    analysis["chart_data"] = chart_data[-252:]  # Last year
+    
+    return analysis
+
+
+def _get_strategy_rankings(strategy: str, db: Session):
+    """Helper to get strategy rankings using existing compute function."""
+    strategies = STRATEGIES_CONFIG.get("strategies", {})
+    if strategy not in strategies:
+        return []
+    return _compute_strategy_rankings(strategy, strategies[strategy], db)
+
+
 # Stocks
-@app.get("/stocks/{ticker}", response_model=StockDetail)
-def get_stock_detail(ticker: str, db: Session = Depends(get_db)):
-    logger.info(f"GET /stocks/{ticker}")
+@v1_router.get("/stocks/{ticker}", response_model=StockDetail)
+def get_stock_detail(ticker: str, refresh: bool = False, db: Session = Depends(get_db)):
+    """Get stock details. Use refresh=true to bypass cache and fetch fresh data."""
+    logger.info(f"GET /stocks/{ticker} (refresh={refresh})")
     stock = db.query(Stock).filter(Stock.ticker == ticker).first()
     if not stock:
         raise HTTPException(status_code=404, detail=f"Stock '{ticker}' not found")
@@ -435,7 +993,7 @@ def get_stock_detail(ticker: str, db: Session = Depends(get_db)):
     return StockDetail(
         ticker=stock.ticker, name=stock.name, market_cap_msek=stock.market_cap_msek, sector=stock.sector,
         pe=fundamentals.pe if fundamentals else None, pb=fundamentals.pb if fundamentals else None,
-        ps=fundamentals.ps if fundamentals else None, pfcf=fundamentals.pfcf if fundamentals else None,
+        ps=fundamentals.ps if fundamentals else None, pfcf=fundamentals.p_fcf if fundamentals else None,
         ev_ebitda=fundamentals.ev_ebitda if fundamentals else None, roe=fundamentals.roe if fundamentals else None,
         roa=fundamentals.roa if fundamentals else None, roic=fundamentals.roic if fundamentals else None,
         fcfroe=fundamentals.fcfroe if fundamentals else None, dividend_yield=fundamentals.dividend_yield if fundamentals else None,
@@ -443,39 +1001,47 @@ def get_stock_detail(ticker: str, db: Session = Depends(get_db)):
     )
 
 
+@v1_router.get("/stocks/{ticker}/prices")
+def get_stock_prices(ticker: str, days: int = 252, db: Session = Depends(get_db)):
+    """Get historical prices for a stock."""
+    prices = db.query(DailyPrice).filter(DailyPrice.ticker == ticker).order_by(DailyPrice.date.desc()).limit(days).all()
+    return {"prices": [{"date": p.date.isoformat(), "close": p.close} for p in reversed(prices)]}
+
+
 # Backtesting
-@app.get("/backtesting/strategies", response_model=list[StrategyMeta])
+@v1_router.get("/backtesting/strategies", response_model=list[StrategyMeta])
 def get_backtesting_strategies():
     logger.info("GET /backtesting/strategies")
     return list_strategies()
 
 
-@app.post("/backtesting/run", response_model=BacktestResponse)
-def run_strategy_backtest(request: BacktestRequest, db: Session = Depends(get_db)):
-    logger.info(f"POST /backtesting/run: {request.strategy_name} {request.start_date} to {request.end_date}")
+@v1_router.post("/backtesting/run", response_model=BacktestResponse)
+@limiter.limit("10/minute")
+def run_strategy_backtest(request: Request, body: BacktestRequest, db: Session = Depends(get_db)):
+    logger.info(f"POST /backtesting/run: {body.strategy_name} {body.start_date} to {body.end_date}")
     strategies = STRATEGIES_CONFIG.get("strategies", {})
-    if request.strategy_name not in strategies:
-        raise HTTPException(status_code=404, detail=f"Strategy '{request.strategy_name}' not found")
+    if body.strategy_name not in strategies:
+        raise HTTPException(status_code=404, detail=f"Strategy '{body.strategy_name}' not found")
     
-    result = backtest_strategy(request.strategy_name, request.start_date, request.end_date, db, strategies[request.strategy_name])
+    result = backtest_strategy(body.strategy_name, body.start_date, body.end_date, db, strategies[body.strategy_name])
     
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     
     return BacktestResponse(
-        strategy_name=result["strategy_name"], start_date=request.start_date, end_date=request.end_date,
+        strategy_name=result["strategy_name"], start_date=body.start_date, end_date=body.end_date,
         total_return_pct=result["total_return_pct"], sharpe=result["sharpe"], max_drawdown_pct=result["max_drawdown_pct"],
         equity_curve=result.get("portfolio_values")
     )
 
 
-@app.get("/backtesting/results/{strategy}")
+@v1_router.get("/backtesting/results/{strategy}")
 def get_strategy_backtest_results(strategy: str, db: Session = Depends(get_db)):
     logger.info(f"GET /backtesting/results/{strategy}")
     return get_backtest_results(db, strategy)
 
 
-@app.post("/backtesting/long-term")
+@v1_router.post("/backtesting/long-term")
 def run_long_term_backtest(
     strategy: str = "sammansatt_momentum",
     years: int = 10,
@@ -551,12 +1117,13 @@ def run_long_term_backtest(
         raise HTTPException(status_code=500, detail=f"Long-term backtest failed: {str(e)}")
 
 
-@app.post("/backtesting/enhanced")
+@v1_router.post("/backtesting/enhanced")
 def run_enhanced_backtest_deprecated(
     strategy: str = "sammansatt_momentum",
     years: int = 5,
     top_n: int = 10,
-    rebalance_frequency: str = "quarterly"
+    rebalance_frequency: str = "quarterly",
+    initial_capital: float = 100000
 ):
     """
     DEPRECATED: Use /backtesting/long-term instead.
@@ -564,11 +1131,15 @@ def run_enhanced_backtest_deprecated(
     """
     logger.warning("DEPRECATED endpoint /backtesting/enhanced called - use /backtesting/long-term")
     
+    # Validate initial_capital
+    if initial_capital <= 0:
+        raise HTTPException(status_code=400, detail="initial_capital must be positive")
+    
     # Redirect to long-term endpoint
     return run_long_term_backtest(strategy, years, top_n, rebalance_frequency)
 
 
-@app.post("/backtesting/historical")
+@v1_router.post("/backtesting/historical")
 def run_historical_backtest_endpoint(
     strategy_name: str,
     start_year: int = 2005,
@@ -586,7 +1157,7 @@ def run_historical_backtest_endpoint(
         use_synthetic: Use synthetic data if real data unavailable
     """
     from services.historical_backtest import run_historical_backtest, generate_synthetic_history
-    from services.eodhd_fetcher import get_omx_stockholm_stocks
+    from services.live_universe import get_live_stock_universe
     
     logger.info(f"POST /backtesting/historical: {strategy_name} {start_year}-{end_year}")
     
@@ -620,7 +1191,7 @@ def run_historical_backtest_endpoint(
         data_source = "real"
     elif use_synthetic:
         # Generate synthetic data
-        tickers = [t[0] for t in get_omx_stockholm_stocks()[:30]]
+        tickers = get_live_stock_universe('sweden', 'large')
         prices_df, fund_df = generate_synthetic_history(tickers, start_date, end_date)
         data_source = "synthetic"
     else:
@@ -639,7 +1210,7 @@ def run_historical_backtest_endpoint(
     return result
 
 
-@app.post("/backtesting/historical/compare")
+@v1_router.post("/backtesting/historical/compare")
 def compare_all_strategies_historical(
     start_year: int = 2005,
     end_year: int = 2024,
@@ -647,7 +1218,7 @@ def compare_all_strategies_historical(
 ):
     """Compare all strategies over a long historical period."""
     from services.historical_backtest import run_all_strategies_backtest, generate_synthetic_history
-    from services.eodhd_fetcher import get_omx_stockholm_stocks
+    from services.live_universe import get_live_stock_universe
     
     logger.info(f"POST /backtesting/historical/compare: {start_year}-{end_year}")
     
@@ -655,7 +1226,7 @@ def compare_all_strategies_historical(
     end_date = date(end_year, 12, 31)
     
     # Generate synthetic data for comparison
-    tickers = [t[0] for t in get_omx_stockholm_stocks()[:30]]
+    tickers = get_live_stock_universe('sweden', 'large')
     prices_df, fund_df = generate_synthetic_history(tickers, start_date, end_date)
     
     strategies = STRATEGIES_CONFIG.get("strategies", {})
@@ -666,14 +1237,29 @@ def compare_all_strategies_historical(
 
 
 # Data Sync
-@app.get("/data/sync-status", response_model=SyncStatus)
+@v1_router.get("/data/sync-status", response_model=SyncStatus)
 def get_data_sync_status(db: Session = Depends(get_db)):
+    """Get sync status from database."""
     logger.info("GET /data/sync-status")
-    return get_sync_status(db)
+    from models import Stock, DailyPrice, Fundamentals
+    stock_count = db.query(Stock).count()
+    price_count = db.query(DailyPrice).count()
+    fund_count = db.query(Fundamentals).count()
+    latest_price = db.query(DailyPrice).order_by(DailyPrice.date.desc()).first()
+    latest_fund = db.query(Fundamentals).order_by(Fundamentals.fetched_date.desc()).first()
+    return SyncStatus(
+        stocks=stock_count,
+        prices=price_count,
+        fundamentals=fund_count,
+        latest_price_date=str(latest_price.date) if latest_price else None,
+        latest_fundamental_date=str(latest_fund.fetched_date) if latest_fund else None
+    )
 
 
-@app.post("/data/sync-now")
+@v1_router.post("/data/sync-now")
+@limiter.limit("2/minute")
 async def trigger_data_sync(
+    request: Request,
     db: Session = Depends(get_db), 
     region: str = "sweden", 
     market_cap: str = "large",
@@ -703,10 +1289,10 @@ async def trigger_data_sync(
         "next_action": "Check /data/status/detailed for real-time quality"
     }
 
-@app.get("/data/status/detailed")
+@v1_router.get("/data/status/detailed")
 def get_detailed_data_status(db: Session = Depends(get_db)):
     """Get detailed data status with cache information."""
-    from services.advanced_cache import AdvancedCache
+    from services.smart_cache import smart_cache
     from services.avanza_fetcher_v2 import AvanzaDirectFetcher
     from services.live_universe import get_live_stock_universe
     
@@ -714,8 +1300,7 @@ def get_detailed_data_status(db: Session = Depends(get_db)):
     tickers = get_live_stock_universe('sweden', 'large')
     
     # Get cache stats
-    cache = AdvancedCache()
-    cache_stats = cache.get_cache_stats()
+    cache_stats = smart_cache.get_cache_stats()
     
     # Get individual stock status
     fetcher = AvanzaDirectFetcher()
@@ -765,14 +1350,13 @@ def get_detailed_data_status(db: Session = Depends(get_db)):
         'checked_stocks': len(stock_status)
     }
 
-@app.post("/data/refresh-stock/{ticker}")
+@v1_router.post("/data/refresh-stock/{ticker}")
 async def refresh_single_stock(ticker: str, db: Session = Depends(get_db)):
     """Manually refresh a single stock, bypassing cache."""
     from services.avanza_fetcher_v2 import AvanzaDirectFetcher
-    from services.advanced_cache import AdvancedCache
+    from services.smart_cache import smart_cache
     
     fetcher = AvanzaDirectFetcher()
-    cache = AdvancedCache()
     
     # Get stock ID
     stock_id = fetcher.known_stocks.get(ticker)
@@ -780,9 +1364,7 @@ async def refresh_single_stock(ticker: str, db: Session = Depends(get_db)):
         return {"error": f"Stock ID not found for {ticker}"}
     
     # Clear cache for this stock
-    endpoint = f"stock_overview/{stock_id}"
-    params = {'stock_id': stock_id}
-    cache.delete(endpoint, params)
+    smart_cache.delete(f"stock_overview_{stock_id}")
     
     # Fetch fresh data
     try:
@@ -804,7 +1386,7 @@ async def refresh_single_stock(ticker: str, db: Session = Depends(get_db)):
     except Exception as e:
         return {"success": False, "ticker": ticker, "error": str(e)}
 
-@app.get("/data/stock-config")
+@v1_router.get("/data/stock-config")
 def get_stock_config():
     """Get current stock ID mappings."""
     from services.avanza_fetcher_v2 import AvanzaDirectFetcher
@@ -815,14 +1397,14 @@ def get_stock_config():
         "total_mapped": len(fetcher.known_stocks)
     }
 
-@app.post("/data/stock-config")
+@v1_router.post("/data/stock-config")
 def update_stock_config(config: dict, db: Session = Depends(get_db)):
     """Update stock ID mappings."""
     # This would require updating the fetcher configuration
     # For now, return the current config
     return {"message": "Stock config update not implemented yet", "config": config}
 
-@app.get("/data/sync-config")
+@v1_router.get("/data/sync-config")
 def get_sync_config():
     """Get current sync configuration."""
     from services.sync_config import sync_config
@@ -834,7 +1416,7 @@ def get_sync_config():
         "should_sync_on_visit": sync_config.should_sync_on_visit()
     }
 
-@app.post("/data/sync-config")
+@v1_router.post("/data/sync-config")
 def update_sync_config(updates: dict):
     """Update sync configuration."""
     from services.sync_config import sync_config
@@ -854,7 +1436,203 @@ def update_sync_config(updates: dict):
     else:
         return {"success": False, "error": "No valid configuration keys provided"}
 
-@app.post("/data/sync-full")
+
+# Stock Scanner - discover new stocks
+@v1_router.get("/data/stocks/status")
+def get_stock_universe_status(db: Session = Depends(get_db)):
+    """Get current stock universe status and scan state."""
+    from services.stock_scanner import get_scan_status
+    from services.stock_validator import get_active_stock_count
+    
+    scan_status = get_scan_status()
+    active_counts = get_active_stock_count(db)
+    
+    return {**scan_status, "active_stocks": active_counts}
+
+
+@v1_router.get("/data/stocks/active")
+def get_active_stocks_info(db: Session = Depends(get_db)):
+    """Get info about active vs inactive stocks."""
+    from services.stock_validator import get_active_stock_count
+    return get_active_stock_count(db)
+
+
+@v1_router.post("/data/stocks/validate")
+async def validate_stocks_endpoint(
+    limit: int = Query(None, description="Max stocks to validate (None = all)"),
+    db: Session = Depends(get_db)
+):
+    """Validate stocks against Avanza API and update is_active flag."""
+    from services.stock_validator import validate_stocks
+    return validate_stocks(db, limit=limit)
+
+
+@v1_router.get("/data/stocks/ranges")
+def get_scan_ranges():
+    """Get available scan ranges with their status."""
+    from services.stock_scanner import get_scan_ranges
+    return get_scan_ranges()
+
+
+@v1_router.post("/data/stocks/scan")
+async def scan_for_new_stocks_endpoint(
+    threads: int = Query(10, ge=1, le=20, description="Number of parallel threads"),
+    body: dict = None
+):
+    """Scan Avanza for new stocks not in database."""
+    from services.stock_scanner import scan_for_new_stocks, DEFAULT_RANGES
+    
+    # Get ranges from body or use defaults
+    ranges = body.get('ranges') if body else None
+    if not ranges:
+        ranges = DEFAULT_RANGES
+    
+    logger.info(f"Starting stock scan: {len(ranges)} ranges, {threads} threads")
+    for r in ranges:
+        logger.info(f"  Range: {r.get('start', r.get('from'))}-{r.get('end', r.get('to'))}")
+    
+    result = scan_for_new_stocks(ranges=ranges, max_workers=threads)
+    
+    logger.info(f"Scan complete: {result['new_stocks_found']} new stocks found")
+    
+    return result
+
+
+@v1_router.post("/data/sync-prices")
+async def sync_historical_prices(
+    threads: int = Query(5, ge=1, le=10),
+    days: int = Query(400, ge=30, le=1825)
+):
+    """Sync historical prices for all stocks. Run monthly or manually."""
+    from services.live_universe import get_live_stock_universe
+    from services.avanza_fetcher_v2 import AvanzaDirectFetcher
+    from models import DailyPrice
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from db import SessionLocal
+    
+    tickers = get_live_stock_universe()
+    logger.info(f"Starting historical price sync: {len(tickers)} stocks, {days} days, {threads} threads")
+    
+    fetcher = AvanzaDirectFetcher()
+    db = SessionLocal()
+    
+    # Get avanza_id mapping
+    from services.live_universe import get_avanza_id_map
+    id_map = get_avanza_id_map()
+    
+    successful = 0
+    total = len(tickers)
+    
+    def fetch_and_store(ticker):
+        avanza_id = id_map.get(ticker)
+        if not avanza_id:
+            return None
+        
+        df = fetcher.get_historical_prices(avanza_id, days=days)
+        if df is not None and len(df) > 0:
+            return (ticker, df)
+        return None
+    
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        futures = {executor.submit(fetch_and_store, t): t for t in tickers}
+        
+        for i, future in enumerate(as_completed(futures)):
+            result = future.result()
+            if result:
+                ticker, df = result
+                # Store prices
+                for _, row in df.iterrows():
+                    try:
+                        db.merge(DailyPrice(
+                            ticker=ticker,
+                            date=row['date'].date() if hasattr(row['date'], 'date') else row['date'],
+                            open=row.get('open'),
+                            close=row['close'],
+                            high=row.get('high'),
+                            low=row.get('low'),
+                            volume=row.get('volume')
+                        ))
+                    except:
+                        pass
+                successful += 1
+            
+            if (i + 1) % 25 == 0 or i == total - 1:
+                logger.info(f"Price sync progress: {i+1}/{total} ({successful} successful)")
+                db.commit()
+    
+    db.commit()
+    db.close()
+    
+    return {
+        "status": "complete",
+        "stocks_synced": successful,
+        "total_stocks": total,
+        "days": days
+    }
+
+
+@v1_router.post("/data/sync-prices-extended")
+async def sync_historical_prices_extended(
+    threads: int = Query(3, ge=1, le=5),
+    years: int = Query(10, ge=1, le=20)
+):
+    """Sync extended historical prices (10+ years) by stitching multiple requests."""
+    from services.live_universe import get_live_stock_universe, get_avanza_id_map
+    from services.avanza_fetcher_v2 import AvanzaDirectFetcher
+    from models import DailyPrice
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from db import SessionLocal
+    
+    tickers = get_live_stock_universe()
+    logger.info(f"Starting extended price sync: {len(tickers)} stocks, {years} years, {threads} threads")
+    
+    fetcher = AvanzaDirectFetcher()
+    db = SessionLocal()
+    id_map = get_avanza_id_map()
+    
+    successful = 0
+    total = len(tickers)
+    
+    def fetch_and_store(ticker):
+        avanza_id = id_map.get(ticker)
+        if not avanza_id:
+            return None
+        df = fetcher.get_historical_prices_extended(avanza_id, years=years)
+        if df is not None and len(df) > 0:
+            return (ticker, df)
+        return None
+    
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        futures = {executor.submit(fetch_and_store, t): t for t in tickers}
+        
+        for i, future in enumerate(as_completed(futures)):
+            result = future.result()
+            if result:
+                ticker, df = result
+                for _, row in df.iterrows():
+                    try:
+                        db.merge(DailyPrice(
+                            ticker=ticker,
+                            date=row['date'].date() if hasattr(row['date'], 'date') else row['date'],
+                            open=row.get('open'), close=row['close'],
+                            high=row.get('high'), low=row.get('low'),
+                            volume=row.get('volume')
+                        ))
+                    except:
+                        pass
+                successful += 1
+            
+            if (i + 1) % 10 == 0 or i == total - 1:
+                logger.info(f"Extended price sync: {i+1}/{total} ({successful} successful)")
+                db.commit()
+    
+    db.commit()
+    db.close()
+    
+    return {"status": "complete", "stocks_synced": successful, "total_stocks": total, "years": years}
+
+
+@v1_router.post("/data/sync-full")
 async def trigger_full_sync(
     db: Session = Depends(get_db),
     method: str = "avanza",
@@ -893,7 +1671,7 @@ async def trigger_full_sync(
     transparency = DataTransparencyService()
     return transparency.get_detailed_data_status(db)
 
-@app.get("/data/sync/estimates")
+@v1_router.get("/data/sync/estimates")
 def get_sync_estimates():
     """Get sync time estimates and rate limiting info."""
     from services.data_transparency import DataTransparencyService
@@ -901,14 +1679,14 @@ def get_sync_estimates():
     transparency = DataTransparencyService()
     return transparency.get_sync_progress()
 
-@app.get("/strategies/{strategy_name}/data-check")
+@v1_router.get("/strategies/{strategy_name}/data-check")
 def check_strategy_data_quality(strategy_name: str, db: Session = Depends(get_db)):
     """Check if strategy can run with current data quality."""
     from services.data_transparency import validate_strategy_data_quality
     
     return validate_strategy_data_quality(db, strategy_name)
 
-@app.get("/data/transparency")
+@v1_router.get("/data/transparency")
 def get_data_transparency_dashboard(db: Session = Depends(get_db)):
     """Get complete data transparency dashboard for users."""
     from services.data_transparency import DataTransparencyService
@@ -939,24 +1717,20 @@ def get_data_transparency_dashboard(db: Session = Depends(get_db)):
     # Add investment safeguards
     return add_investment_safeguards_to_response(dashboard_data, dashboard_data['data_status']['summary'])
 
-@app.get("/data/reliability")
+@v1_router.get("/data/reliability")
 def get_reliability_status():
-    """Get data reliability and retry queue status."""
-    from services.optimized_yfinance import DataReliabilityManager
+    """Get data reliability status."""
+    from services.smart_cache import smart_cache
     
-    reliability_manager = DataReliabilityManager()
-    stats = reliability_manager.get_reliability_stats()
-    retry_candidates = reliability_manager.get_retry_candidates()
+    stats = smart_cache.get_cache_stats()
     
     return {
-        "reliability_stats": stats,
-        "pending_retries": len(retry_candidates),
-        "retry_queue": [{"ticker": ticker, "priority": priority} for ticker, priority in retry_candidates[:10]],
-        "guarantee": "100% data retrieval with persistent retry system",
-        "optimization": "1-3 second delays with parallel processing"
+        "cache_stats": stats,
+        "source": "Avanza Direct API",
+        "guarantee": "Free Swedish stock data with smart caching"
     }
 
-@app.get("/data/universe/{region}/{market_cap}")
+@v1_router.get("/data/universe/{region}/{market_cap}")
 def get_universe_info(region: str, market_cap: str):
     """Get information about available stock universe."""
     from services.live_universe import get_live_stock_universe
@@ -980,27 +1754,41 @@ def get_universe_info(region: str, market_cap: str):
         }
 
 
-@app.get("/data/scheduler-status")
+@v1_router.get("/data/scheduler-status")
 def get_scheduler_status_endpoint():
     logger.info("GET /data/scheduler-status")
     return get_scheduler_status()
 
 
-@app.get("/data/freshness")
+@v1_router.get("/data/freshness")
 def get_data_freshness(db: Session = Depends(get_db)):
     """Check if data is fresh enough for strategy calculations."""
     logger.info("GET /data/freshness")
     return check_data_freshness(db)
 
 
-@app.get("/cache/stats")
+@v1_router.get("/cache/stats")
 def get_cache_statistics():
-    """Get cache statistics."""
+    """Get cache statistics including smart cache info."""
     logger.info("GET /cache/stats")
-    return get_cache_stats()
+    from services.smart_cache import smart_cache, SmartCache
+    
+    basic_stats = get_cache_stats()
+    smart_stats = smart_cache.get_cache_stats()
+    
+    return {
+        "in_memory_cache": basic_stats,
+        "smart_cache": smart_stats,
+        "ttl_settings": {
+            "prices_hours": SmartCache.TTL_PRICES,
+            "fundamentals_hours": SmartCache.TTL_FUNDAMENTALS,
+            "rankings_hours": SmartCache.TTL_RANKINGS,
+            "backtest_hours": SmartCache.TTL_BACKTEST,
+        }
+    }
 
 
-@app.post("/cache/invalidate")
+@v1_router.post("/cache/invalidate")
 def invalidate_cache_endpoint(pattern: str = None):
     """Invalidate cache entries."""
     logger.info(f"POST /cache/invalidate pattern={pattern}")
@@ -1008,19 +1796,76 @@ def invalidate_cache_endpoint(pattern: str = None):
     return {"status": "invalidated", "pattern": pattern}
 
 
+@v1_router.post("/cache/clear")
+def clear_all_caches():
+    """Clear all caches to force fresh data on next request."""
+    logger.info("POST /cache/clear")
+    from services.smart_cache import smart_cache
+    
+    invalidate_cache()  # Clear in-memory
+    deleted = smart_cache.clear_all()  # Clear smart cache
+    
+    return {"status": "cleared", "smart_cache_entries_deleted": deleted}
+
+
 # Helper functions
-def _compute_strategy_rankings(name: str, config: dict, db: Session) -> list[RankedStock]:
+def _compute_strategy_rankings(name: str, config: dict, db: Session, include_etfs: bool = False) -> list[RankedStock]:
+    """Compute strategy rankings - checks DB cache first, computes if stale."""
+    from models import StrategySignal
+    
+    # Check if we have fresh rankings in DB (same day)
+    latest = db.query(StrategySignal).filter(
+        StrategySignal.strategy_name == name,
+        StrategySignal.calculated_date == date.today()
+    ).order_by(StrategySignal.rank).all()
+    
+    if latest:
+        logger.info(f"Using cached rankings for {name} ({len(latest)} stocks)")
+        return [
+            RankedStock(
+                ticker=s.ticker,
+                name=_get_stock_name(s.ticker, db),
+                rank=s.rank,
+                score=s.score,
+                last_updated=date.today().isoformat(),
+                data_age_days=0,
+                freshness="fresh"
+            ) for s in latest
+        ]
+    
+    # Compute fresh rankings
+    logger.info(f"Computing fresh rankings for {name}")
+    
     # Support both old ("type") and new ("category") config keys
     strategy_type = config.get("category", config.get("type", ""))
     
     prices = db.query(DailyPrice).all()
     fundamentals = db.query(Fundamentals).all()
+    stocks = db.query(Stock).all()
+    
+    # Build lookups
+    market_caps = {s.ticker: s.market_cap_msek or 0 for s in stocks}
+    stock_types = {s.ticker: getattr(s, 'stock_type', 'stock') for s in stocks}
     
     prices_df = pd.DataFrame([{"ticker": p.ticker, "date": p.date, "close": p.close} for p in prices]) if prices else pd.DataFrame()
     fund_df = pd.DataFrame([{
-        "ticker": f.ticker, "pe": f.pe, "pb": f.pb, "ps": f.ps, "pfcf": f.pfcf, "ev_ebitda": f.ev_ebitda,
-        "dividend_yield": f.dividend_yield, "roe": f.roe, "roa": f.roa, "roic": f.roic, "fcfroe": f.fcfroe, "payout_ratio": f.payout_ratio
+        "ticker": f.ticker, "pe": f.pe, "pb": f.pb, "ps": f.ps, "p_fcf": f.p_fcf, "ev_ebitda": f.ev_ebitda,
+        "dividend_yield": f.dividend_yield, "roe": f.roe, "roa": f.roa, "roic": f.roic, "fcfroe": f.fcfroe, 
+        "payout_ratio": f.payout_ratio, "market_cap": market_caps.get(f.ticker, 0),
+        "stock_type": stock_types.get(f.ticker, 'stock')
     } for f in fundamentals]) if fundamentals else pd.DataFrame()
+    
+    # Filter out ETFs/certificates by default
+    from services.ranking import filter_by_min_market_cap, filter_real_stocks
+    if not fund_df.empty and not include_etfs:
+        fund_df = filter_real_stocks(fund_df)
+    
+    # Apply 2B SEK minimum market cap filter (Börslabbet rule since June 2023)
+    if not fund_df.empty:
+        fund_df = filter_by_min_market_cap(fund_df)
+    if not prices_df.empty and not fund_df.empty:
+        valid_tickers = set(fund_df['ticker'])
+        prices_df = prices_df[prices_df['ticker'].isin(valid_tickers)]
     
     if strategy_type == "momentum":
         if not prices_df.empty and not fund_df.empty:
@@ -1032,16 +1877,13 @@ def _compute_strategy_rankings(name: str, config: dict, db: Session) -> list[Ran
             return []
     elif strategy_type == "value":
         if fund_df.empty: return []
-        scores = calculate_value_score(fund_df)
-        ranked_df = rank_and_select_top_n(scores, config)
+        ranked_df = calculate_value_score(fund_df, prices_df)
     elif strategy_type == "dividend":
         if fund_df.empty: return []
-        scores = calculate_dividend_score(fund_df)
-        ranked_df = rank_and_select_top_n(scores, config)
+        ranked_df = calculate_dividend_score(fund_df, prices_df)
     elif strategy_type == "quality":
         if fund_df.empty: return []
-        scores = calculate_quality_score(fund_df, prices_df)
-        ranked_df = rank_and_select_top_n(scores, config)
+        ranked_df = calculate_quality_score(fund_df, prices_df)
     else:
         raise HTTPException(status_code=400, detail=f"Unknown strategy type: {strategy_type}")
     
@@ -1078,30 +1920,21 @@ def _compute_strategy_rankings(name: str, config: dict, db: Session) -> list[Ran
         
         stocks_with_freshness.append(RankedStock(**stock_data))
     
-    # Add investment safeguards to strategy response
-    from services.investment_safeguards import add_investment_safeguards_to_response, validate_strategy_safety
-    from services.data_transparency import DataTransparencyService
+    # Save rankings to DB for caching
+    from models import StrategySignal
+    db.query(StrategySignal).filter(StrategySignal.strategy_name == name).delete()
+    for r in stocks_with_freshness:
+        db.add(StrategySignal(
+            strategy_name=name,
+            ticker=r.ticker,
+            rank=r.rank,
+            score=r.score,
+            calculated_date=date.today()
+        ))
+    db.commit()
+    logger.info(f"Saved {len(stocks_with_freshness)} rankings for {name}")
     
-    # Get data quality for safety validation
-    transparency = DataTransparencyService()
-    data_status = transparency.get_detailed_data_status(db)
-    
-    # Validate strategy safety
-    safety_check = validate_strategy_safety(name, data_status['summary'])
-    
-    # Convert to response format with safeguards
-    response_data = {
-        'stocks': stocks_with_freshness,
-        'strategy_name': name,
-        'data_quality': data_status['summary'],
-        'safety_validation': safety_check,
-        'total_stocks': len(stocks_with_freshness)
-    }
-    
-    # Add all investment safeguards
-    response_data = add_investment_safeguards_to_response(response_data, data_status['summary'])
-    
-    return response_data
+    return stocks_with_freshness
 
 
 def _get_stock_name(ticker: str, db: Session):
@@ -1121,7 +1954,7 @@ def _calculate_returns(prices: list[DailyPrice]) -> dict:
 
 
 # Export endpoints
-@app.get("/export/rankings/{strategy_name}", response_class=PlainTextResponse)
+@v1_router.get("/export/rankings/{strategy_name}", response_class=PlainTextResponse)
 def export_strategy_rankings(strategy_name: str, db: Session = Depends(get_db)):
     """Export strategy rankings as CSV."""
     rankings = get_strategy_rankings(strategy_name, db)
@@ -1133,7 +1966,7 @@ def export_strategy_rankings(strategy_name: str, db: Session = Depends(get_db)):
     )
 
 
-@app.get("/export/backtest/{strategy_name}", response_class=PlainTextResponse)
+@v1_router.get("/export/backtest/{strategy_name}", response_class=PlainTextResponse)
 def export_strategy_backtest(strategy_name: str, db: Session = Depends(get_db)):
     """Export backtest results as CSV."""
     results = get_backtest_results(db, strategy_name)
@@ -1147,8 +1980,281 @@ def export_strategy_backtest(strategy_name: str, db: Session = Depends(get_db)):
     )
 
 
+@v1_router.get("/export/portfolio", response_class=PlainTextResponse)
+def export_portfolio(db: Session = Depends(get_db)):
+    """Export combined portfolio as CSV."""
+    from services.export import export_portfolio_to_csv
+    portfolio = get_portfolio_sverige(db)
+    csv_data = export_portfolio_to_csv([h.dict() for h in portfolio.holdings], "Sverige")
+    return PlainTextResponse(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=portfolio_sverige.csv"}
+    )
+
+
+@v1_router.get("/export/analytics/{strategy_name}", response_class=PlainTextResponse)
+def export_analytics(strategy_name: str, db: Session = Depends(get_db)):
+    """Export analytics/performance metrics as CSV."""
+    import io, csv
+    metrics = get_performance_metrics(strategy_name, "1y", db)
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Metric', 'Value'])
+    for k, v in metrics.items():
+        if not isinstance(v, (dict, list)):
+            writer.writerow([k, v])
+    
+    return PlainTextResponse(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={strategy_name}_analytics.csv"}
+    )
+
+
+# Alerts
+@v1_router.get("/alerts")
+def get_alerts(db: Session = Depends(get_db)):
+    """Get all active alerts - rebalancing, volatility, milestones."""
+    from services.alerts import get_all_alerts
+    return get_all_alerts(db)
+
+
+@v1_router.get("/alerts/rebalancing")
+def get_rebalancing_alerts(db: Session = Depends(get_db)):
+    """Get rebalancing reminder alerts."""
+    from services.alerts import check_rebalancing_alerts
+    return {"alerts": check_rebalancing_alerts(db)}
+
+
+# Goals
+@v1_router.post("/goals")
+def create_goal(
+    name: str,
+    target_amount: float,
+    target_date: str,
+    current_amount: float = 0,
+    monthly_contribution: float = 0,
+    save: bool = False,
+    db: Session = Depends(get_db)
+):
+    """Create a financial goal. Set save=true to persist."""
+    from datetime import datetime
+    from models import UserGoal
+    
+    target = datetime.strptime(target_date, "%Y-%m-%d").date()
+    months_remaining = max(1, (target.year - date.today().year) * 12 + (target.month - date.today().month))
+    
+    # Calculate required return
+    if current_amount > 0 and monthly_contribution >= 0:
+        needed = target_amount - current_amount
+        if monthly_contribution > 0:
+            total_contributions = monthly_contribution * months_remaining
+            growth_needed = needed - total_contributions
+            required_return = (growth_needed / current_amount) / (months_remaining / 12) * 100 if current_amount > 0 else 0
+        else:
+            required_return = ((target_amount / current_amount) ** (12 / months_remaining) - 1) * 100
+    else:
+        required_return = 0
+    
+    progress = (current_amount / target_amount * 100) if target_amount > 0 else 0
+    
+    goal_id = None
+    if save:
+        goal = UserGoal(
+            name=name, target_amount=target_amount, current_amount=current_amount,
+            monthly_contribution=monthly_contribution, target_date=target
+        )
+        db.add(goal)
+        db.commit()
+        goal_id = goal.id
+    
+    return {
+        "id": goal_id,
+        "name": name,
+        "target_amount": target_amount,
+        "current_amount": current_amount,
+        "target_date": target_date,
+        "months_remaining": months_remaining,
+        "progress_pct": round(progress, 1),
+        "monthly_contribution": monthly_contribution,
+        "required_annual_return_pct": round(required_return, 1),
+        "on_track": required_return <= 15,
+        "recommendation": _get_goal_recommendation(required_return)
+    }
+
+
+@v1_router.get("/goals")
+def list_goals(db: Session = Depends(get_db)):
+    """List all saved goals."""
+    from models import UserGoal
+    goals = db.query(UserGoal).all()
+    return [{"id": g.id, "name": g.name, "target_amount": g.target_amount, 
+             "current_amount": g.current_amount, "target_date": g.target_date.isoformat() if g.target_date else None,
+             "monthly_contribution": g.monthly_contribution} for g in goals]
+
+
+@v1_router.put("/goals/{goal_id}")
+def update_goal(goal_id: int, current_amount: float, db: Session = Depends(get_db)):
+    """Update goal progress."""
+    from models import UserGoal
+    goal = db.query(UserGoal).filter(UserGoal.id == goal_id).first()
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    goal.current_amount = current_amount
+    db.commit()
+    return {"status": "updated", "id": goal_id, "current_amount": current_amount}
+
+
+@v1_router.delete("/goals/{goal_id}")
+def delete_goal(goal_id: int, db: Session = Depends(get_db)):
+    """Delete a goal."""
+    from models import UserGoal
+    goal = db.query(UserGoal).filter(UserGoal.id == goal_id).first()
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    db.delete(goal)
+    db.commit()
+    return {"status": "deleted", "id": goal_id}
+
+
+def _get_goal_recommendation(required_return: float) -> str:
+    if required_return <= 0:
+        return "On track! Consider more conservative allocation."
+    elif required_return <= 8:
+        return "Achievable with balanced portfolio (stocks + bonds)."
+    elif required_return <= 15:
+        return "Requires aggressive growth strategy."
+    else:
+        return "Consider increasing contributions or extending timeline."
+
+
+@v1_router.get("/goals/projection")
+def project_goal(
+    current_amount: float,
+    monthly_contribution: float,
+    years: int = 10,
+    expected_return: float = 8.0
+):
+    """Project portfolio growth over time."""
+    monthly_return = (1 + expected_return / 100) ** (1/12) - 1
+    
+    projections = []
+    value = current_amount
+    
+    for month in range(years * 12 + 1):
+        if month % 12 == 0:
+            projections.append({
+                "year": month // 12,
+                "value": round(value, 0),
+                "contributions": round(current_amount + monthly_contribution * month, 0)
+            })
+        value = value * (1 + monthly_return) + monthly_contribution
+    
+    return {
+        "projections": projections,
+        "final_value": round(value, 0),
+        "total_contributions": round(current_amount + monthly_contribution * years * 12, 0),
+        "total_growth": round(value - current_amount - monthly_contribution * years * 12, 0)
+    }
+
+
+# Benchmarks - using real Avanza data
+BENCHMARKS = {
+    "omxs30": {"name": "XACT OMXS30", "description": "OMXS30 index ETF", "stock_id": "5510"},
+    "sixrx": {"name": "Investor B (SIX proxy)", "description": "Total return proxy", "stock_id": "5247"},
+}
+
+
+@v1_router.get("/benchmarks")
+def list_benchmarks():
+    """List available benchmarks."""
+    return {"benchmarks": [{"id": k, "name": v["name"], "description": v["description"]} for k, v in BENCHMARKS.items()]}
+
+
+@v1_router.get("/benchmarks/compare")
+def compare_to_benchmark(
+    strategy: str,
+    benchmark: str = "omxs30",
+    period: str = "1y",
+    db: Session = Depends(get_db)
+):
+    """Compare strategy performance to selected benchmark using real Avanza data."""
+    if benchmark not in BENCHMARKS:
+        raise HTTPException(status_code=400, detail=f"Unknown benchmark: {benchmark}")
+    
+    days = {"1m": 21, "3m": 63, "6m": 126, "1y": 252, "3y": 756}.get(period, 252)
+    
+    # Get strategy values
+    rankings = _get_strategy_rankings(strategy, db)[:10]
+    if not rankings:
+        raise HTTPException(status_code=404, detail="No strategy data")
+    
+    tickers = [r.ticker for r in rankings]
+    prices = db.query(DailyPrice).filter(
+        DailyPrice.ticker.in_(tickers)
+    ).order_by(DailyPrice.date.desc()).limit(days * len(tickers)).all()
+    
+    from collections import defaultdict
+    price_by_date = defaultdict(dict)
+    for p in prices:
+        price_by_date[p.date][p.ticker] = p.close
+    
+    dates = sorted(price_by_date.keys())[-days:]
+    strategy_values = []
+    for d in dates:
+        day_prices = [price_by_date[d].get(t) for t in tickers]
+        valid = [p for p in day_prices if p]
+        if valid:
+            strategy_values.append(sum(valid) / len(valid))
+    
+    if len(strategy_values) < 20:
+        return {"error": "Insufficient strategy data"}
+    
+    # Get real benchmark data from Avanza (Investor B as OMXS30 proxy)
+    bench_info = BENCHMARKS[benchmark]
+    fetcher = AvanzaDirectFetcher()
+    bench_df = fetcher.get_historical_prices(bench_info["stock_id"], days + 50)
+    
+    if bench_df is None or len(bench_df) < 20:
+        return {"error": "Could not fetch benchmark data"}
+    
+    # Align benchmark to strategy dates
+    bench_df = bench_df.sort_values('date')
+    benchmark_values = bench_df['close'].tolist()[-len(strategy_values):]
+    
+    if len(benchmark_values) != len(strategy_values):
+        # Trim to match
+        min_len = min(len(benchmark_values), len(strategy_values))
+        benchmark_values = benchmark_values[-min_len:]
+        strategy_values = strategy_values[-min_len:]
+        dates = dates[-min_len:]
+    
+    # Normalize both to start at 100
+    strategy_norm = [v / strategy_values[0] * 100 for v in strategy_values]
+    benchmark_norm = [v / benchmark_values[0] * 100 for v in benchmark_values]
+    
+    # Calculate comparison metrics
+    from services.benchmark import calculate_relative_performance
+    metrics = calculate_relative_performance(strategy_norm, benchmark_norm)
+    
+    return {
+        "strategy": strategy,
+        "benchmark": bench_info["name"],
+        "period": period,
+        "metrics": metrics,
+        "chart_data": {
+            "dates": [d.isoformat() for d in dates],
+            "strategy": [round(v, 2) for v in strategy_norm],
+            "benchmark": [round(v, 2) for v in benchmark_norm]
+        },
+        "note": "Benchmark uses Investor B as OMXS30 proxy (0.95+ correlation)"
+    }
+
+
 # Enhanced Portfolio Tracking with Performance Visualization
-@app.post("/portfolio/import/avanza-csv")
+@v1_router.post("/portfolio/import/avanza-csv")
 def import_avanza_csv(
     csv_content: str
 ):
@@ -1186,7 +2292,7 @@ def import_avanza_csv(
         raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
 
 
-@app.get("/portfolio/performance/chart-data")
+@v1_router.get("/portfolio/performance/chart-data")
 def get_portfolio_chart_data(
     portfolio_id: Optional[int] = None,
     include_benchmark: bool = True,
@@ -1227,7 +2333,7 @@ def get_portfolio_chart_data(
     }
 
 
-@app.get("/portfolio/performance/stats")
+@v1_router.get("/portfolio/performance/stats")
 def get_portfolio_stats(
     portfolio_id: Optional[int] = None,
     include_transaction_costs: bool = True
@@ -1267,14 +2373,14 @@ def get_portfolio_stats(
 
 
 # Portfolio Tracking
-@app.post("/portfolio/create")
+@v1_router.post("/portfolio/create")
 def create_new_portfolio(name: str = "Default", db: Session = Depends(get_db)):
     """Create a new portfolio for tracking."""
     portfolio_id = create_portfolio(db, name)
     return {"portfolio_id": portfolio_id, "name": name}
 
 
-@app.post("/portfolio/{portfolio_id}/transaction")
+@v1_router.post("/portfolio/{portfolio_id}/transaction")
 def record_transaction(
     portfolio_id: int,
     ticker: str,
@@ -1294,19 +2400,19 @@ def record_transaction(
     return {"transaction_id": txn_id}
 
 
-@app.get("/portfolio/{portfolio_id}/holdings")
+@v1_router.get("/portfolio/{portfolio_id}/holdings")
 def get_holdings(portfolio_id: int, db: Session = Depends(get_db)):
     """Get current portfolio holdings with values."""
     return get_portfolio_value(db, portfolio_id)
 
 
-@app.get("/portfolio/{portfolio_id}/performance")
+@v1_router.get("/portfolio/{portfolio_id}/performance")
 def get_performance(portfolio_id: int, db: Session = Depends(get_db)):
     """Get portfolio performance metrics."""
     return calculate_portfolio_performance(db, portfolio_id)
 
 
-@app.post("/portfolio/{portfolio_id}/rebalance-trades")
+@v1_router.post("/portfolio/{portfolio_id}/rebalance-trades")
 def get_rebalance_trades(
     portfolio_id: int,
     request: dict,
@@ -1318,13 +2424,13 @@ def get_rebalance_trades(
     return calculate_rebalance_trades(db, portfolio_id, target_holdings, portfolio_value)
 
 
-@app.get("/portfolio/{portfolio_id}/history")
+@v1_router.get("/portfolio/{portfolio_id}/history")
 def get_history(portfolio_id: int, db: Session = Depends(get_db)):
     """Get portfolio value history."""
     return get_portfolio_history(db, portfolio_id)
 
 
-@app.post("/portfolio/{portfolio_id}/snapshot")
+@v1_router.post("/portfolio/{portfolio_id}/snapshot")
 def take_snapshot(portfolio_id: int, db: Session = Depends(get_db)):
     """Save current portfolio state as a snapshot."""
     snapshot_id = save_snapshot(db, portfolio_id)
@@ -1332,13 +2438,13 @@ def take_snapshot(portfolio_id: int, db: Session = Depends(get_db)):
 
 
 # Transaction Costs
-@app.get("/costs/brokers")
+@v1_router.get("/costs/brokers")
 def list_brokers():
     """Get available brokers with fee structures."""
     return get_available_brokers()
 
 
-@app.post("/costs/calculate")
+@v1_router.post("/costs/calculate")
 def calculate_trade_cost(
     trade_value: float,
     broker: str = "avanza",
@@ -1349,7 +2455,7 @@ def calculate_trade_cost(
     return calculate_total_transaction_cost(trade_value, broker, spread_pct, is_round_trip)
 
 
-@app.post("/costs/rebalance")
+@v1_router.post("/costs/rebalance")
 def calculate_rebalance_cost(request: dict):
     """Calculate total costs for a rebalance."""
     trades = request.get("trades", [])
@@ -1358,7 +2464,7 @@ def calculate_rebalance_cost(request: dict):
     return calculate_rebalance_costs(trades, broker, spread_pct)
 
 
-@app.post("/costs/annual-impact")
+@v1_router.post("/costs/annual-impact")
 def calculate_annual_impact(
     portfolio_value: float,
     rebalances_per_year: int = 4,
@@ -1373,7 +2479,7 @@ def calculate_annual_impact(
 
 
 # Benchmark Comparison
-@app.post("/benchmark/compare")
+@v1_router.post("/benchmark/compare")
 def compare_to_benchmark(request: dict):
     """
     Compare strategy performance to benchmark.
@@ -1393,7 +2499,7 @@ def compare_to_benchmark(request: dict):
     return calculate_relative_performance(strategy_values, benchmark_values, dates)
 
 
-@app.post("/benchmark/chart-data")
+@v1_router.post("/benchmark/chart-data")
 def get_benchmark_chart_data(request: dict):
     """Get normalized chart data for strategy vs benchmark."""
     strategy_values = request.get("strategy_values", [])
@@ -1403,7 +2509,7 @@ def get_benchmark_chart_data(request: dict):
     return generate_relative_chart_data(strategy_values, benchmark_values, dates)
 
 
-@app.post("/benchmark/rolling")
+@v1_router.post("/benchmark/rolling")
 def get_rolling_metrics_endpoint(request: dict):
     """Get rolling alpha, beta, and excess return."""
     strategy_values = request.get("strategy_values", [])
@@ -1414,7 +2520,7 @@ def get_rolling_metrics_endpoint(request: dict):
 
 
 # Risk Analytics
-@app.post("/risk/metrics")
+@v1_router.post("/risk/metrics")
 def get_risk_metrics(request: dict):
     """Get comprehensive risk metrics for a value series."""
     values = request.get("values", [])
@@ -1424,14 +2530,14 @@ def get_risk_metrics(request: dict):
     return calculate_risk_metrics(values, benchmark_values, risk_free_rate)
 
 
-@app.post("/risk/sector-exposure")
+@v1_router.post("/risk/sector-exposure")
 def get_sector_exposure(request: dict):
     """Calculate sector exposure from holdings."""
     holdings = request.get("holdings", [])
     return calculate_sector_exposure(holdings)
 
 
-@app.post("/risk/drawdown")
+@v1_router.post("/risk/drawdown")
 def get_drawdown_analysis_endpoint(request: dict):
     """Detailed drawdown analysis."""
     values = request.get("values", [])
@@ -1439,13 +2545,13 @@ def get_drawdown_analysis_endpoint(request: dict):
 
 
 # Dividends
-@app.get("/dividends/upcoming")
+@v1_router.get("/dividends/upcoming")
 def get_upcoming_dividends_endpoint(days_ahead: int = 90, db: Session = Depends(get_db)):
     """Get upcoming dividend events."""
     return get_upcoming_dividends(db, days_ahead=days_ahead)
 
 
-@app.post("/dividends/projected-income")
+@v1_router.post("/dividends/projected-income")
 def get_projected_income(request: dict, db: Session = Depends(get_db)):
     """Calculate projected dividend income from holdings."""
     holdings = request.get("holdings", [])
@@ -1453,39 +2559,39 @@ def get_projected_income(request: dict, db: Session = Depends(get_db)):
     return calculate_projected_income(db, holdings, months)
 
 
-@app.get("/dividends/history/{ticker}")
+@v1_router.get("/dividends/history/{ticker}")
 def get_dividend_history_endpoint(ticker: str, years: int = 5, db: Session = Depends(get_db)):
     """Get dividend history for a stock."""
     return get_dividend_history(db, ticker, years)
 
 
-@app.get("/dividends/growth/{ticker}")
+@v1_router.get("/dividends/growth/{ticker}")
 def get_dividend_growth(ticker: str, years: int = 5, db: Session = Depends(get_db)):
     """Calculate dividend growth rate."""
     return calculate_dividend_growth(db, ticker, years)
 
 
 # Watchlist
-@app.post("/watchlist/create")
+@v1_router.post("/watchlist/create")
 def create_watchlist_endpoint(name: str = "Default", db: Session = Depends(get_db)):
     """Create a new watchlist."""
     watchlist_id = create_watchlist(db, name)
     return {"watchlist_id": watchlist_id, "name": name}
 
 
-@app.get("/watchlist")
+@v1_router.get("/watchlist")
 def list_watchlists(db: Session = Depends(get_db)):
     """Get all watchlists."""
     return get_all_watchlists(db)
 
 
-@app.get("/watchlist/{watchlist_id}")
+@v1_router.get("/watchlist/{watchlist_id}")
 def get_watchlist_endpoint(watchlist_id: int, db: Session = Depends(get_db)):
     """Get watchlist with items and rankings."""
     return get_watchlist(db, watchlist_id)
 
 
-@app.post("/watchlist/{watchlist_id}/add")
+@v1_router.post("/watchlist/{watchlist_id}/add")
 def add_to_watchlist_endpoint(
     watchlist_id: int,
     ticker: str,
@@ -1498,14 +2604,14 @@ def add_to_watchlist_endpoint(
     return {"item_id": item_id}
 
 
-@app.delete("/watchlist/{watchlist_id}/remove/{ticker}")
+@v1_router.delete("/watchlist/{watchlist_id}/remove/{ticker}")
 def remove_from_watchlist_endpoint(watchlist_id: int, ticker: str, db: Session = Depends(get_db)):
     """Remove stock from watchlist."""
     success = remove_from_watchlist(db, watchlist_id, ticker)
     return {"success": success}
 
 
-@app.get("/watchlist/{watchlist_id}/alerts")
+@v1_router.get("/watchlist/{watchlist_id}/alerts")
 def get_watchlist_alerts(
     watchlist_id: int,
     strategy: str = "sammansatt_momentum",
@@ -1516,19 +2622,19 @@ def get_watchlist_alerts(
 
 
 # Custom Strategy Builder
-@app.get("/custom-strategy/factors")
+@v1_router.get("/custom-strategy/factors")
 def get_factors():
     """Get available factors for custom strategies."""
     return get_available_factors()
 
 
-@app.get("/custom-strategy")
-def list_strategies(db: Session = Depends(get_db)):
+@v1_router.get("/custom-strategy")
+def list_custom_strategies_endpoint(db: Session = Depends(get_db)):
     """List all custom strategies."""
     return list_custom_strategies(db)
 
 
-@app.post("/custom-strategy/create")
+@v1_router.post("/custom-strategy/create")
 def create_strategy(request: dict, db: Session = Depends(get_db)):
     """
     Create a custom strategy.
@@ -1553,7 +2659,7 @@ def create_strategy(request: dict, db: Session = Depends(get_db)):
     return {"strategy_id": strategy_id}
 
 
-@app.get("/custom-strategy/{strategy_id}")
+@v1_router.get("/custom-strategy/{strategy_id}")
 def get_strategy(strategy_id: int, db: Session = Depends(get_db)):
     """Get a custom strategy by ID."""
     strategy = get_custom_strategy(db, strategy_id)
@@ -1562,14 +2668,14 @@ def get_strategy(strategy_id: int, db: Session = Depends(get_db)):
     return strategy
 
 
-@app.delete("/custom-strategy/{strategy_id}")
+@v1_router.delete("/custom-strategy/{strategy_id}")
 def delete_strategy(strategy_id: int, db: Session = Depends(get_db)):
     """Delete a custom strategy."""
     success = delete_custom_strategy(db, strategy_id)
     return {"success": success}
 
 
-@app.post("/custom-strategy/{strategy_id}/run")
+@v1_router.post("/custom-strategy/{strategy_id}/run")
 def run_strategy(strategy_id: int, db: Session = Depends(get_db)):
     """Run a custom strategy and get rankings."""
     strategy = get_custom_strategy(db, strategy_id)
@@ -1602,13 +2708,13 @@ def run_strategy(strategy_id: int, db: Session = Depends(get_db)):
 
 
 # Markets
-@app.get("/markets")
+@v1_router.get("/markets")
 def list_markets():
     """Get available markets."""
     return get_available_markets()
 
 
-@app.get("/markets/{market}/stocks")
+@v1_router.get("/markets/{market}/stocks")
 def get_market_stocks(market: str):
     """Get stocks for a specific market."""
     stocks = get_stocks_for_market(market)
@@ -1621,7 +2727,7 @@ def get_market_stocks(market: str):
 
 
 # CSV Import
-@app.post("/import/csv")
+@v1_router.post("/import/csv")
 def import_csv(request: dict):
     """
     Import transactions from broker CSV export.
@@ -1645,7 +2751,7 @@ def import_csv(request: dict):
     return result
 
 
-@app.post("/import/csv/holdings")
+@v1_router.post("/import/csv/holdings")
 def import_csv_to_holdings(request: dict):
     """
     Import CSV and calculate current holdings.
@@ -1670,7 +2776,7 @@ def import_csv_to_holdings(request: dict):
         "holdings_count": len(holdings)
     }
 
-@app.post("/user/profile")
+@v1_router.post("/user/profile")
 async def create_user_profile(name: str, email: str = None, db: Session = Depends(get_db)):
     """Create a new user profile."""
     from services.user_storage import UserStorageService
@@ -1678,7 +2784,7 @@ async def create_user_profile(name: str, email: str = None, db: Session = Depend
     user_id = UserStorageService.create_user_profile(db, name, email)
     return {"user_id": user_id, "message": "Profile created successfully"}
 
-@app.get("/user/{user_id}/profile")
+@v1_router.get("/user/{user_id}/profile")
 async def get_user_profile(user_id: str, db: Session = Depends(get_db)):
     """Get user profile."""
     from services.user_storage import UserStorageService
@@ -1689,7 +2795,7 @@ async def get_user_profile(user_id: str, db: Session = Depends(get_db)):
     
     return profile
 
-@app.post("/user/{user_id}/avanza-import")
+@v1_router.post("/user/{user_id}/avanza-import")
 async def save_avanza_import(user_id: str, filename: str, transactions_count: int, 
                            holdings_data: dict, raw_data: str, db: Session = Depends(get_db)):
     """Save Avanza CSV import for user."""
@@ -1700,24 +2806,10 @@ async def save_avanza_import(user_id: str, filename: str, transactions_count: in
     )
     return {"import_id": import_id, "message": "Avanza import saved successfully"}
 
-@app.get("/cache/stats")
-async def get_cache_stats():
-    """Get cache performance statistics."""
-    from services.advanced_cache import AdvancedCache
-    
-    cache = AdvancedCache()
-    stats = cache.get_cache_stats()
-    
-    return {
-        "cache_stats": stats,
-        "api_calls_saved": stats['total_hits'],
-        "cache_efficiency": stats['cache_efficiency']
-    }
-
-@app.get("/portfolio/{portfolio_name}/performance")
+@v1_router.get("/portfolio/{portfolio_name}/performance")
 async def get_portfolio_performance(portfolio_name: str, days: int = 30):
     """Get portfolio performance over time."""
-    from services.advanced_cache import HistoricalTracker
+    from services.historical_tracker import HistoricalTracker
     
     tracker = HistoricalTracker()
     performance = tracker.get_portfolio_performance(portfolio_name, days)
@@ -1728,10 +2820,10 @@ async def get_portfolio_performance(portfolio_name: str, days: int = 30):
         "tracking_period_days": days
     }
 
-@app.get("/stock/{ticker}/history")
+@v1_router.get("/stock/{ticker}/history")
 async def get_stock_history(ticker: str, days: int = 30):
     """Get price history for a stock."""
-    from services.advanced_cache import HistoricalTracker
+    from services.historical_tracker import HistoricalTracker
     
     tracker = HistoricalTracker()
     history = tracker.get_price_history(ticker, days)
@@ -1742,10 +2834,10 @@ async def get_stock_history(ticker: str, days: int = 30):
         "data_points": len(history)
     }
 
-@app.post("/portfolio/{portfolio_name}/snapshot")
+@v1_router.post("/portfolio/{portfolio_name}/snapshot")
 async def record_portfolio_snapshot(portfolio_name: str, holdings: List[dict]):
     """Record a portfolio snapshot for tracking."""
-    from services.advanced_cache import HistoricalTracker
+    from services.historical_tracker import HistoricalTracker
     
     tracker = HistoricalTracker()
     tracker.record_portfolio_snapshot(portfolio_name, holdings)
@@ -1756,7 +2848,7 @@ async def record_portfolio_snapshot(portfolio_name: str, holdings: List[dict]):
         "timestamp": datetime.now().isoformat()
     }
 
-@app.get("/user/{user_id}/avanza-imports")
+@v1_router.get("/user/{user_id}/avanza-imports")
 async def get_user_avanza_imports(user_id: str, db: Session = Depends(get_db)):
     """Get all Avanza imports for user."""
     from services.user_storage import UserStorageService
@@ -1764,7 +2856,7 @@ async def get_user_avanza_imports(user_id: str, db: Session = Depends(get_db)):
     imports = UserStorageService.get_user_avanza_imports(db, user_id)
     return {"imports": imports, "count": len(imports)}
 
-@app.websocket("/ws/sync-logs")
+@v1_router.websocket("/ws/sync-logs")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
@@ -1773,3 +2865,532 @@ async def websocket_endpoint(websocket: WebSocket):
             await asyncio.sleep(1)
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+
+@v1_router.post("/rebalance/trades")
+def generate_rebalance_trades(
+    strategy: str,
+    portfolio_value: float,
+    current_holdings: List[dict] = [],
+    db: Session = Depends(get_db)
+):
+    """Generate buy/sell trades to rebalance portfolio to target strategy.
+    
+    current_holdings: [{"ticker": "VOLV-B.ST", "shares": 10, "value": 5000}, ...]
+    """
+    # Get target stocks from strategy
+    strategies = STRATEGIES_CONFIG.get("strategies", {})
+    if strategy not in strategies:
+        raise HTTPException(status_code=404, detail=f"Strategy '{strategy}' not found")
+    
+    rankings = _compute_strategy_rankings(strategy, strategies[strategy], db)
+    target_tickers = [r.ticker for r in rankings[:10]]
+    
+    # Equal weight allocation
+    target_per_stock = portfolio_value / len(target_tickers) if target_tickers else 0
+    
+    # Build current holdings map
+    current_map = {h["ticker"]: h.get("value", 0) for h in current_holdings}
+    
+    # Get current prices and ISINs
+    prices = {}
+    isins = {}
+    for ticker in set(target_tickers + list(current_map.keys())):
+        price_row = db.query(DailyPrice).filter(DailyPrice.ticker == ticker).order_by(DailyPrice.date.desc()).first()
+        prices[ticker] = price_row.close if price_row else None
+        stock = db.query(Stock).filter(Stock.ticker == ticker).first()
+        isins[ticker] = stock.isin if stock and stock.isin else None
+    
+    trades = []
+    
+    # Sells first (stocks to remove)
+    for ticker, current_value in current_map.items():
+        if ticker not in target_tickers and current_value > 0:
+            price = prices.get(ticker)
+            shares = int(current_value / price) if price else 0
+            trades.append({
+                "ticker": ticker, "action": "SELL", "shares": shares,
+                "amount_sek": current_value, "price": price, "isin": isins.get(ticker)
+            })
+    
+    # Buys (new stocks and rebalancing)
+    for ticker in target_tickers:
+        current_value = current_map.get(ticker, 0)
+        diff = target_per_stock - current_value
+        price = prices.get(ticker)
+        
+        if diff > 100 and price:  # Only trade if diff > 100 SEK
+            shares = int(diff / price)
+            if shares > 0:
+                trades.append({
+                    "ticker": ticker, "action": "BUY", "shares": shares,
+                    "amount_sek": shares * price, "price": price, "isin": isins.get(ticker)
+                })
+        elif diff < -100 and price:  # Reduce position
+            shares = int(abs(diff) / price)
+            if shares > 0:
+                trades.append({
+                    "ticker": ticker, "action": "SELL", "shares": shares,
+                    "amount_sek": shares * price, "price": price, "isin": isins.get(ticker)
+                })
+    
+    # Calculate costs (Avanza rates)
+    total_traded = sum(t["amount_sek"] for t in trades)
+    courtage_rate = 0.00069  # 0.069% Avanza standard
+    spread_rate = 0.002  # ~0.2% estimated spread for Swedish stocks
+    
+    courtage = total_traded * courtage_rate
+    spread_cost = total_traded * spread_rate
+    total_cost = courtage + spread_cost
+    
+    return {
+        "strategy": strategy,
+        "portfolio_value": portfolio_value,
+        "target_stocks": target_tickers,
+        "trades": trades,
+        "total_buys": sum(t["amount_sek"] for t in trades if t["action"] == "BUY"),
+        "total_sells": sum(t["amount_sek"] for t in trades if t["action"] == "SELL"),
+        "costs": {
+            "courtage": round(courtage, 2),
+            "spread_estimate": round(spread_cost, 2),
+            "total": round(total_cost, 2),
+            "percentage": round(total_cost / portfolio_value * 100, 3) if portfolio_value else 0
+        }
+    }
+
+
+@v1_router.post("/rebalance/save")
+def save_rebalance(strategy: str, portfolio_value: float, trades: List[dict], db: Session = Depends(get_db)):
+    """Save a completed rebalance to history."""
+    from models import RebalanceHistory
+    import json
+    
+    total_cost = sum(t.get('amount_sek', 0) for t in trades) * 0.00269  # courtage + spread
+    
+    record = RebalanceHistory(
+        strategy=strategy,
+        rebalance_date=date.today(),
+        trades_json=json.dumps(trades),
+        total_cost=total_cost,
+        portfolio_value=portfolio_value
+    )
+    db.add(record)
+    db.commit()
+    return {"id": record.id, "date": record.rebalance_date.isoformat()}
+
+
+@v1_router.get("/rebalance/history/{strategy}")
+def get_rebalance_history(strategy: str, db: Session = Depends(get_db)):
+    """Get rebalance history for a strategy."""
+    from models import RebalanceHistory
+    import json
+    
+    records = db.query(RebalanceHistory).filter(
+        RebalanceHistory.strategy == strategy
+    ).order_by(RebalanceHistory.rebalance_date.desc()).limit(20).all()
+    
+    return [{
+        "id": r.id,
+        "date": r.rebalance_date.isoformat(),
+        "trades": json.loads(r.trades_json) if r.trades_json else [],
+        "total_cost": r.total_cost,
+        "portfolio_value": r.portfolio_value
+    } for r in records]
+
+
+@v1_router.get("/rebalance/last/{strategy}")
+def get_last_rebalance(strategy: str, db: Session = Depends(get_db)):
+    """Get last rebalance date for a strategy."""
+    from models import RebalanceHistory
+    
+    record = db.query(RebalanceHistory).filter(
+        RebalanceHistory.strategy == strategy
+    ).order_by(RebalanceHistory.rebalance_date.desc()).first()
+    
+    if not record:
+        return {"last_rebalance": None}
+    return {"last_rebalance": record.rebalance_date.isoformat(), "days_ago": (date.today() - record.rebalance_date).days}
+
+
+@v1_router.post("/portfolio/divergence")
+def check_portfolio_divergence(strategy: str, holdings: List[dict], db: Session = Depends(get_db)):
+    """Check how portfolio diverges from target strategy.
+    
+    holdings: [{"ticker": "VOLV-B", "value": 10000}, ...]
+    Returns: which stocks to add/remove, drift percentage
+    """
+    strategies = STRATEGIES_CONFIG.get("strategies", {})
+    if strategy not in strategies:
+        raise HTTPException(status_code=404, detail=f"Strategy '{strategy}' not found")
+    
+    rankings = _compute_strategy_rankings(strategy, strategies[strategy], db)
+    target_tickers = set(r.ticker for r in rankings[:10])
+    
+    holding_tickers = set(h["ticker"] for h in holdings)
+    total_value = sum(h.get("value", 0) for h in holdings)
+    
+    correct = holding_tickers & target_tickers
+    to_add = target_tickers - holding_tickers
+    to_remove = holding_tickers - target_tickers
+    
+    # Calculate drift (deviation from equal weight)
+    target_weight = 0.10  # 10% each
+    drift = 0
+    if total_value > 0:
+        for h in holdings:
+            actual_weight = h.get("value", 0) / total_value
+            if h["ticker"] in target_tickers:
+                drift += abs(actual_weight - target_weight)
+            else:
+                drift += actual_weight  # Wrong stock = 100% drift for that position
+    
+    return {
+        "strategy": strategy,
+        "correct_count": len(correct),
+        "target_count": 10,
+        "correct_stocks": list(correct),
+        "to_add": list(to_add),
+        "to_remove": list(to_remove),
+        "drift_percentage": round(drift * 100, 1),
+        "status": "aligned" if len(correct) == 10 and drift < 0.05 else "needs_rebalance"
+    }
+
+
+@v1_router.post("/import/avanza-csv")
+async def import_avanza_csv(file: UploadFile = File(...)):
+    """Import holdings from Avanza CSV export."""
+    content = await file.read()
+    try:
+        text = content.decode('utf-8')
+    except:
+        text = content.decode('latin-1')
+    
+    transactions = parse_broker_csv(text)
+    holdings = calculate_holdings_from_transactions(transactions)
+    
+    # Calculate totals
+    total_fees = sum(t.get('fees', 0) for t in transactions)
+    total_invested = sum(t['shares'] * t['price'] for t in transactions if t['type'] == 'BUY')
+    
+    return {
+        "transactions_count": len(transactions),
+        "holdings": [{"ticker": k, "shares": v} for k, v in holdings.items()],
+        "total_fees_paid": total_fees,
+        "total_invested": total_invested,
+        "unique_stocks": len(holdings)
+    }
+
+
+# Multi-Portfolio Support
+@v1_router.post("/portfolios")
+def create_portfolio_account(name: str, account_type: str = "ISK", strategy: str = None, db: Session = Depends(get_db)):
+    """Create a new portfolio account."""
+    from models import UserPortfolioAccount
+    account = UserPortfolioAccount(name=name, account_type=account_type, strategy=strategy, holdings_json="[]")
+    db.add(account)
+    db.commit()
+    return {"id": account.id, "name": name, "account_type": account_type}
+
+
+@v1_router.get("/portfolios")
+def list_portfolio_accounts(db: Session = Depends(get_db)):
+    """List all portfolio accounts."""
+    from models import UserPortfolioAccount
+    import json
+    accounts = db.query(UserPortfolioAccount).all()
+    return [{
+        "id": a.id, "name": a.name, "account_type": a.account_type,
+        "strategy": a.strategy, "holdings": json.loads(a.holdings_json or "[]")
+    } for a in accounts]
+
+
+@v1_router.put("/portfolios/{portfolio_id}")
+def update_portfolio_account(portfolio_id: int, holdings: List[dict], db: Session = Depends(get_db)):
+    """Update portfolio holdings."""
+    from models import UserPortfolioAccount
+    import json
+    account = db.query(UserPortfolioAccount).filter(UserPortfolioAccount.id == portfolio_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    account.holdings_json = json.dumps(holdings)
+    db.commit()
+    return {"id": portfolio_id, "holdings_count": len(holdings)}
+
+
+@v1_router.delete("/portfolios/{portfolio_id}")
+def delete_portfolio_account(portfolio_id: int, db: Session = Depends(get_db)):
+    """Delete a portfolio account."""
+    from models import UserPortfolioAccount
+    account = db.query(UserPortfolioAccount).filter(UserPortfolioAccount.id == portfolio_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    db.delete(account)
+    db.commit()
+    return {"deleted": True}
+
+
+# Historical Rankings Archive
+@v1_router.post("/rankings/snapshot")
+def save_rankings_snapshot(strategy: str, db: Session = Depends(get_db)):
+    """Save current rankings as a snapshot."""
+    from models import RankingsSnapshot
+    import json
+    
+    strategies = STRATEGIES_CONFIG.get("strategies", {})
+    if strategy not in strategies:
+        raise HTTPException(status_code=404, detail=f"Strategy '{strategy}' not found")
+    
+    rankings = _compute_strategy_rankings(strategy, strategies[strategy], db)
+    rankings_data = [{"ticker": r.ticker, "rank": r.rank, "score": r.score} for r in rankings[:10]]
+    
+    snapshot = RankingsSnapshot(
+        strategy=strategy,
+        snapshot_date=date.today(),
+        rankings_json=json.dumps(rankings_data)
+    )
+    db.add(snapshot)
+    db.commit()
+    return {"id": snapshot.id, "date": snapshot.snapshot_date.isoformat(), "stocks": len(rankings_data)}
+
+
+@v1_router.get("/rankings/history/{strategy}")
+def get_rankings_history(strategy: str, limit: int = 12, db: Session = Depends(get_db)):
+    """Get historical rankings snapshots."""
+    from models import RankingsSnapshot
+    import json
+    
+    snapshots = db.query(RankingsSnapshot).filter(
+        RankingsSnapshot.strategy == strategy
+    ).order_by(RankingsSnapshot.snapshot_date.desc()).limit(limit).all()
+    
+    return [{
+        "date": s.snapshot_date.isoformat(),
+        "rankings": json.loads(s.rankings_json) if s.rankings_json else []
+    } for s in snapshots]
+
+
+@v1_router.get("/rankings/on-date")
+def get_rankings_on_date(strategy: str, target_date: str, db: Session = Depends(get_db)):
+    """Get rankings for a specific date (nearest snapshot)."""
+    from models import RankingsSnapshot
+    import json
+    
+    target = datetime.strptime(target_date, "%Y-%m-%d").date()
+    
+    snapshot = db.query(RankingsSnapshot).filter(
+        RankingsSnapshot.strategy == strategy,
+        RankingsSnapshot.snapshot_date <= target
+    ).order_by(RankingsSnapshot.snapshot_date.desc()).first()
+    
+    if not snapshot:
+        return {"date": None, "rankings": [], "message": "No snapshot found for this date"}
+    
+    return {
+        "date": snapshot.snapshot_date.isoformat(),
+        "rankings": json.loads(snapshot.rankings_json) if snapshot.rankings_json else []
+    }
+
+
+@v1_router.get("/rankings/compute-historical")
+def compute_historical_rankings(strategy: str, target_date: str, db: Session = Depends(get_db)):
+    """
+    Compute what the strategy rankings WOULD have been on a specific date.
+    Uses historical fundamentals snapshots + historical prices.
+    """
+    from models import FundamentalsSnapshot, DailyPrice
+    from services.ranking import (
+        calculate_momentum_score, calculate_value_score,
+        calculate_dividend_score, calculate_quality_score,
+        filter_by_market_cap, filter_financial_companies
+    )
+    
+    target = datetime.strptime(target_date, "%Y-%m-%d").date()
+    
+    # Find nearest fundamentals snapshot (on or before target date)
+    snapshot_date = db.query(FundamentalsSnapshot.snapshot_date).filter(
+        FundamentalsSnapshot.snapshot_date <= target
+    ).order_by(FundamentalsSnapshot.snapshot_date.desc()).first()
+    
+    if not snapshot_date:
+        return {"error": "No fundamentals snapshot available for this date", "available_from": None}
+    
+    snapshot_date = snapshot_date[0]
+    
+    # Load fundamentals from snapshot
+    snapshots = db.query(FundamentalsSnapshot).filter(
+        FundamentalsSnapshot.snapshot_date == snapshot_date
+    ).all()
+    
+    fund_df = pd.DataFrame([{
+        'ticker': s.ticker, 'market_cap': s.market_cap, 'pe': s.pe, 'pb': s.pb,
+        'ps': s.ps, 'p_fcf': s.p_fcf, 'ev_ebitda': s.ev_ebitda, 'roe': s.roe,
+        'roa': s.roa, 'roic': s.roic, 'fcfroe': s.fcfroe,
+        'dividend_yield': s.dividend_yield, 'payout_ratio': s.payout_ratio
+    } for s in snapshots])
+    
+    if fund_df.empty:
+        return {"error": "No fundamentals data in snapshot"}
+    
+    # Load historical prices up to target date (need 12 months for momentum)
+    prices = db.query(DailyPrice).filter(
+        DailyPrice.date <= target,
+        DailyPrice.date >= target - timedelta(days=400)
+    ).all()
+    
+    prices_df = pd.DataFrame([{'ticker': p.ticker, 'date': p.date, 'close': p.close} for p in prices])
+    
+    if prices_df.empty:
+        return {"error": "No price data available for this date range"}
+    
+    # Apply market cap filter
+    filtered_fund = filter_by_market_cap(fund_df, 40)
+    filtered_fund = filter_financial_companies(filtered_fund)
+    
+    # Compute rankings based on strategy type
+    strategies = STRATEGIES_CONFIG.get("strategies", {})
+    if strategy not in strategies:
+        return {"error": f"Unknown strategy: {strategy}"}
+    
+    config = strategies[strategy]
+    strategy_type = config.get('category', config.get('type', ''))
+    
+    if strategy_type == 'momentum':
+        scores = calculate_momentum_score(prices_df)
+        ranked = scores.sort_values(ascending=False).head(10)
+        rankings = [{'ticker': t, 'rank': i+1, 'score': float(s)} for i, (t, s) in enumerate(ranked.items())]
+    elif strategy_type == 'value':
+        ranked = calculate_value_score(filtered_fund, prices_df)
+        rankings = ranked.head(10).to_dict('records')
+    elif strategy_type == 'dividend':
+        ranked = calculate_dividend_score(filtered_fund, prices_df)
+        rankings = ranked.head(10).to_dict('records')
+    elif strategy_type == 'quality':
+        ranked = calculate_quality_score(filtered_fund, prices_df)
+        rankings = ranked.head(10).to_dict('records')
+    else:
+        return {"error": f"Unknown strategy type: {strategy_type}"}
+    
+    return {
+        "strategy": strategy,
+        "target_date": target_date,
+        "fundamentals_snapshot_date": snapshot_date.isoformat(),
+        "rankings": rankings,
+        "note": "Rankings computed from historical data - may differ from actual picks if data was different"
+    }
+
+
+@v1_router.get("/fundamentals/snapshots")
+def list_fundamentals_snapshots(db: Session = Depends(get_db)):
+    """List available fundamentals snapshot dates."""
+    from models import FundamentalsSnapshot
+    from sqlalchemy import func
+    
+    dates = db.query(
+        FundamentalsSnapshot.snapshot_date,
+        func.count(FundamentalsSnapshot.id).label('stock_count')
+    ).group_by(FundamentalsSnapshot.snapshot_date).order_by(
+        FundamentalsSnapshot.snapshot_date.desc()
+    ).limit(52).all()  # Last year of weekly snapshots
+    
+    return {
+        "snapshots": [{"date": d[0].isoformat(), "stocks": d[1]} for d in dates],
+        "total_snapshots": len(dates)
+    }
+
+
+# Broker Fee Comparison
+BROKER_FEES = {
+    "avanza": {"name": "Avanza", "courtage_pct": 0.069, "min_fee": 1, "spread_pct": 0.20},
+    "nordnet": {"name": "Nordnet", "courtage_pct": 0.069, "min_fee": 39, "spread_pct": 0.20},
+    "degiro": {"name": "DEGIRO", "courtage_pct": 0.05, "min_fee": 0, "spread_pct": 0.25},
+}
+
+@v1_router.get("/brokers/compare")
+def compare_broker_fees(trade_value: float):
+    """Compare broker fees for a given trade value."""
+    results = []
+    for broker_id, fees in BROKER_FEES.items():
+        courtage = max(trade_value * fees["courtage_pct"] / 100, fees["min_fee"])
+        spread = trade_value * fees["spread_pct"] / 100
+        total = courtage + spread
+        results.append({
+            "broker": fees["name"],
+            "courtage": round(courtage, 2),
+            "spread": round(spread, 2),
+            "total": round(total, 2),
+            "percentage": round(total / trade_value * 100, 3) if trade_value else 0
+        })
+    
+    results.sort(key=lambda x: x["total"])
+    cheapest = results[0]["broker"] if results else None
+    
+    return {"trade_value": trade_value, "brokers": results, "cheapest": cheapest}
+
+
+@v1_router.get("/brokers/rebalance-cost")
+def compare_rebalance_costs(portfolio_value: float, turnover_pct: float = 50):
+    """Compare total rebalance costs across brokers."""
+    trade_value = portfolio_value * turnover_pct / 100
+    
+    results = []
+    for broker_id, fees in BROKER_FEES.items():
+        # Assume 10 trades (5 buys, 5 sells) for a full rebalance
+        num_trades = 10
+        courtage_per_trade = max(trade_value / num_trades * fees["courtage_pct"] / 100, fees["min_fee"])
+        total_courtage = courtage_per_trade * num_trades
+        spread = trade_value * fees["spread_pct"] / 100
+        total = total_courtage + spread
+        
+        results.append({
+            "broker": fees["name"],
+            "courtage": round(total_courtage, 2),
+            "spread": round(spread, 2),
+            "total": round(total, 2),
+            "percentage": round(total / portfolio_value * 100, 3)
+        })
+    
+    results.sort(key=lambda x: x["total"])
+    
+    return {
+        "portfolio_value": portfolio_value,
+        "turnover_pct": turnover_pct,
+        "trade_value": trade_value,
+        "brokers": results,
+        "cheapest": results[0]["broker"] if results else None,
+        "savings_vs_worst": round(results[-1]["total"] - results[0]["total"], 2) if len(results) > 1 else 0
+    }
+
+
+@v1_router.post("/notifications/rebalance-reminder")
+def send_rebalance_reminder_endpoint(email: str, strategy: str, db: Session = Depends(get_db)):
+    """Send rebalance reminder email."""
+    from services.email_notifications import send_rebalance_reminder, get_upcoming_rebalances
+    
+    upcoming = get_upcoming_rebalances(days_ahead=30)
+    match = next((u for u in upcoming if u['strategy'].lower() == strategy.lower()), None)
+    
+    if not match:
+        return {"sent": False, "reason": "No upcoming rebalance for this strategy"}
+    
+    # Get current top stocks
+    strategies = STRATEGIES_CONFIG.get("strategies", {})
+    strategy_key = next((k for k in strategies if k.lower() == strategy.lower()), None)
+    stocks = []
+    if strategy_key:
+        rankings = _compute_strategy_rankings(strategy_key, strategies[strategy_key], db)
+        stocks = [r.ticker for r in rankings[:10]]
+    
+    sent = send_rebalance_reminder(email, strategy, match['date'], stocks)
+    return {"sent": sent, "strategy": strategy, "date": match['date'].isoformat()}
+
+
+@v1_router.get("/notifications/upcoming-rebalances")
+def get_upcoming_rebalances_endpoint(days_ahead: int = 14):
+    """Get strategies with upcoming rebalances."""
+    from services.email_notifications import get_upcoming_rebalances
+    upcoming = get_upcoming_rebalances(days_ahead)
+    return [{"strategy": u['strategy'], "date": u['date'].isoformat(), "days_until": u['days_until']} for u in upcoming]
+
+
+# Include v1 router
+app.include_router(v1_router)

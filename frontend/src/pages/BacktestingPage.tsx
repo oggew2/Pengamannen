@@ -13,6 +13,11 @@ export function BacktestingPage() {
   const [history, setHistory] = useState<BacktestResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // Customization options
+  const [topN, setTopN] = useState(10);
+  const [minMarketCap, setMinMarketCap] = useState(2000); // MSEK
+  const [rebalanceFreq, setRebalanceFreq] = useState('quarterly');
 
   useEffect(() => {
     api.getStrategies().then(setStrategies).catch(() => {});
@@ -80,6 +85,36 @@ export function BacktestingPage() {
             onChange={e => setEndDate(e.target.value)}
             className={styles.input}
           />
+
+          <details style={{ marginTop: '1rem' }}>
+            <summary style={{ cursor: 'pointer', fontWeight: 500 }}>Advanced Options</summary>
+            <div style={{ marginTop: '0.5rem' }}>
+              <label className={styles.formLabel}>Top N Stocks</label>
+              <select value={topN} onChange={e => setTopN(+e.target.value)} className={styles.select}>
+                <option value={5}>5</option>
+                <option value={10}>10 (Standard)</option>
+                <option value={15}>15</option>
+                <option value={20}>20</option>
+              </select>
+
+              <label className={styles.formLabel}>Min Market Cap (MSEK)</label>
+              <select value={minMarketCap} onChange={e => setMinMarketCap(+e.target.value)} className={styles.select}>
+                <option value={500}>500 MSEK</option>
+                <option value={1000}>1 000 MSEK</option>
+                <option value={2000}>2 000 MSEK (Standard)</option>
+                <option value={5000}>5 000 MSEK</option>
+                <option value={10000}>10 000 MSEK</option>
+              </select>
+
+              <label className={styles.formLabel}>Rebalance Frequency</label>
+              <select value={rebalanceFreq} onChange={e => setRebalanceFreq(e.target.value)} className={styles.select}>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly (Standard)</option>
+                <option value="semi-annual">Semi-Annual</option>
+                <option value="annual">Annual</option>
+              </select>
+            </div>
+          </details>
 
           <button
             onClick={handleRun}

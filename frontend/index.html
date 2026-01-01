@@ -1,12 +1,39 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="sv">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Börslabbet Strategies</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0d9488" />
+    <meta name="description" content="Swedish stock strategy platform - Börslabbet strategies" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <title>Börslabbet</title>
+    <style>
+      /* Safe area padding for notched devices */
+      body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+      /* Prevent text size adjustment on orientation change */
+      html { -webkit-text-size-adjust: 100%; }
+      /* Smooth scrolling */
+      html { scroll-behavior: smooth; }
+      /* Touch action for better scroll performance */
+      * { touch-action: manipulation; }
+    </style>
   </head>
   <body>
+    <noscript>
+      <div style="padding: 2rem; text-align: center; font-family: system-ui, sans-serif;">
+        <h1>JavaScript krävs</h1>
+        <p>Denna applikation kräver JavaScript för att fungera. Vänligen aktivera JavaScript i din webbläsare.</p>
+      </div>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js');
+      }
+    </script>
   </body>
 </html>

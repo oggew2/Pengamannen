@@ -1,0 +1,30 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Pagination > matches snapshot 1`] = `
+<div>
+  <div
+    class="chakra-stack css-wn444f"
+  >
+    <button
+      class="chakra-button css-tjtpa6"
+      disabled=""
+      type="button"
+    >
+      ←
+    </button>
+    <p
+      class="css-oo4xmo"
+    >
+      1
+       / 
+      3
+    </p>
+    <button
+      class="chakra-button css-tjtpa6"
+      type="button"
+    >
+      →
+    </button>
+  </div>
+</div>
+`;

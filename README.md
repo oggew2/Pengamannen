@@ -1,182 +1,180 @@
 # Börslabbet App
 
-A quantitative Swedish stock strategy platform implementing Börslabbet's proven investment strategies with **free unlimited data** from Yahoo Finance.
+A quantitative Swedish stock strategy platform implementing Börslabbet's proven investment strategies with data from Avanza.
 
 ## Features
 
-- **4 Börslabbet Strategies**:
-  - Sammansatt Momentum (Quarterly rebalancing)
-  - Trendande Värde (Annual, January)
-  - Trendande Utdelning (Annual, February)
-  - Trendande Kvalitet (Annual, March)
+### Core Strategies
+- **Sammansatt Momentum** - Quarterly rebalancing, Piotroski F-Score quality filter
+- **Trendande Värde** - 6-factor value scoring, momentum sorted
+- **Trendande Utdelning** - Dividend yield with momentum filter
+- **Trendande Kvalitet** - ROE/ROA/ROIC/FCFROE quality composite
 
-- **Portfolio Management**: Combine strategies, track holdings, view rebalance calendar
-- **Backtesting**: Historical performance simulation with Sharpe ratio, max drawdown
-- **Free Data**: Unlimited Swedish stock data via Yahoo Finance (no API keys needed)
+### Data Pipeline
+- **Avanza API** - Free Swedish stock data (fundamentals + prices)
+- **Daily sync** - Automated data refresh (~51 seconds)
+- **Pre-computed rankings** - Instant API responses from DB cache
+- **Historical backtesting** - Test strategies on 10+ years of data
 
-## 🚀 Quick Start with Docker (Recommended)
+### Portfolio Management
+- Track holdings with P&L calculation
+- Import from Avanza CSV exports
+- Rebalance trade generator with cost estimates
+- Strategy comparison (side-by-side top 10)
 
-### Prerequisites
-- Docker and Docker Compose
-- 2GB RAM, 1GB disk space
+## Quick Start
 
-### One-Command Deployment
-
+### Docker (Recommended)
 ```bash
-git clone <your-repo>
-cd borslabbet-app
 docker compose up -d
 ```
-
-**That's it!** The application will be available at:
 - Frontend: http://localhost:5173
-- Backend API: http://localhost:8000
-- API Documentation: http://localhost:8000/docs
+- Backend: http://localhost:8000
+- API Docs: http://localhost:8000/docs
 
-### First Data Sync (Multiple Methods Available)
-
+### Manual Setup
 ```bash
-# Ultimate method (recommended): Balanced speed and reliability
-curl -X POST "http://localhost:8000/data/sync-now?method=ultimate"
-
-# Optimized method: Maximum reliability with 100% guarantee
-curl -X POST "http://localhost:8000/data/sync-now?method=optimized"
-
-# Standard method: Basic sync
-curl -X POST "http://localhost:8000/data/sync-now?method=v3"
-```
-
-**Performance**: 30 Swedish stocks sync in 2-3 minutes, 880 Nordic stocks in 45-60 minutes.
-
-## 🛠 Manual Development Setup
-
-### Prerequisites
-- Python 3.9+
-- Node.js 18+
-
-### Backend Setup
-
-```bash
+# Backend
 cd backend
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+uvicorn main:app --reload
 
-# Start server
-python -m uvicorn main:app --reload
-```
-
-Backend runs at http://localhost:8000
-
-### Frontend Setup
-
-```bash
+# Frontend
 cd frontend
-
-# Install dependencies
-npm install
-
-# Start dev server
-npm run dev
+npm install && npm run dev
 ```
 
-Frontend runs at http://localhost:5173
+## Architecture
 
-## Project Structure
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed technical documentation.
 
+### Data Flow
 ```
-borslabbet-app/
-├── backend/
-│   ├── main.py              # FastAPI application
-│   ├── models.py            # SQLAlchemy models
-│   ├── schemas.py           # Pydantic schemas
-│   ├── db.py                # Database setup
-│   ├── config/
-│   │   ├── settings.py      # Environment config
-│   │   └── strategies.yaml  # Strategy definitions
-│   ├── services/
-│   │   ├── ranking.py       # Strategy scoring
-│   │   ├── portfolio.py     # Portfolio management
-│   │   ├── backtesting.py   # Historical simulation
-│   │   └── yfinance_fetcher.py # Yahoo Finance data
-│   └── jobs/
-│       └── scheduler.py     # Automatic sync
-├── frontend/
-│   ├── src/
-│   │   ├── pages/           # React pages
-│   │   ├── components/      # Reusable components
-│   │   ├── api/             # API client
-│   │   └── types/           # TypeScript types
-│   └── vite.config.ts
-└── README.md
+Avanza API → avanza_sync() → Database → Pre-compute rankings → API cache
+                                                                    ↓
+                                              User request → Instant response
 ```
+
+### Key Components
+| Component | Purpose |
+|-----------|---------|
+| `avanza_fetcher_v2.py` | Fetch data from Avanza API |
+| `ranking.py` | Strategy scoring calculations |
+| `ranking_cache.py` | Pre-compute and cache rankings |
+| `smart_cache.py` | SQLite-based API response cache |
+| `scheduler.py` | Daily automated sync jobs |
 
 ## API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/strategies` | GET | List all strategies |
-| `/strategies/{name}` | GET | Get ranked stocks |
-| `/portfolio/sverige` | GET | Combined portfolio |
-| `/portfolio/rebalance-dates` | GET | Rebalance calendar |
-| `/portfolio/combiner` | POST | Custom combination |
-| `/backtesting/run` | POST | Run backtest |
-| `/data/sync-now` | POST | Trigger data sync |
+### Strategy Rankings
+| Endpoint | Description |
+|----------|-------------|
+| `GET /strategies` | List all strategies |
+| `GET /strategies/{name}` | Get ranked stocks (cached) |
+| `GET /strategies/{name}/top10` | Top 10 only |
 
-## Strategy Details
+### Data Management
+| Endpoint | Description |
+|----------|-------------|
+| `POST /data/sync-now` | Trigger full sync (~51s) |
+| `GET /data/status/detailed` | Data freshness info |
+| `GET /cache/stats` | Cache statistics |
 
-### Sammansatt Momentum
-- **Rebalance**: Quarterly (March, June, September, December)
-- **Scoring**: Composite momentum (3m + 6m + 12m returns)
-- **Filter**: Piotroski F-Score ≥ 4
+### Backtesting
+| Endpoint | Description |
+|----------|-------------|
+| `POST /backtest` | Run historical backtest |
+| `GET /backtest/results` | Get saved results |
 
-### Trendande Värde
-- **Rebalance**: Annual (January)
-- **Scoring**: Lowest P/E, P/B, P/S, EV/EBITDA
-- **Filter**: None
+## Strategy Rules
 
-### Trendande Utdelning
-- **Rebalance**: Annual (February)
-- **Scoring**: Highest dividend yield
-- **Filters**: Payout ratio < 100%, ROE > 5%, Yield > 1.5%
+All strategies apply:
+- **2B SEK minimum market cap** (since June 2023)
+- **Equal-weight portfolios** (10% per stock)
+- **Stockholmsbörsen + First North** universe
+- **Top 10 stocks** selected per strategy
 
-### Trendande Kvalitet
-- **Rebalance**: Annual (March)
-- **Scoring**: ROIC (50%) + Momentum (50%)
-- **Filter**: ROIC > 10% OR ROE > 15%
+### Momentum Calculation
+```
+Sammansatt Momentum = average(3m_return, 6m_return, 12m_return)
+```
+
+### Rebalancing Schedule
+- **Sammansatt Momentum**: Quarterly (March, June, September, December)
+- **Trendande strategies**: Annual
+
+## Database
+
+SQLite database (`app.db`) with tables:
+- `stocks` - Stock metadata (734 Swedish stocks)
+- `daily_prices` - Historical OHLCV (~2.3M rows, 1982-present)
+- `fundamentals` - P/E, P/B, ROE, etc. (current snapshot)
+- `strategy_signals` - Pre-computed rankings (refreshed daily)
+- `finbas_historical` - Historical fundamentals from FinBas (1998-2023)
+- `ticker_all_isins` - ISIN mapping for historical data
+
+### FinBas Historical Data
+Historical Swedish stock data from [Swedish House of Finance](https://data.houseoffinance.se/finbas/) for backtesting:
+- **Coverage:** 1998-2023, 1,830 stocks (SSE + First North)
+- **Data:** Prices, market cap, book value
+- **Backup:** `backend/data/backups/finbas_backup_*.db`
+- **Docs:** See `backend/data/FINBAS_DATA.md`
+
+## Performance
+
+| Operation | Time |
+|-----------|------|
+| Full sync (fundamentals + prices + rankings) | ~51 seconds |
+| Strategy API (cached) | <50ms |
+| Backtest (1 year) | ~2 seconds |
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | `sqlite:///./app.db` | Database connection |
-| `DATA_SYNC_ENABLED` | `true` | Enable automatic sync |
-| `DATA_SYNC_HOUR` | `18` | Hour for daily sync (UTC) |
-
-**Note**: No API keys required! Yahoo Finance data is completely free.
+| `DATA_SYNC_ENABLED` | `true` | Enable scheduled sync |
+| `DATA_SYNC_HOUR` | `6` | Hour (UTC) for daily sync |
 
 ## Development
 
 ```bash
-# Run tests
-cd backend && pytest
+# Verify backend
+cd backend && python -c "from main import app; print('OK')"
 
-# Type check frontend
-cd frontend && npx tsc --noEmit
+# Run sync manually
+curl -X POST http://localhost:8000/data/sync-now
 
-# Build frontend
-cd frontend && npm run build
+# Check rankings
+curl http://localhost:8000/strategies/sammansatt_momentum
 ```
 
-## License
+## Project Structure
 
-MIT
+```
+borslabbet-app/
+├── ARCHITECTURE.md          # Technical documentation
+├── backend/
+│   ├── main.py              # FastAPI app
+│   ├── models.py            # SQLAlchemy models
+│   ├── config/
+│   │   └── strategies.yaml  # Strategy definitions
+│   ├── services/
+│   │   ├── avanza_fetcher_v2.py
+│   │   ├── ranking.py
+│   │   ├── ranking_cache.py
+│   │   ├── backtesting.py
+│   │   └── smart_cache.py
+│   └── jobs/
+│       └── scheduler.py
+├── frontend/
+│   └── src/
+│       ├── pages/
+│       └── components/
+└── docker-compose.yml
+```
 
 ## Disclaimer
 
-This is for educational purposes only. Past performance does not guarantee future results. Always do your own research before investing.
+For educational purposes only. Past performance does not guarantee future results. Not investment advice.

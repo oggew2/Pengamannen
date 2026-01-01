@@ -93,15 +93,16 @@ export function HistoricalBacktestPage() {
         <div className={styles.card}>
           <h3 className={styles.cardTitle}>Configuration</h3>
           
-          <label className={styles.formLabel}>Strategy</label>
-          <select value={strategy} onChange={e => setStrategy(e.target.value)} className={styles.select}>
+          <label htmlFor="hist-strategy" className={styles.formLabel}>Strategy</label>
+          <select id="hist-strategy" value={strategy} onChange={e => setStrategy(e.target.value)} className={styles.select}>
             {STRATEGIES.map(s => (
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
 
-          <label className={styles.formLabel}>Start Year</label>
+          <label htmlFor="hist-start" className={styles.formLabel}>Start Year</label>
           <input
+            id="hist-start"
             type="number"
             min={1990}
             max={2023}
@@ -110,8 +111,9 @@ export function HistoricalBacktestPage() {
             className={styles.input}
           />
 
-          <label className={styles.formLabel}>End Year</label>
+          <label htmlFor="hist-end" className={styles.formLabel}>End Year</label>
           <input
+            id="hist-end"
             type="number"
             min={2000}
             max={2024}

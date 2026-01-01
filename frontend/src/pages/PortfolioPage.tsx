@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { PortfolioSummary } from '../components/PortfolioSummary';
 import { RebalanceCalendar } from '../components/RebalanceCalendar';
+import { ExportButton } from '../components/ExportButton';
 import type { PortfolioResponse, RebalanceDate } from '../types';
 import styles from '../styles/App.module.css';
 
@@ -21,7 +22,10 @@ export function PortfolioPage() {
 
   return (
     <div>
-      <h1 className={styles.pageTitle}>Svenska Portföljen</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <h1 className={styles.pageTitle} style={{ margin: 0 }}>Svenska Portföljen</h1>
+        <ExportButton url="/export/portfolio" />
+      </div>
       
       <div className={styles.grid}>
         <div className={styles.card}>
@@ -39,21 +43,23 @@ export function PortfolioPage() {
 
       <div className={styles.card} style={{marginTop: '1.5rem'}}>
         <h3 className={styles.cardTitle}>Holdings</h3>
-        <table className={styles.table}>
-          <thead>
-            <tr><th>Ticker</th><th>Name</th><th>Strategy</th><th>Weight</th></tr>
-          </thead>
-          <tbody>
-            {portfolio.holdings.map((h, i) => (
-              <tr key={`${h.ticker}-${h.strategy}-${i}`}>
-                <td>{h.ticker}</td>
-                <td>{h.name || '—'}</td>
-                <td>{h.strategy}</td>
-                <td>{(h.weight * 100).toFixed(1)}%</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className={styles.tableWrapper}>
+          <table className={styles.table}>
+            <thead>
+              <tr><th>Ticker</th><th>Name</th><th>Strategy</th><th>Weight</th></tr>
+            </thead>
+            <tbody>
+              {portfolio.holdings.map((h, i) => (
+                <tr key={`${h.ticker}-${h.strategy}-${i}`}>
+                  <td>{h.ticker}</td>
+                  <td>{h.name || '—'}</td>
+                  <td>{h.strategy}</td>
+                  <td>{(h.weight * 100).toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className={styles.card} style={{marginTop: '1.5rem'}}>

@@ -75,29 +75,31 @@ class EnhancedBacktester:
     def prepare_long_term_backtest_universe(self, tickers: List[str], years: int = 10) -> Dict[str, pd.DataFrame]:
         """
         Prepare long-term historical data for backtesting universe.
-        This runs separately and doesn't affect main app performance.
+        Optimized with threading for fast parallel fetching.
         """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
         universe_data = {}
         
         logger.info(f"Preparing LONG-TERM backtest universe: {len(tickers)} stocks, {years} years")
-        logger.info("This is a separate process and won't affect main app performance")
         
-        for i, ticker in enumerate(tickers):
-            logger.info(f"Fetching long-term data for {ticker} ({i+1}/{len(tickers)})")
-            
+        def fetch_ticker(ticker):
             hist_data = self.data_fetcher.fetch_long_term_historical_data(ticker, years)
+            if hist_data is not None and len(hist_data) > 252:
+                return ticker, hist_data.sort_values('date')
+            return ticker, None
+        
+        # Parallel fetch with 10 threads
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {executor.submit(fetch_ticker, t): t for t in tickers}
             
-            if hist_data is not None and len(hist_data) > 252:  # Need at least 1 year
-                hist_data = hist_data.sort_values('date')
-                universe_data[ticker] = hist_data
+            for i, future in enumerate(as_completed(futures)):
+                ticker, hist_data = future.result()
+                if hist_data is not None:
+                    universe_data[ticker] = hist_data
                 
-                start_date = hist_data.iloc[0]['date'].strftime('%Y-%m-%d')
-                end_date = hist_data.iloc[-1]['date'].strftime('%Y-%m-%d')
-                actual_years = (hist_data.iloc[-1]['date'] - hist_data.iloc[0]['date']).days / 365
-                
-                logger.info(f"✅ {ticker}: {len(hist_data)} points, {actual_years:.1f} years ({start_date} to {end_date})")
-            else:
-                logger.warning(f"❌ {ticker}: Insufficient data for long-term backtest")
+                if (i + 1) % 50 == 0 or i == len(tickers) - 1:
+                    logger.info(f"Backtest data progress: {i+1}/{len(tickers)} ({len(universe_data)} successful)")
         
         logger.info(f"Long-term backtest universe ready: {len(universe_data)}/{len(tickers)} stocks")
         return universe_data

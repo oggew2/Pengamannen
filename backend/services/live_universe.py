@@ -1,9 +1,8 @@
 """
-Live stock universe fetcher - no hardcoded lists, real-time exchange data.
+Live stock universe fetcher - uses Avanza mappings for Swedish stocks.
 """
 import requests
 from bs4 import BeautifulSoup
-import yfinance as yf
 import pandas as pd
 from typing import List, Dict
 import logging
@@ -11,52 +10,41 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-def get_live_stock_universe(region: str = 'sweden', market_cap: str = 'large') -> List[str]:
-    """Get stock universe using Avanza mappings - no hardcoded fallbacks."""
-    from services.avanza_fetcher_v2 import AvanzaDirectFetcher
+def get_live_stock_universe(region: str = 'sweden', market_cap: str = 'large', market: str = 'both') -> List[str]:
+    """Get stock universe from database - only active stocks with avanza_id."""
+    import sqlite3
     
-    try:
-        # Use Avanza known mappings as our live universe
-        fetcher = AvanzaDirectFetcher()
-        known_stocks = fetcher.known_stocks
-        
-        if region == 'sweden':
-            if market_cap == 'large':
-                # Return major Swedish stocks we have mappings for
-                major_stocks = [
-                    'ERIC-B', 'VOLV-B', 'ASSA-B', 'SEB-A', 'SWED-A', 'SHB-A', 
-                    'NDA-SE', 'INVE-B', 'SKF-B', 'SSAB-A', 'SCA-B', 'TREL-B',
-                    'SECU-B', 'INDU-A', 'HOLM-B', 'SKA-B', 'BEIJ-B'
-                ]
-                # Filter to only stocks we have mappings for
-                available_stocks = [ticker for ticker in major_stocks if ticker in known_stocks]
-                logger.info(f"Using {len(available_stocks)} Swedish large cap stocks with Avanza mappings")
-                return available_stocks
-            else:
-                # Return all mapped Swedish stocks
-                all_stocks = list(known_stocks.keys())
-                logger.info(f"Using all {len(all_stocks)} mapped Swedish stocks")
-                return all_stocks
-        
-        elif region == 'nordics':
-            # For Nordic, we only have Swedish stocks mapped currently
-            all_stocks = list(known_stocks.keys())
-            logger.info(f"Using {len(all_stocks)} Swedish stocks (Nordic expansion needed)")
-            return all_stocks
-        
-        else:
-            raise ValueError(f"Unsupported region: {region}")
-            
-    except Exception as e:
-        logger.error(f"Failed to get live stock universe: {e}")
-        # Emergency fallback - but this should not happen with Avanza mappings
-        return ['ERIC-B', 'VOLV-B', 'ASSA-B', 'SEB-A', 'SWED-A']
-        
-        raise ValueError(f"Unknown region/market_cap: {region}/{market_cap}")
-        
-    except Exception as e:
-        logger.error(f"Failed to fetch live universe {region}/{market_cap}: {e}")
-        raise Exception(f"Cannot fetch live stock data: {str(e)}")
+    conn = sqlite3.connect('app.db')
+    cur = conn.cursor()
+    
+    # Only fetch active stocks (those with fundamentals data)
+    query = """SELECT ticker FROM stocks 
+               WHERE stock_type IN ('stock', 'sdb') 
+               AND is_active = 1
+               AND avanza_id IS NOT NULL AND avanza_id != ''"""
+    if market == 'stockholmsborsen':
+        query += " AND market = 'Stockholmsbörsen'"
+    elif market == 'first_north':
+        query += " AND market = 'First North Stockholm'"
+    
+    cur.execute(query)
+    tickers = [row[0] for row in cur.fetchall()]
+    conn.close()
+    
+    logger.info(f"Using {len(tickers)} active Swedish stocks ({market})")
+    return tickers
+
+
+def get_avanza_id_map() -> Dict[str, str]:
+    """Get ticker -> avanza_id mapping from database."""
+    import sqlite3
+    
+    conn = sqlite3.connect('app.db')
+    cur = conn.cursor()
+    cur.execute("SELECT ticker, avanza_id FROM stocks WHERE avanza_id IS NOT NULL AND avanza_id != ''")
+    mapping = {row[0]: row[1] for row in cur.fetchall()}
+    conn.close()
+    return mapping
 
 def fetch_omx_stockholm_30() -> List[str]:
     """Fetch live OMX Stockholm 30 constituents."""
