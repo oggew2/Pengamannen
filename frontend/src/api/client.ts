@@ -1,6 +1,6 @@
 import type { StrategyMeta, RankedStock, PortfolioResponse, RebalanceDate, StockDetail, BacktestRequest, BacktestResult, CombinerRequest } from '../types';
 
-const BASE_URL = import.meta.env.DEV ? '/api/v1' : '/api/v1';
+const BASE_URL = '/v1';
 
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('authToken');
