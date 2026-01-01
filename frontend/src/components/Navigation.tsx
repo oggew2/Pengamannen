@@ -13,13 +13,15 @@ const SettingsIcon = () => <Text fontSize="sm">⚙️</Text>;
 
 const navLinks = [
   { to: '/', label: 'Dashboard', icon: <HomeIcon /> },
+  { to: '/getting-started', label: 'Kom igång', icon: <ChartIcon /> },
   { to: '/strategies/momentum', label: 'Momentum', icon: <ChartIcon /> },
   { to: '/strategies/value', label: 'Värde', icon: <ChartIcon /> },
   { to: '/strategies/dividend', label: 'Utdelning', icon: <ChartIcon /> },
   { to: '/strategies/quality', label: 'Kvalitet', icon: <ChartIcon /> },
-  { to: '/rebalancing', label: 'Rebalansering', icon: <CalendarIcon /> },
+  { to: '/rebalancing', label: 'Min Strategi', icon: <CalendarIcon /> },
   { to: '/portfolio/my', label: 'Portfölj', icon: <ChartIcon /> },
   { to: '/portfolio/analysis', label: 'Analys', icon: <ChartIcon /> },
+  { to: '/learn', label: 'Lär dig mer', icon: <ChartIcon /> },
   { to: '/data', label: 'Data', icon: <ChartIcon /> },
   { to: '/alerts', label: 'Notiser', icon: <BellIcon /> },
   { to: '/settings', label: 'Inställningar', icon: <SettingsIcon /> },

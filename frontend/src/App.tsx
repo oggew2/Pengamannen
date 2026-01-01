@@ -18,11 +18,12 @@ const MyPortfolioPage = lazy(() => import('./pages/MyPortfolioPage'));
 const StrategyComparisonPage = lazy(() => import('./pages/StrategyComparisonPage'));
 const DividendCalendarPage = lazy(() => import('./pages/DividendCalendarPage'));
 const CostAnalysisPage = lazy(() => import('./pages/CostAnalysisPage'));
-const RebalancingPage = lazy(() => import('./pages/RebalancingPage'));
 const PortfolioAnalysisPage = lazy(() => import('./pages/PortfolioAnalysisPage'));
 const AlertsPage = lazy(() => import('./pages/AlertsPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const EducationPage = lazy(() => import('./pages/EducationPage'));
+const GettingStartedPage = lazy(() => import('./pages/GettingStartedPage'));
+const MinStrategiPage = lazy(() => import('./pages/MinStrategiPage'));
 const DataManagementPage = lazy(() => import('./pages/DataManagementPage'));
 
 const PageLoader = () => (
@@ -58,11 +59,12 @@ export function App() {
               <Route path="/compare" element={<StrategyComparisonPage />} />
               <Route path="/dividends" element={<DividendCalendarPage />} />
               <Route path="/costs" element={<CostAnalysisPage />} />
-              <Route path="/rebalancing" element={<RebalancingPage />} />
+              <Route path="/rebalancing" element={<MinStrategiPage />} />
               <Route path="/alerts" element={<AlertsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/data" element={<DataManagementPage />} />
               <Route path="/learn" element={<EducationPage />} />
+              <Route path="/getting-started" element={<GettingStartedPage />} />
               <Route path="/stock/:ticker" element={<StockDetailPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

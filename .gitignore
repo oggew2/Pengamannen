@@ -1,6 +1,8 @@
 # Dependencies
 node_modules/
 venv/
+.venv/
+backend/.venv/
 __pycache__/
 *.py[cod]
 *$py.class
@@ -36,5 +38,10 @@ build/
 .coverage
 htmlcov/
 
-# Data files (user-specific)
+# Data files (large files)
 backend/data/*.csv
+data/*.csv
+*.csv
+
+# Playwright (large binaries)
+**/playwright/driver/
