@@ -21,15 +21,11 @@ services:
       retries: 3
 
   tunnel:
-    image: ngrok/ngrok:latest
-    command: http app:8000 --log stdout
+    image: cloudflare/cloudflared:latest
+    command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
       - app
     restart: unless-stopped
-    environment:
-      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
-    ports:
-      - "4040:4040"
 
 volumes:
   data:
