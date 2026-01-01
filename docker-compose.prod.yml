@@ -42,19 +42,17 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   # Auto-update containers when new images are pushed to GHCR
+  # Note: Using maintained fork - original watchtower is broken with Docker 29+
   watchtower:
-    image: containrrr/watchtower
+    image: nickfedor/watchtower:latest
     container_name: watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.docker/config.json:/config.json:ro
     environment:
       - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_POLL_INTERVAL=300
-      - WATCHTOWER_INCLUDE_STOPPED=true
+      - WATCHTOWER_POLL_INTERVAL=86400  # Daily check
       - WATCHTOWER_ROLLING_RESTART=true
       - TZ=Europe/Stockholm
-      - DOCKER_CONFIG=/config.json
     restart: unless-stopped
 
   # Cloudflare Tunnel - secure external access without port forwarding

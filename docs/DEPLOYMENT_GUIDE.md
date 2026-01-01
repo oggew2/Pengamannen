@@ -1,50 +1,32 @@
-# Börslabbet App - Proxmox Deployment Guide
+# Börslabbet App - Self-Hosting Guide
 
-Complete guide to deploy the app on Proxmox with secure external access via Cloudflare Tunnel and automatic updates.
+Deploy on Proxmox with Cloudflare Tunnel (no port forwarding needed).
 
-## Architecture Overview
+## Quick Overview
 
 ```
-Internet → Cloudflare Tunnel → Proxmox LXC → Docker Containers
-                                    ↓
-                            ┌───────────────┐
-                            │   Frontend    │ :5173
-                            │   (Vite)      │
-                            └───────┬───────┘
-                                    │
-                            ┌───────▼───────┐
-                            │   Backend     │ :8000
-                            │   (FastAPI)   │
-                            └───────┬───────┘
-                                    │
-                            ┌───────▼───────┐
-                            │   SQLite DB   │
-                            │   (app.db)    │
-                            └───────────────┘
+Internet → Cloudflare Tunnel → Proxmox LXC → Docker (Frontend + Backend + SQLite)
 ```
 
-## Prerequisites
-
-- Proxmox VE 8.x installed
-- Domain name (for Cloudflare Tunnel)
-- Cloudflare account (free tier works)
-- GitHub account (for auto-updates)
+**Cost: ~$10-15/year** (just the domain, everything else is free)
 
 ---
 
-## Part 1: Proxmox LXC Setup
+## Prerequisites
 
-### 1.1 Create LXC Container
+- Proxmox VE 8.x+
+- Domain on Cloudflare (free tier works)
+- GitHub account
+
+---
+
+## Step 1: Create Proxmox LXC
 
 ```bash
-# SSH into Proxmox host
-ssh root@your-proxmox-ip
-
-# Download Ubuntu 24.04 template
+# On Proxmox host
 pveam update
 pveam download local ubuntu-24.04-standard_24.04-2_amd64.tar.zst
 
-# Create LXC container (adjust ID and storage as needed)
 pct create 200 local:vztmpl/ubuntu-24.04-standard_24.04-2_amd64.tar.zst \
   --hostname borslabbet \
   --memory 2048 \
@@ -54,518 +36,204 @@ pct create 200 local:vztmpl/ubuntu-24.04-standard_24.04-2_amd64.tar.zst \
   --unprivileged 1 \
   --features nesting=1 \
   --onboot 1
-```
 
-### 1.2 Configure LXC for Docker
-
-Edit the container config to enable Docker support:
-
-```bash
-# On Proxmox host
-nano /etc/pve/lxc/200.conf
-```
-
-Add these lines:
-```
-lxc.apparmor.profile: unconfined
-lxc.cgroup2.devices.allow: a
-lxc.cap.drop:
-lxc.mount.auto: proc:rw sys:rw
-```
-
-### 1.3 Start and Enter Container
-
-```bash
 pct start 200
 pct enter 200
 ```
 
-### 1.4 Install Docker in LXC
+---
+
+## Step 2: Install Docker
 
 ```bash
-# Update system
 apt update && apt upgrade -y
+apt install -y ca-certificates curl git
 
-# Install prerequisites
-apt install -y ca-certificates curl gnupg lsb-release git
+# Docker official install
+curl -fsSL https://get.docker.com | sh
 
-# Add Docker GPG key
-install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-chmod a+r /etc/apt/keyrings/docker.gpg
-
-# Add Docker repository
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-# Install Docker
-apt update
-apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-# Verify Docker works
+# Verify
 docker run hello-world
 ```
 
 ---
 
-## Part 2: Deploy the Application
-
-### 2.1 Clone Repository
+## Step 3: Deploy the App
 
 ```bash
 cd /opt
-git clone https://github.com/YOUR_USERNAME/borslabbet-app.git
-cd borslabbet-app
+git clone https://github.com/oggew2/Pengamannen.git borslabbet
+cd borslabbet
+
+# Create data directory
+mkdir -p data
+
+# Start the app
+docker compose up -d --build
 ```
 
-### 2.2 Create Production Docker Compose
+The app is now running locally:
+- Frontend: http://localhost:5173
+- Backend: http://localhost:8000
 
-```bash
-cat > docker-compose.prod.yml << 'EOF'
-version: '3.8'
+---
 
+## Step 4: Cloudflare Tunnel (External Access)
+
+### 4.1 Create Tunnel
+
+1. Go to [Cloudflare Zero Trust](https://one.dash.cloudflare.com/) → Networks → Tunnels
+2. Click "Create a tunnel" → name it `borslabbet`
+3. Copy the tunnel token (starts with `eyJ...`)
+
+### 4.2 Add Cloudflared to Docker Compose
+
+Create `docker-compose.override.yml`:
+
+```yaml
 services:
-  backend:
-    build: ./backend
-    container_name: borslabbet-backend
-    ports:
-      - "8000:8000"
-    environment:
-      - DATABASE_URL=sqlite:///./data/app.db
-      - DATA_SYNC_ENABLED=true
-      - DATA_SYNC_HOUR=6
-      - TZ=Europe/Stockholm
-    volumes:
-      - ./data:/app/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-
-  frontend:
-    build: 
-      context: ./frontend
-      args:
-        - VITE_API_BASE_URL=https://YOUR_DOMAIN.com
-    container_name: borslabbet-frontend
-    ports:
-      - "5173:80"
-    depends_on:
-      - backend
-    restart: unless-stopped
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-
-  # Auto-update containers when new images are pushed
-  watchtower:
-    image: containrrr/watchtower
-    container_name: watchtower
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_POLL_INTERVAL=300
-      - WATCHTOWER_INCLUDE_STOPPED=true
-      - TZ=Europe/Stockholm
-    restart: unless-stopped
-
-  # Cloudflare Tunnel for secure external access
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: cloudflared
     command: tunnel run
     environment:
-      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+      - TUNNEL_TOKEN=eyJ...YOUR_TOKEN_HERE...
     restart: unless-stopped
-    depends_on:
-      - frontend
-      - backend
-
-volumes:
-  data:
-EOF
+    network_mode: host
 ```
-
-### 2.3 Create Environment File
 
 ```bash
-cat > .env << 'EOF'
-CLOUDFLARE_TUNNEL_TOKEN=your_tunnel_token_here
-EOF
-chmod 600 .env
+docker compose up -d
 ```
 
-### 2.4 Update Frontend for Production
+### 4.3 Configure Public Hostname
 
-Create production Dockerfile for frontend:
+In Cloudflare Dashboard → your tunnel → Public Hostname:
 
-```bash
-cat > frontend/Dockerfile.prod << 'EOF'
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-ARG VITE_API_BASE_URL
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
-RUN npm run build
+| Subdomain | Domain | Service |
+|-----------|--------|---------|
+| stocks | yourdomain.com | http://localhost:5173 |
+| api.stocks | yourdomain.com | http://localhost:8000 |
 
-FROM nginx:alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-EOF
-
-cat > frontend/nginx.conf << 'EOF'
-server {
-    listen 80;
-    server_name _;
-    root /usr/share/nginx/html;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    location /api {
-        proxy_pass http://backend:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
-EOF
-```
-
-### 2.5 Build and Start
-
-```bash
-docker compose -f docker-compose.prod.yml build
-docker compose -f docker-compose.prod.yml up -d
-```
+Your app is now live at `https://stocks.yourdomain.com` 🎉
 
 ---
 
-## Part 3: Cloudflare Tunnel Setup (Secure External Access)
+## Step 5: Auto-Updates (Optional)
 
-Cloudflare Tunnel creates an outbound-only connection - no ports need to be opened on your router.
+### Option A: Maintained Watchtower Fork (Simple)
 
-### 3.1 Create Cloudflare Tunnel
-
-1. Go to [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com/)
-2. Navigate to **Networks → Tunnels**
-3. Click **Create a tunnel**
-4. Name it `borslabbet`
-5. Copy the tunnel token
-
-### 3.2 Configure Tunnel Token
-
-```bash
-# Update .env with your token
-nano /opt/borslabbet-app/.env
-# Set: CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoiYWJj...
-```
-
-### 3.3 Configure Public Hostname
-
-In Cloudflare Dashboard:
-
-1. Go to your tunnel → **Public Hostname**
-2. Add hostname:
-   - **Subdomain**: `stocks` (or your choice)
-   - **Domain**: `yourdomain.com`
-   - **Service**: `http://frontend:5173`
-
-3. Add another for API:
-   - **Subdomain**: `api.stocks`
-   - **Domain**: `yourdomain.com`
-   - **Service**: `http://backend:8000`
-
-### 3.4 Restart with Tunnel
-
-```bash
-docker compose -f docker-compose.prod.yml up -d
-```
-
-Your app is now accessible at `https://stocks.yourdomain.com`
-
----
-
-## Part 4: Auto-Updates from GitHub
-
-### Option A: Watchtower + GitHub Container Registry (Recommended)
-
-#### 4.1 Create GitHub Actions Workflow
-
-Create `.github/workflows/docker-publish.yml`:
+The original Watchtower is broken with Docker 29+. Use the maintained fork:
 
 ```yaml
-name: Build and Push Docker Images
-
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
-jobs:
-  build-backend:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push backend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend:latest
-
-  build-frontend:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push frontend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile.prod
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:latest
-          build-args: |
-            VITE_API_BASE_URL=https://api.stocks.yourdomain.com
+# Add to docker-compose.override.yml
+services:
+  watchtower:
+    image: nickfedor/watchtower:latest
+    container_name: watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=86400  # Check daily
+      - TZ=Europe/Stockholm
+    restart: unless-stopped
 ```
 
-#### 4.2 Update docker-compose to use GHCR images
+### Option B: What's Up Docker (More Features)
+
+WUD has a web UI and more control over updates:
 
 ```yaml
 services:
-  backend:
-    image: ghcr.io/YOUR_USERNAME/borslabbet-app-backend:latest
-    # ... rest of config
-
-  frontend:
-    image: ghcr.io/YOUR_USERNAME/borslabbet-app-frontend:latest
-    # ... rest of config
+  wud:
+    image: ghcr.io/getwud/wud
+    container_name: wud
+    ports:
+      - "3000:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WUD_WATCHER_LOCAL_CRON=0 6 * * *  # Check at 6 AM
+    restart: unless-stopped
 ```
 
-#### 4.3 Authenticate Docker with GHCR
-
-```bash
-# Create GitHub Personal Access Token with packages:read scope
-# Then login:
-echo "YOUR_GITHUB_TOKEN" | docker login ghcr.io -u YOUR_USERNAME --password-stdin
-```
-
-Watchtower will now automatically pull new images when you push to GitHub.
-
-### Option B: Webhook-based Updates (Alternative)
-
-```bash
-# Install webhook handler
-cat > /opt/borslabbet-app/update.sh << 'EOF'
-#!/bin/bash
-cd /opt/borslabbet-app
-git pull origin main
-docker compose -f docker-compose.prod.yml build
-docker compose -f docker-compose.prod.yml up -d
-EOF
-chmod +x /opt/borslabbet-app/update.sh
-```
+Access WUD dashboard at `http://your-server:3000`
 
 ---
 
-## Part 5: Security Hardening
-
-### 5.1 Cloudflare Access (Optional - Restrict to Friends)
-
-1. In Cloudflare Zero Trust → **Access → Applications**
-2. Create application for `stocks.yourdomain.com`
-3. Add policy: **Allow** → **Emails ending in** → `@gmail.com` (or specific emails)
-
-Your friends will need to authenticate via email before accessing.
-
-### 5.2 Firewall Rules
-
-```bash
-# In LXC container - only allow local network + Cloudflare
-apt install -y ufw
-ufw default deny incoming
-ufw default allow outgoing
-ufw allow from 192.168.0.0/16  # Local network
-ufw enable
-```
-
-### 5.3 Automatic Security Updates
-
-```bash
-apt install -y unattended-upgrades
-dpkg-reconfigure -plow unattended-upgrades
-```
-
----
-
-## Part 6: Monitoring & Maintenance
-
-### 6.1 View Logs
-
-```bash
-# All containers
-docker compose -f docker-compose.prod.yml logs -f
-
-# Specific container
-docker logs -f borslabbet-backend
-```
-
-### 6.2 Check Status
-
-```bash
-docker compose -f docker-compose.prod.yml ps
-```
-
-### 6.3 Manual Update
-
-```bash
-cd /opt/borslabbet-app
-git pull
-docker compose -f docker-compose.prod.yml build
-docker compose -f docker-compose.prod.yml up -d
-```
-
-### 6.4 Backup Database
-
-```bash
-# Create backup script
-cat > /opt/borslabbet-app/backup.sh << 'EOF'
-#!/bin/bash
-BACKUP_DIR="/opt/backups/borslabbet"
-mkdir -p $BACKUP_DIR
-cp /opt/borslabbet-app/data/app.db "$BACKUP_DIR/app_$(date +%Y%m%d_%H%M%S).db"
-# Keep only last 7 backups
-ls -t $BACKUP_DIR/app_*.db | tail -n +8 | xargs -r rm
-EOF
-chmod +x /opt/borslabbet-app/backup.sh
-
-# Add to cron (daily at 2 AM)
-echo "0 2 * * * /opt/borslabbet-app/backup.sh" | crontab -
-```
-
----
-
-## Quick Reference
-
-| Component | URL | Port |
-|-----------|-----|------|
-| Frontend | https://stocks.yourdomain.com | 5173→80 |
-| Backend API | https://api.stocks.yourdomain.com | 8000 |
-| Health Check | /v1/health | - |
-| API Docs | /docs | - |
-
-### Commands Cheat Sheet
+## Common Commands
 
 ```bash
 # Start
-docker compose -f docker-compose.prod.yml up -d
+docker compose up -d
 
 # Stop
-docker compose -f docker-compose.prod.yml down
-
-# Restart
-docker compose -f docker-compose.prod.yml restart
+docker compose down
 
 # View logs
-docker compose -f docker-compose.prod.yml logs -f
+docker compose logs -f
 
-# Update
-git pull && docker compose -f docker-compose.prod.yml up -d --build
+# Update manually
+git pull && docker compose up -d --build
 
-# Check Watchtower logs
-docker logs watchtower
-
-# Check tunnel status
-docker logs cloudflared
+# Restart single service
+docker compose restart backend
 ```
 
 ---
 
 ## Troubleshooting
 
-### Container won't start
-```bash
-docker compose -f docker-compose.prod.yml logs backend
-```
-
 ### Tunnel not connecting
 ```bash
 docker logs cloudflared
-# Verify token in .env file
+# Check token is correct in docker-compose.override.yml
 ```
 
-### Database issues
+### Backend errors
 ```bash
-# Check database exists
-ls -la /opt/borslabbet-app/data/
-
-# Reset database (WARNING: loses data)
-rm /opt/borslabbet-app/data/app.db
-docker compose -f docker-compose.prod.yml restart backend
+docker logs borslabbet-backend
+# Check data/app.db exists
 ```
 
-### Watchtower not updating
+### LXC Docker issues
+If Docker fails in unprivileged LXC, add to `/etc/pve/lxc/200.conf` on Proxmox host:
+```
+lxc.apparmor.profile: unconfined
+lxc.cgroup2.devices.allow: a
+lxc.cap.drop:
+```
+Then restart the container.
+
+---
+
+## Security (Optional)
+
+### Restrict Access with Cloudflare Access
+
+1. Zero Trust → Access → Applications → Add
+2. Select your hostname
+3. Add policy: Allow specific emails only
+
+Your friends will need to authenticate via email before accessing.
+
+---
+
+## Backup
+
 ```bash
-docker logs watchtower
-# Check GHCR authentication
-docker pull ghcr.io/YOUR_USERNAME/borslabbet-app-backend:latest
+# Backup database
+cp /opt/borslabbet/data/app.db ~/app_backup_$(date +%Y%m%d).db
+
+# Automated daily backup (add to crontab -e)
+0 2 * * * cp /opt/borslabbet/data/app.db /opt/backups/app_$(date +\%Y\%m\%d).db
 ```
 
 ---
 
-## Cost Summary
+## References
 
-| Service | Cost |
-|---------|------|
-| Proxmox | Free (open source) |
-| Cloudflare Tunnel | Free |
-| Cloudflare Access | Free (up to 50 users) |
-| GitHub Container Registry | Free (public repos) |
-| Domain | ~$10-15/year |
-
-**Total: ~$10-15/year** (just the domain)
-
----
-
-*Content was rephrased for compliance with licensing restrictions.*
-
-References:
-[1] Cloudflare Tunnel Documentation - https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
-[2] Watchtower GitHub - https://github.com/containrrr/watchtower
-[3] GitHub Container Registry - https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry
+- [Cloudflare Tunnel Docs](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
+- [What's Up Docker](https://getwud.github.io/wud/)
+- [Watchtower Fork](https://hub.docker.com/r/nickfedor/watchtower)
