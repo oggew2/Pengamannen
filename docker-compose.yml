@@ -1,8 +1,10 @@
 version: '3.8'
 
 services:
-  backend:
-    build: ./backend
+  app:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "8000:8000"
     environment:
@@ -18,29 +20,16 @@ services:
       timeout: 10s
       retries: 3
 
-  frontend:
-    build: ./frontend
-    ports:
-      - "5173:5173"
+  tunnel:
+    image: ngrok/ngrok:latest
+    command: http app:8000 --log stdout
     depends_on:
-      - backend
+      - app
     restart: unless-stopped
     environment:
-      - VITE_API_BASE_URL=${BACKEND_TUNNEL_URL:-http://localhost:8000}
-
-  tunnel-backend:
-    image: cloudflare/cloudflared:latest
-    command: tunnel --url http://backend:8000
-    depends_on:
-      - backend
-    restart: unless-stopped
-
-  tunnel-frontend:
-    image: cloudflare/cloudflared:latest
-    command: tunnel --url http://frontend:5173
-    depends_on:
-      - frontend
-    restart: unless-stopped
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    ports:
+      - "4040:4040"
 
 volumes:
   data:

@@ -142,7 +142,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=["*"],  # Allow all origins for tunnel access
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -3394,3 +3394,20 @@ def get_upcoming_rebalances_endpoint(days_ahead: int = 14):
 
 # Include v1 router
 app.include_router(v1_router)
+
+# Serve frontend static files (production mode)
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(STATIC_DIR):
+    app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
+    
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        # Serve index.html for all non-API routes (SPA routing)
+        file_path = os.path.join(STATIC_DIR, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
