@@ -8,6 +8,10 @@ from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
 import json
 import logging
+import gc
+
+# Import memory optimization
+from services.memory_optimizer import MemoryOptimizer
 
 logger = logging.getLogger(__name__)
 
@@ -162,20 +166,55 @@ def get_historical_market_caps(db, as_of_date: date) -> dict:
 
 
 def preload_all_market_caps(db, start_date: date, end_date: date) -> pd.DataFrame:
-    """Pre-load all market caps for date range to avoid repeated queries."""
+    """Pre-load all market caps for date range with memory optimization."""
     from sqlalchemy import text
     
-    result = db.execute(text('''
+    logger.info("Loading market cap data with memory optimization...")
+    
+    # Use chunked reading to prevent memory overflow
+    query = '''
         SELECT t.normalized_ticker as ticker, f.date, f.market_cap
         FROM ticker_all_isins t
         JOIN finbas_historical f ON f.isin = t.isin
         WHERE f.market_cap IS NOT NULL 
         AND f.date >= :start_date AND f.date <= :end_date
-    '''), {'start_date': start_date.isoformat(), 'end_date': end_date.isoformat()}).fetchall()
+        ORDER BY f.date
+    '''
     
-    if not result:
-        return pd.DataFrame()
-    return pd.DataFrame([{'ticker': r[0], 'date': r[1], 'market_cap': r[2]} for r in result])
+    try:
+        # Use chunked SQL reading
+        df = MemoryOptimizer.chunked_sql_read(
+            db.bind.url.database,  # SQLite database path
+            query.replace(':start_date', f"'{start_date.isoformat()}'").replace(':end_date', f"'{end_date.isoformat()}'"),
+            chunk_size=25000  # Smaller chunks for memory safety
+        )
+        
+        if df.empty:
+            logger.warning("No market cap data found for date range")
+            return pd.DataFrame()
+        
+        logger.info(f"Loaded {len(df)} market cap records with memory optimization")
+        return df
+        
+    except Exception as e:
+        logger.error(f"Error loading market caps with optimization: {e}")
+        # Fallback to original method with smaller result set
+        result = db.execute(text(query), {
+            'start_date': start_date.isoformat(), 
+            'end_date': end_date.isoformat()
+        }).fetchmany(50000)  # Limit to prevent memory overflow
+        
+        if not result:
+            return pd.DataFrame()
+        
+        df = pd.DataFrame([{'ticker': r[0], 'date': r[1], 'market_cap': r[2]} for r in result])
+        df = MemoryOptimizer.optimize_dtypes(df)
+        
+        # Force garbage collection
+        del result
+        gc.collect()
+        
+        return df
 
 
 def get_market_caps_for_date(mcap_df: pd.DataFrame, as_of_date: date, financial_tickers: set) -> set:
@@ -269,41 +308,91 @@ def backtest_strategy(
         mcap_df = preload_all_market_caps(db, start_date - timedelta(days=35), end_date)
         logger.info(f"Pre-loaded {len(mcap_df)} market cap records")
     
-    # 1. Load price data - use FinBas for historical periods (includes delisted stocks)
-    logger.info("Loading price data from database...")
+    # 1. Load price data with memory optimization
+    logger.info("Loading price data from database with memory optimization...")
     if use_finbas:
         prices_df = get_finbas_prices(db, start_date - timedelta(days=400), end_date)
         logger.info(f"Loaded {len(prices_df)} FinBas price records (includes delisted stocks)")
     else:
+        # Use chunked loading for large price datasets
         prices = db.query(
             DailyPrice.ticker, DailyPrice.date, DailyPrice.close
         ).filter(
             DailyPrice.date >= start_date - timedelta(days=400),
             DailyPrice.date <= end_date
         ).all()
-        prices_df = pd.DataFrame([{'ticker': p.ticker, 'date': p.date, 'close': p.close} for p in prices])
+        
+        # Build DataFrame in chunks to prevent memory spikes
+        logger.info("Building price DataFrame with memory optimization...")
+        prices_data = [{'ticker': p.ticker, 'date': p.date, 'close': p.close} for p in prices]
+        prices_df = pd.DataFrame(prices_data)
+        del prices_data, prices  # Free memory immediately
+        
+        # Apply memory optimization
+        prices_df = MemoryOptimizer.optimize_dtypes(prices_df)
         logger.info(f"Loaded {len(prices_df)} Avanza price records")
     
     if prices_df.empty:
         return {"error": f"No price data available for {start_date} to {end_date}"}
     
-    # Pre-compute price pivot table once
-    price_pivot = prices_df.pivot_table(index='date', columns='ticker', values='close', aggfunc='last').sort_index()
+    # Memory-optimized pivot table creation
+    logger.info("Creating price pivot table with memory optimization...")
+    
+    # Filter to only needed date range first to reduce pivot size
+    date_mask = (prices_df['date'] >= start_date - timedelta(days=30)) & (prices_df['date'] <= end_date)
+    prices_subset = prices_df[date_mask].copy()
+    
+    # Create pivot in chunks if too large
+    if len(prices_subset) > 500000:  # If more than 500k records
+        logger.info("Large dataset detected - using chunked pivot creation")
+        unique_dates = sorted(prices_subset['date'].unique())
+        pivot_chunks = []
+        
+        chunk_size = 50  # 50 dates at a time
+        for i in range(0, len(unique_dates), chunk_size):
+            date_chunk = unique_dates[i:i + chunk_size]
+            chunk_data = prices_subset[prices_subset['date'].isin(date_chunk)]
+            chunk_pivot = chunk_data.pivot_table(index='date', columns='ticker', values='close', aggfunc='last')
+            pivot_chunks.append(chunk_pivot)
+            
+            # Memory cleanup
+            del chunk_data
+            if i % (chunk_size * 5) == 0:  # Every 5 chunks
+                gc.collect()
+        
+        price_pivot = pd.concat(pivot_chunks, axis=0).sort_index()
+        del pivot_chunks
+        gc.collect()
+    else:
+        price_pivot = prices_subset.pivot_table(index='date', columns='ticker', values='close', aggfunc='last').sort_index()
+    
+    # Clean up large DataFrames
+    del prices_subset
+    gc.collect()
+    
     trading_dates = price_pivot.index
     trading_dates_in_range = trading_dates[(trading_dates >= start_date) & (trading_dates <= end_date)]
     
     if len(trading_dates_in_range) == 0:
         return {"error": "No trading dates in range"}
     
-    # Cache current fundamentals (used for non-market-cap metrics)
+    # Cache current fundamentals with memory optimization
     fundamentals = db.query(Fundamentals).all()
     stocks = {s.ticker: s.market_cap_msek for s in db.query(Stock).all()}
-    fund_df = pd.DataFrame([{
+    
+    logger.info("Building fundamentals DataFrame with memory optimization...")
+    fund_data = [{
         'ticker': f.ticker, 'pe': f.pe, 'pb': f.pb, 'ps': f.ps,
         'p_fcf': f.p_fcf, 'ev_ebitda': f.ev_ebitda, 'dividend_yield': f.dividend_yield,
         'roe': f.roe, 'roa': f.roa, 'roic': f.roic, 'fcfroe': f.fcfroe,
         'payout_ratio': f.payout_ratio, 'market_cap': stocks.get(f.ticker, 0)
-    } for f in fundamentals]) if fundamentals else pd.DataFrame()
+    } for f in fundamentals] if fundamentals else []
+    
+    fund_df = pd.DataFrame(fund_data) if fund_data else pd.DataFrame()
+    del fund_data, fundamentals, stocks  # Free memory
+    
+    if not fund_df.empty:
+        fund_df = MemoryOptimizer.optimize_dtypes(fund_df)
     
     # For historical backtests, we'll filter by market cap at each rebalance date
     filtered_fund_df = filter_by_market_cap(fund_df, 40) if not fund_df.empty else fund_df
@@ -472,6 +561,14 @@ def backtest_strategy(
         }]
     
     save_backtest_result(db, result)
+    
+    # Critical memory cleanup
+    logger.info("Cleaning up memory after backtest...")
+    del prices_df, price_pivot, fund_df, filtered_fund_df, mcap_df
+    del equity_curve, equity_values, monthly_returns
+    gc.collect()
+    logger.info("Memory cleanup complete")
+    
     return result
 
 

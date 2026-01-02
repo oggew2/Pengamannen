@@ -1,6 +1,3 @@
-# CRITICAL: Import memory limits FIRST to prevent OOM kills
-import memory_limits
-
 from fastapi import FastAPI, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, Header, UploadFile, File, Request
 from sqlalchemy.orm import Session
 from datetime import date, datetime, timedelta
