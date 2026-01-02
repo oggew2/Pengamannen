@@ -39,7 +39,7 @@ export default function SettingsPage() {
     const token = localStorage.getItem('authToken');
     if (!token) return;
     try {
-      const resp = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
+      const resp = await fetch('/v1/auth/me', { headers: { Authorization: `Bearer ${token}` } });
       const data = await resp.json();
       if (data.authenticated) {
         setAuth({ authenticated: true, email: data.email, name: data.name });
@@ -51,7 +51,7 @@ export default function SettingsPage() {
     setAuthError('');
     setAuthLoading(true);
     try {
-      const resp = await fetch(`/api/auth/login?email=${encodeURIComponent(loginEmail)}&password=${encodeURIComponent(loginPassword)}`, { method: 'POST' });
+      const resp = await fetch(`/v1/auth/login?email=${encodeURIComponent(loginEmail)}&password=${encodeURIComponent(loginPassword)}`, { method: 'POST' });
       if (!resp.ok) {
         const err = await resp.json();
         throw new Error(err.detail || 'Login failed');
@@ -72,7 +72,7 @@ export default function SettingsPage() {
     setAuthError('');
     setAuthLoading(true);
     try {
-      const resp = await fetch(`/api/auth/register?email=${encodeURIComponent(loginEmail)}&password=${encodeURIComponent(loginPassword)}`, { method: 'POST' });
+      const resp = await fetch(`/v1/auth/register?email=${encodeURIComponent(loginEmail)}&password=${encodeURIComponent(loginPassword)}`, { method: 'POST' });
       if (!resp.ok) {
         const err = await resp.json();
         throw new Error(err.detail || 'Registration failed');
@@ -87,7 +87,7 @@ export default function SettingsPage() {
   const handleLogout = async () => {
     const token = localStorage.getItem('authToken');
     if (token) {
-      await fetch(`/api/auth/logout?token=${token}`, { method: 'POST' }).catch(() => {});
+      await fetch(`/v1/auth/logout?token=${token}`, { method: 'POST' }).catch(() => {});
     }
     localStorage.removeItem('authToken');
     setAuth({ authenticated: false });
@@ -112,7 +112,7 @@ export default function SettingsPage() {
 
   const clearCache = async () => {
     try {
-      await fetch('/api/cache/clear', { method: 'POST' });
+      await fetch('/v1/cache/clear', { method: 'POST' });
       setExportStatus('Cache cleared!');
     } catch { setExportStatus('Clear failed'); }
   };

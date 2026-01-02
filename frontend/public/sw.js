@@ -7,12 +7,12 @@ const STATIC_ASSETS = [
 ];
 
 const API_ROUTES = [
-  '/strategies',
-  '/strategies/sammansatt_momentum',
-  '/strategies/trendande_varde',
-  '/strategies/trendande_utdelning',
-  '/strategies/trendande_kvalitet',
-  '/portfolio/sverige',
+  '/v1/strategies',
+  '/v1/strategies/sammansatt_momentum',
+  '/v1/strategies/trendande_varde',
+  '/v1/strategies/trendande_utdelning',
+  '/v1/strategies/trendande_kvalitet',
+  '/v1/portfolio/sverige',
 ];
 
 self.addEventListener('install', (event) => {
