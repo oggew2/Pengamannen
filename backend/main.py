@@ -455,6 +455,15 @@ def get_strategy_rankings(name: str, db: Session = Depends(get_db)):
     strategies = STRATEGIES_CONFIG.get("strategies", {})
     if name not in strategies:
         raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
+    
+    # CRITICAL OPTIMIZATION: Serve from cache instead of computing
+    cached_rankings = get_cached_strategy_rankings(db, name)
+    if cached_rankings:
+        logger.info(f"Serving cached rankings for {name} ({len(cached_rankings)} stocks)")
+        return cached_rankings
+    
+    # Fallback: compute if no cache (shouldn't happen in production)
+    logger.warning(f"No cached rankings for {name}, computing on-demand")
     return _compute_strategy_rankings(name, strategies[name], db)
 
 
@@ -464,7 +473,48 @@ def get_strategy_top10(name: str, db: Session = Depends(get_db)):
     strategies = STRATEGIES_CONFIG.get("strategies", {})
     if name not in strategies:
         raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
+    
+    # CRITICAL OPTIMIZATION: Serve from cache
+    cached_rankings = get_cached_strategy_rankings(db, name, limit=10)
+    if cached_rankings:
+        logger.info(f"Serving cached top 10 for {name}")
+        return cached_rankings
+    
+    # Fallback: compute if no cache
+    logger.warning(f"No cached rankings for {name}, computing on-demand")
     return _compute_strategy_rankings(name, strategies[name], db)[:10]
+
+
+def get_cached_strategy_rankings(db: Session, strategy_name: str, limit: Optional[int] = None) -> List[RankedStock]:
+    """Get pre-computed strategy rankings from cache."""
+    from models import StrategySignal, Stock
+    from datetime import date
+    
+    # Get today's cached rankings
+    query = db.query(StrategySignal, Stock.name).join(
+        Stock, StrategySignal.ticker == Stock.ticker
+    ).filter(
+        StrategySignal.strategy_name == strategy_name,
+        StrategySignal.calculated_date == date.today()
+    ).order_by(StrategySignal.rank)
+    
+    if limit:
+        query = query.limit(limit)
+    
+    results = query.all()
+    
+    if not results:
+        return []
+    
+    return [
+        RankedStock(
+            ticker=signal.ticker,
+            name=stock_name or signal.ticker,
+            score=signal.score or 0.0,
+            rank=signal.rank
+        )
+        for signal, stock_name in results
+    ]
 
 
 # Enhanced Strategy Rankings with Manual/Auto Toggle
@@ -617,11 +667,16 @@ def get_portfolio_sverige(db: Session = Depends(get_db)):
                 strategy_results[name] = pd.DataFrame()
     
     combined = combine_strategies(strategy_results)
-    holdings = [
-        PortfolioHoldingOut(ticker=row['ticker'], name=_get_stock_name(row['ticker'], db),
-                           weight=row['weight'], strategy=row['strategy'])
-        for _, row in combined.iterrows()
-    ]
+    # CRITICAL FIX: Use vectorized operations instead of memory-intensive iterrows()
+    holdings = []
+    for idx in range(len(combined)):
+        row = combined.iloc[idx]
+        holdings.append(PortfolioHoldingOut(
+            ticker=row['ticker'], 
+            name=_get_stock_name(row['ticker'], db),
+            weight=row['weight'], 
+            strategy=row['strategy']
+        ))
     
     rebalance_dates = get_next_rebalance_dates(strategies)
     next_rebalance = min(rebalance_dates.values()) if rebalance_dates else None
