@@ -97,6 +97,11 @@ class AvanzaDirectFetcher:
                     ohlc_data = data.get('ohlc', [])
                     if ohlc_data:
                         all_data.extend(ohlc_data)
+                        
+                        # CRITICAL FIX: Prevent memory accumulation in long loops
+                        if len(all_data) > 50000:  # Limit to 50k records max
+                            logger.warning(f"Truncating historical data at 50k records for {stock_id}")
+                            break
                 else:
                     break  # No more data available
             except:
