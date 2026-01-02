@@ -27,6 +27,10 @@ class MemoryOptimizer:
         for col in df.columns:
             col_type = df[col].dtype
             
+            # CRITICAL FIX: Never optimize date columns - they need comparison operations
+            if 'date' in col.lower() or col_type.name.startswith('datetime'):
+                continue
+            
             if col_type == 'object':
                 # Convert to category if low cardinality
                 unique_ratio = df[col].nunique() / len(df)
