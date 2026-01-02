@@ -614,7 +614,10 @@ def _sync_prices_threaded(db, tickers: list, fetcher, id_map: dict, days: int = 
             result = future.result()
             if result:
                 ticker, df = result
-                for _, row in df.iterrows():
+                
+                # CRITICAL FIX: Replace iterrows() with vectorized operations
+                for idx in range(len(df)):
+                    row = df.iloc[idx]
                     try:
                         db.merge(DailyPrice(
                             ticker=ticker,

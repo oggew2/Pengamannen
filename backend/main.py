@@ -1675,8 +1675,9 @@ async def sync_historical_prices(
             result = future.result()
             if result:
                 ticker, df = result
-                # Store prices
-                for _, row in df.iterrows():
+                # CRITICAL FIX: Replace iterrows() with vectorized operations
+                for idx in range(len(df)):
+                    row = df.iloc[idx]
                     try:
                         db.merge(DailyPrice(
                             ticker=ticker,
@@ -1744,7 +1745,9 @@ async def sync_historical_prices_extended(
             result = future.result()
             if result:
                 ticker, df = result
-                for _, row in df.iterrows():
+                # CRITICAL FIX: Replace iterrows() with vectorized operations
+                for idx in range(len(df)):
+                    row = df.iloc[idx]
                     try:
                         db.merge(DailyPrice(
                             ticker=ticker,
