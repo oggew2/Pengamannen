@@ -223,6 +223,10 @@ def get_market_caps_for_date(mcap_df: pd.DataFrame, as_of_date: date, financial_
         return set()
     
     # Get data within 35 days before as_of_date
+    # CRITICAL FIX: Ensure date column is not categorical before comparison
+    if mcap_df['date'].dtype.name == 'category':
+        mcap_df['date'] = pd.to_datetime(mcap_df['date'])
+    
     mask = (mcap_df['date'] <= as_of_date) & (mcap_df['date'] >= as_of_date - timedelta(days=35))
     recent = mcap_df[mask]
     if recent.empty:
@@ -340,6 +344,10 @@ def backtest_strategy(
     
     # Memory-optimized pivot table creation
     logger.info("Creating price pivot table with memory optimization...")
+    
+    # CRITICAL FIX: Ensure date column is not categorical before comparison
+    if prices_df['date'].dtype.name == 'category':
+        prices_df['date'] = pd.to_datetime(prices_df['date'])
     
     # Filter to only needed date range first to reduce pivot size
     date_mask = (prices_df['date'] >= start_date - timedelta(days=30)) & (prices_df['date'] <= end_date)

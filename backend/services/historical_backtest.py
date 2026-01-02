@@ -112,6 +112,10 @@ def run_historical_backtest(
         rebalance_months = [strategy_config.get('rebalance_month', 3)]
     
     # Get all trading dates
+    # CRITICAL FIX: Ensure date column is not categorical before operations
+    if 'date' in prices_df.columns and prices_df['date'].dtype.name == 'category':
+        prices_df['date'] = pd.to_datetime(prices_df['date'])
+    
     all_dates = sorted(prices_df['date'].unique())
     trading_dates = [d for d in all_dates if start_date <= d <= end_date]
     
@@ -153,6 +157,12 @@ def run_historical_backtest(
         )
         
         if should_rebalance:
+            # CRITICAL FIX: Ensure date column is not categorical before comparison
+            if 'date' in prices_df.columns and prices_df['date'].dtype.name == 'category':
+                prices_df['date'] = pd.to_datetime(prices_df['date'])
+            if 'fiscal_date' in fundamentals_df.columns and fundamentals_df['fiscal_date'].dtype.name == 'category':
+                fundamentals_df['fiscal_date'] = pd.to_datetime(fundamentals_df['fiscal_date'])
+            
             # Get data up to current date for scoring
             prices_to_date = prices_df[prices_df['date'] <= current_date]
             
