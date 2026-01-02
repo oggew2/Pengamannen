@@ -161,7 +161,7 @@ def compute_all_rankings(db) -> dict:
                     ticker=row['ticker'],
                     rank=rank,
                     score=float(row.get('score', 0)),
-                    date_computed=today
+                    calculated_date=today  # CRITICAL FIX: Use correct column name
                 )
                 signals_to_insert.append(signal)
             
@@ -172,7 +172,7 @@ def compute_all_rankings(db) -> dict:
                     'ticker': s.ticker,
                     'rank': s.rank,
                     'score': s.score,
-                    'date_computed': s.date_computed
+                    'calculated_date': s.calculated_date  # CRITICAL FIX: Use correct column name
                 } for s in signals_to_insert
             ])
             
