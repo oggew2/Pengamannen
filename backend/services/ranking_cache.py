@@ -3,6 +3,7 @@ Pre-compute and cache strategy rankings in database.
 Called after daily sync to ensure rankings are ready for users.
 """
 import logging
+import gc
 from datetime import date
 import pandas as pd
 import yaml
@@ -50,18 +51,26 @@ def compute_all_rankings(db) -> dict:
         logger.warning("No data available for ranking computation")
         return {"error": "No data available"}
     
-    # Build DataFrames
+    # Import memory optimization
+    from services.memory_optimizer import optimize_ranking_computation, MemoryOptimizer
+    
+    # Build DataFrames with memory optimization
     market_caps = {s.ticker: s.market_cap_msek or 0 for s in stocks}
     stock_types = {s.ticker: getattr(s, 'stock_type', 'stock') for s in stocks}
     stock_names = {s.ticker: s.name for s in stocks}
     stock_sectors = {s.ticker: getattr(s, 'sector', None) for s in stocks}
     
-    prices_df = pd.DataFrame([
+    # Create DataFrames in chunks to prevent memory spikes
+    logger.info("Building price DataFrame with memory optimization...")
+    prices_data = [
         {"ticker": p.ticker, "date": p.date, "close": p.close} 
         for p in prices
-    ])
+    ]
+    prices_df = pd.DataFrame(prices_data)
+    del prices_data  # Free memory immediately
     
-    fund_df = pd.DataFrame([{
+    logger.info("Building fundamentals DataFrame with memory optimization...")
+    fund_data = [{
         "ticker": f.ticker, "pe": f.pe, "pb": f.pb, "ps": f.ps,
         "p_fcf": f.p_fcf, "ev_ebitda": f.ev_ebitda,
         "dividend_yield": f.dividend_yield, "roe": f.roe,
@@ -70,7 +79,12 @@ def compute_all_rankings(db) -> dict:
         "market_cap": market_caps.get(f.ticker, 0),
         "stock_type": stock_types.get(f.ticker, 'stock'),
         "sector": stock_sectors.get(f.ticker)
-    } for f in fundamentals])
+    } for f in fundamentals]
+    fund_df = pd.DataFrame(fund_data)
+    del fund_data  # Free memory immediately
+    
+    # Apply comprehensive memory optimization
+    prices_df, fund_df = optimize_ranking_computation(prices_df, fund_df)
     
     # Apply filters
     fund_df = filter_real_stocks(fund_df)
@@ -98,6 +112,71 @@ def compute_all_rankings(db) -> dict:
                 # Use banding with current holdings
                 ranked_df = calculate_momentum_with_quality_filter(
                     prices_df, fund_df, 
+                    current_holdings=current_momentum_holdings
+                )
+            elif strategy_type == "value":
+                ranked_df = calculate_value_score(prices_df, fund_df)
+            elif strategy_type == "dividend":
+                ranked_df = calculate_dividend_score(prices_df, fund_df)
+            elif strategy_type == "quality":
+                ranked_df = calculate_quality_score(fund_df)
+            else:
+                logger.warning(f"Unknown strategy type: {strategy_type}")
+                continue
+            
+            if ranked_df is None or ranked_df.empty:
+                logger.warning(f"No results for strategy {strategy_name}")
+                continue
+            
+            # Memory optimization: process in batches for large results
+            if len(ranked_df) > 1000:
+                ranked_df = MemoryOptimizer.process_in_batches(
+                    ranked_df, 
+                    batch_size=500,
+                    process_func=lambda x: x.head(100)  # Keep top 100 per batch
+                )
+            
+            # Take top 10 and save to database
+            top_stocks = ranked_df.head(10)
+            
+            # Batch insert for better performance
+            signals_to_insert = []
+            for rank, (_, row) in enumerate(top_stocks.iterrows(), 1):
+                signal = StrategySignal(
+                    strategy_name=strategy_name,
+                    ticker=row['ticker'],
+                    rank=rank,
+                    score=float(row.get('score', 0)),
+                    date_computed=today
+                )
+                signals_to_insert.append(signal)
+            
+            # Bulk insert
+            db.bulk_insert_mappings(StrategySignal, [
+                {
+                    'strategy_name': s.strategy_name,
+                    'ticker': s.ticker,
+                    'rank': s.rank,
+                    'score': s.score,
+                    'date_computed': s.date_computed
+                } for s in signals_to_insert
+            ])
+            
+            results[strategy_name] = {
+                "computed": len(ranked_df),
+                "top_10": [row['ticker'] for _, row in top_stocks.iterrows()]
+            }
+            
+            logger.info(f"✓ {strategy_name}: {len(ranked_df)} stocks ranked, "
+                       f"top 10: {results[strategy_name]['top_10'][:3]}...")
+            
+            # Memory cleanup after each strategy
+            del ranked_df, top_stocks, signals_to_insert
+            gc.collect()
+            
+        except Exception as e:
+            logger.error(f"Error computing {strategy_name}: {e}")
+            results[strategy_name] = {"error": str(e)}
                     current_holdings=current_momentum_holdings if current_momentum_holdings else None
                 )
             elif strategy_type == "value":
@@ -132,6 +211,11 @@ def compute_all_rankings(db) -> dict:
             logger.error(f"Error computing {strategy_name}: {e}")
             results[strategy_name] = f"error: {str(e)}"
     
+    # Final memory cleanup
+    del prices_df, fund_df
+    gc.collect()
+    
+    # Commit all changes
     db.commit()
     logger.info(f"Rankings computation complete: {results}")
     
