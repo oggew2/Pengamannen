@@ -34,17 +34,34 @@ def filter_real_stocks(df: pd.DataFrame, include_preference: bool = False) -> pd
     if df.empty or 'stock_type' not in df.columns:
         return df
     valid_types = VALID_STOCK_TYPES + (['preference'] if include_preference else [])
-    # Case-insensitive comparison
-    return df[df['stock_type'].str.lower().isin([t.lower() for t in valid_types])]
+    
+    # CRITICAL FIX: Handle categorical columns that don't have .str accessor
+    if df['stock_type'].dtype.name == 'category':
+        # Convert categories to lowercase for comparison
+        valid_types_lower = [t.lower() for t in valid_types]
+        return df[df['stock_type'].astype(str).str.lower().isin(valid_types_lower)]
+    else:
+        # Case-insensitive comparison for non-categorical
+        return df[df['stock_type'].str.lower().isin([t.lower() for t in valid_types])]
 
 
 def filter_financial_companies(df: pd.DataFrame) -> pd.DataFrame:
     """Exclude financial companies where valuation metrics don't apply well."""
     if df.empty or 'sector' not in df.columns:
         return df
-    # Case-insensitive comparison
+    
+    # CRITICAL FIX: Handle categorical columns that don't have .str accessor
     financial_lower = [s.lower() for s in FINANCIAL_SECTORS]
-    return df[~df['sector'].fillna('').str.lower().isin(financial_lower)]
+    
+    if df['sector'].dtype.name == 'category':
+        # Handle categorical sector column - convert to string first to avoid category issues
+        sector_lower = df['sector'].astype(str).str.lower()
+        # Handle NaN values properly for categorical
+        sector_lower = sector_lower.fillna('unknown')
+        return df[~sector_lower.isin(financial_lower)]
+    else:
+        # Case-insensitive comparison for non-categorical
+        return df[~df['sector'].fillna('').str.lower().isin(financial_lower)]
 
 
 def filter_by_min_market_cap(df: pd.DataFrame, min_cap_msek: float = MIN_MARKET_CAP_MSEK) -> pd.DataFrame:
