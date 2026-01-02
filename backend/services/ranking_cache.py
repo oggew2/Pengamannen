@@ -191,39 +191,6 @@ def compute_all_rankings(db) -> dict:
         except Exception as e:
             logger.error(f"Error computing {strategy_name}: {e}")
             results[strategy_name] = {"error": str(e)}
-                    current_holdings=current_momentum_holdings if current_momentum_holdings else None
-                )
-            elif strategy_type == "value":
-                ranked_df = calculate_value_score(fund_df, prices_df)
-            elif strategy_type == "dividend":
-                ranked_df = calculate_dividend_score(fund_df, prices_df)
-            elif strategy_type == "quality":
-                ranked_df = calculate_quality_score(fund_df, prices_df)
-            else:
-                logger.warning(f"Unknown strategy type: {strategy_type}")
-                continue
-            
-            if ranked_df.empty:
-                logger.warning(f"No rankings computed for {strategy_name}")
-                results[strategy_name] = 0
-                continue
-            
-            # Save to DB
-            for _, row in ranked_df.iterrows():
-                db.add(StrategySignal(
-                    strategy_name=strategy_name,
-                    ticker=row['ticker'],
-                    rank=int(row['rank']),
-                    score=float(row['score']),
-                    calculated_date=today
-                ))
-            
-            results[strategy_name] = len(ranked_df)
-            logger.info(f"Computed {len(ranked_df)} rankings for {strategy_name}")
-            
-        except Exception as e:
-            logger.error(f"Error computing {strategy_name}: {e}")
-            results[strategy_name] = f"error: {str(e)}"
     
     # Final memory cleanup
     del prices_df, fund_df
@@ -236,7 +203,7 @@ def compute_all_rankings(db) -> dict:
     return {
         "computed_date": today.isoformat(),
         "strategies": results,
-        "total_rankings": sum(v for v in results.values() if isinstance(v, int))
+        "total_rankings": sum(v.get("computed", 0) if isinstance(v, dict) else 0 for v in results.values())
     }
 
 

@@ -11,6 +11,9 @@ Verified Strategy Rules (from börslabbet.se/borslabbets-strategier):
 """
 import pandas as pd
 import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Minimum market cap threshold (2 billion SEK since June 2023)
 MIN_MARKET_CAP_MSEK = 2000  # 2B SEK = 2000 MSEK
