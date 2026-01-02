@@ -60,10 +60,24 @@ def sync_job():
         else:
             # No issues - resolve any old alerts
             resolve_old_alerts(db)
+            
+        # CRITICAL FIX: Force memory cleanup after sync
+        import gc
+        gc.collect()
+        logger.info("Memory cleanup completed after sync")
+        
     except Exception as e:
         logger.error(f"Sync failed: {e}")
     finally:
-        db.close()
+        # CRITICAL FIX: Ensure database session is properly closed
+        try:
+            db.close()
+        except:
+            pass
+        
+        # Additional cleanup
+        import gc
+        gc.collect()
 
 def scan_new_stocks_job():
     """Job to scan for new stocks - runs every 2 weeks at night."""

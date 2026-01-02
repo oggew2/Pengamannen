@@ -67,7 +67,25 @@ def calculate_momentum_score(prices_df: pd.DataFrame, price_pivot: pd.DataFrame 
     if price_pivot is None:
         if prices_df is None or prices_df.empty:
             return pd.Series(dtype=float)
+        
+        # CRITICAL FIX: Memory-optimized pivot table creation
+        from services.memory_optimizer import MemoryOptimizer
+        
+        # Optimize DataFrame first
+        prices_df = MemoryOptimizer.optimize_dtypes(prices_df)
+        
+        # Create pivot with memory optimization
+        if len(prices_df) > 100000:  # Large dataset
+            logger.info("Large price dataset - using memory-optimized pivot")
+            # Sort and filter to recent data only
+            prices_df = prices_df.sort_values('date').tail(50000)  # Last 50k records
+            
         price_pivot = prices_df.pivot_table(index='date', columns='ticker', values='close', aggfunc='last').sort_index()
+        
+        # Clean up
+        import gc
+        del prices_df
+        gc.collect()
     
     if price_pivot.empty:
         return pd.Series(dtype=float)

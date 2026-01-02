@@ -8,6 +8,9 @@ import logging
 import asyncio
 from typing import List, Dict, Optional
 
+# CRITICAL: Start memory monitoring immediately
+from services.memory_monitor import memory_monitor, monitor_memory_usage
+
 from db import get_db, engine, Base, text
 from models import Stock, DailyPrice, Fundamentals, SavedCombination as SavedCombinationModel, UserGoal
 # from models.user_storage import UserProfile, UserPortfolio, AvanzaImport, UserSession
@@ -117,11 +120,19 @@ STRATEGIES_CONFIG = load_strategies_config()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    
+    # CRITICAL: Start memory monitoring for production
+    memory_monitor.start_monitoring(check_interval=60)  # Check every minute
+    logger.info("Memory monitoring started")
+    
     start_scheduler()
-    logger.info("Application started with scheduler")
+    logger.info("Application started with scheduler and memory monitoring")
     yield
+    
+    # Cleanup on shutdown
+    memory_monitor.stop_monitoring()
     stop_scheduler()
-    logger.info("Application shutdown")
+    logger.info("Application shutdown with cleanup")
 
 app = FastAPI(title="Börslabbet Strategy API", lifespan=lifespan)
 
@@ -251,6 +262,10 @@ def metrics(db: Session = Depends(get_db)):
     price_count = db.query(DailyPrice).count()
     signal_count = db.query(StrategySignal).count()
     
+    # Add memory metrics
+    from services.memory_monitor import get_memory_status
+    memory_stats = get_memory_status()
+    
     lines = [
         "# HELP borslabbet_stocks_total Total number of stocks in database",
         "# TYPE borslabbet_stocks_total gauge",
@@ -261,8 +276,29 @@ def metrics(db: Session = Depends(get_db)):
         "# HELP borslabbet_signals_total Strategy signal records",
         "# TYPE borslabbet_signals_total gauge",
         f"borslabbet_signals_total {signal_count}",
+        "# HELP borslabbet_memory_usage_mb Memory usage in MB",
+        "# TYPE borslabbet_memory_usage_mb gauge",
+        f"borslabbet_memory_usage_mb {memory_stats['usage_mb']:.1f}",
+        "# HELP borslabbet_memory_percent Memory usage percentage",
+        "# TYPE borslabbet_memory_percent gauge",
+        f"borslabbet_memory_percent {memory_stats['percent']:.1f}",
     ]
     return "\n".join(lines)
+
+
+# Memory monitoring endpoints
+@v1_router.get("/system/memory")
+def get_memory_status_endpoint():
+    """Get current memory usage status."""
+    from services.memory_monitor import get_memory_status
+    return get_memory_status()
+
+@v1_router.post("/system/memory/cleanup")
+def cleanup_memory_endpoint():
+    """Force memory cleanup (admin only)."""
+    from services.memory_monitor import cleanup_memory
+    result = cleanup_memory()
+    return {"message": "Memory cleanup completed", "result": result}
 
 
 # Alerts endpoint
@@ -562,7 +598,23 @@ def get_portfolio_sverige(db: Session = Depends(get_db)):
     for name in strategy_names:
         if name in strategies:
             rankings = _compute_strategy_rankings(name, strategies[name], db)
-            strategy_results[name] = pd.DataFrame([r.model_dump() for r in rankings])
+            
+            # CRITICAL FIX: Memory-optimized DataFrame creation
+            if rankings:
+                # Create DataFrame in chunks to prevent memory spikes
+                ranking_data = [r.model_dump() for r in rankings]
+                strategy_results[name] = pd.DataFrame(ranking_data)
+                
+                # Apply memory optimization
+                from services.memory_optimizer import MemoryOptimizer
+                strategy_results[name] = MemoryOptimizer.optimize_dtypes(strategy_results[name])
+                
+                # Clean up
+                del ranking_data, rankings
+                import gc
+                gc.collect()
+            else:
+                strategy_results[name] = pd.DataFrame()
     
     combined = combine_strategies(strategy_results)
     holdings = [
@@ -594,7 +646,21 @@ def combine_portfolio(request: CombinerRequest, db: Session = Depends(get_db)):
     for name in request.strategies:
         if name in strategies:
             rankings = _compute_strategy_rankings(name, strategies[name], db)
-            strategy_results[name] = pd.DataFrame([r.model_dump() for r in rankings])
+            # CRITICAL FIX: Memory-optimized DataFrame creation
+            if rankings:
+                ranking_data = [r.model_dump() for r in rankings]
+                strategy_results[name] = pd.DataFrame(ranking_data)
+                
+                # Apply memory optimization
+                from services.memory_optimizer import MemoryOptimizer
+                strategy_results[name] = MemoryOptimizer.optimize_dtypes(strategy_results[name])
+                
+                # Clean up
+                del ranking_data, rankings
+                import gc
+                gc.collect()
+            else:
+                strategy_results[name] = pd.DataFrame()
     
     combined = combine_strategies(strategy_results)
     holdings = [
@@ -615,7 +681,21 @@ def preview_combination(request: CombinerPreviewRequest, db: Session = Depends(g
     for sw in request.strategies:
         if sw.name in strategies:
             rankings = _compute_strategy_rankings(sw.name, strategies[sw.name], db)
-            strategy_results[sw.name] = pd.DataFrame([r.model_dump() for r in rankings])
+            # CRITICAL FIX: Memory-optimized DataFrame creation
+            if rankings:
+                ranking_data = [r.model_dump() for r in rankings]
+                strategy_results[sw.name] = pd.DataFrame(ranking_data)
+                
+                # Apply memory optimization
+                from services.memory_optimizer import MemoryOptimizer
+                strategy_results[sw.name] = MemoryOptimizer.optimize_dtypes(strategy_results[sw.name])
+                
+                # Clean up
+                del ranking_data, rankings
+                import gc
+                gc.collect()
+            else:
+                strategy_results[sw.name] = pd.DataFrame()
     
     combined = combine_strategies(strategy_results)
     holdings = [

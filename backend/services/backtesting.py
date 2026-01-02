@@ -275,6 +275,9 @@ def get_financial_tickers(db) -> set:
     return {row[0] for row in result}
 
 
+from services.memory_monitor import monitor_memory_usage
+
+@monitor_memory_usage
 def backtest_strategy(
     strategy_name: str,
     start_date: date,

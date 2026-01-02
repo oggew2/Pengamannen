@@ -25,6 +25,9 @@ def get_current_holdings(db, strategy_name: str) -> list:
     return [h[0] for h in holdings] if holdings else []
 
 
+from services.memory_monitor import monitor_memory_usage
+
+@monitor_memory_usage
 def compute_all_rankings(db) -> dict:
     """
     Compute rankings for all strategies and save to StrategySignal table.
@@ -41,11 +44,22 @@ def compute_all_rankings(db) -> dict:
     with open('config/strategies.yaml') as f:
         strategies = yaml.safe_load(f).get('strategies', {})
     
-    # Load all data once
-    logger.info("Loading data for ranking computation...")
-    prices = db.query(DailyPrice).all()
-    fundamentals = db.query(Fundamentals).all()
+    # Load data with memory optimization - CRITICAL FIX
+    logger.info("Loading data for ranking computation with memory optimization...")
+    
+    # Load stocks first (small dataset)
     stocks = db.query(Stock).all()
+    logger.info(f"Loaded {len(stocks)} stocks")
+    
+    # Load fundamentals (medium dataset)
+    fundamentals = db.query(Fundamentals).all()
+    logger.info(f"Loaded {len(fundamentals)} fundamentals")
+    
+    # CRITICAL: Load only recent prices (last 400 days) instead of ALL prices
+    from datetime import timedelta
+    cutoff_date = date.today() - timedelta(days=400)
+    prices = db.query(DailyPrice).filter(DailyPrice.date >= cutoff_date).all()
+    logger.info(f"Loaded {len(prices)} recent price records (last 400 days)")
     
     if not prices or not fundamentals:
         logger.warning("No data available for ranking computation")

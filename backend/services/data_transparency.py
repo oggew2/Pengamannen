@@ -18,23 +18,52 @@ class DataTransparencyService:
         try:
             now = datetime.now()
             
-            # Get all stocks and their last update times
-            stocks_query = db.query(Stock).all()
-            fundamentals_query = db.query(Fundamentals).all()
+            # CRITICAL FIX: Load data with memory optimization
+            logger.info("Loading data status with memory optimization...")
             
-            # Create stock status map
+            # Load stocks in chunks to prevent memory overflow
+            from services.memory_optimizer import MemoryOptimizer
+            
+            # Get counts first to avoid loading everything
+            stock_count = db.query(Stock).count()
+            fund_count = db.query(Fundamentals).count()
+            
+            logger.info(f"Processing {stock_count} stocks and {fund_count} fundamentals")
+            
+            # Load in smaller batches
+            batch_size = 1000
             stock_status = {}
-            for stock in stocks_query:
-                stock_status[stock.ticker] = {
-                    'name': stock.name,
-                    'sector': stock.sector,
-                    'market_cap': stock.market_cap_msek,
-                    'last_fundamental_update': None,
-                    'last_price_update': None,
-                    'data_age_hours': None,
-                    'status': 'NO_DATA'
-                }
             
+            for offset in range(0, stock_count, batch_size):
+                stocks_batch = db.query(Stock).offset(offset).limit(batch_size).all()
+                
+                for stock in stocks_batch:
+                    stock_status[stock.ticker] = {
+                        'name': stock.name,
+                        'sector': stock.sector,
+                        'market_cap': stock.market_cap_msek,
+                        'last_fundamental_update': None,
+                        'last_price_update': None,
+                        'data_age_hours': None,
+                        'status': 'NO_DATA'
+                    }
+                
+                # Clean up batch
+                del stocks_batch
+                import gc
+                gc.collect()
+            
+            # Process fundamentals in batches
+            for offset in range(0, fund_count, batch_size):
+                fund_batch = db.query(Fundamentals).offset(offset).limit(batch_size).all()
+                
+                for fund in fund_batch:
+                    if fund.ticker in stock_status:
+                        stock_status[fund.ticker]['last_fundamental_update'] = fund.fetched_date
+                
+                # Clean up batch
+                del fund_batch
+                gc.collect()
             # Add fundamental data timestamps
             for fund in fundamentals_query:
                 if fund.ticker in stock_status:
