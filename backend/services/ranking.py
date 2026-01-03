@@ -100,7 +100,7 @@ def calculate_momentum_score(prices_df: pd.DataFrame, price_pivot: pd.DataFrame 
             # Sort and filter to recent data only
             prices_df = prices_df.sort_values('date').tail(50000)  # Last 50k records
             
-        price_pivot = prices_df.pivot_table(index='date', columns='ticker', values='close', aggfunc='last').sort_index()
+        price_pivot = prices_df.pivot_table(index='date', columns='ticker', values='close', aggfunc='last', observed=True).sort_index()
         
         # Clean up
         import gc
@@ -471,57 +471,3 @@ def rank_and_select_top_n(scores: pd.Series, config: dict, n: int = 10) -> pd.Da
     n = config.get('position_count', n)
     top = scores.sort_values(ascending=False).head(n)
     return pd.DataFrame({'ticker': top.index, 'rank': range(1, len(top)+1), 'score': top.values})
-
-
-def calculate_quality_score(fund_df: pd.DataFrame, prices_df: pd.DataFrame = None, price_pivot: pd.DataFrame = None) -> pd.DataFrame:
-    """
-    Calculate quality composite score (ROE/ROA/ROIC/FCFROE).
-    
-    Args:
-        fund_df: Fundamentals data with quality metrics
-        prices_df: Price data (optional, for momentum filter)
-        price_pivot: Pre-computed price pivot (optional)
-    
-    Returns:
-        DataFrame with ticker, rank, score columns
-    """
-    if fund_df.empty:
-        return pd.DataFrame(columns=['ticker', 'rank', 'score'])
-    
-    # Quality factors: ROE, ROA, ROIC, FCFROE
-    quality_factors = ['roe', 'roa', 'roic', 'fcfroe']
-    available_factors = [f for f in quality_factors if f in fund_df.columns]
-    
-    if not available_factors:
-        logger.warning("No quality factors available")
-        return pd.DataFrame(columns=['ticker', 'rank', 'score'])
-    
-    # Calculate composite quality score
-    quality_scores = pd.Series(index=fund_df.index, dtype=float)
-    
-    for factor in available_factors:
-        factor_scores = fund_df[factor].fillna(0)
-        # Normalize to 0-1 scale
-        if factor_scores.std() > 0:
-            normalized = (factor_scores - factor_scores.min()) / (factor_scores.max() - factor_scores.min())
-            quality_scores = quality_scores.add(normalized, fill_value=0)
-    
-    # Average across available factors
-    if len(available_factors) > 0:
-        quality_scores = quality_scores / len(available_factors)
-    
-    # Apply momentum filter if price data available
-    if prices_df is not None and not prices_df.empty:
-        momentum = calculate_momentum_score(prices_df, price_pivot=price_pivot)
-        # Filter to top 40% by quality, then top 25% by momentum
-        top_quality = quality_scores.sort_values(ascending=False).head(int(len(quality_scores) * 0.4))
-        filtered_momentum = momentum[momentum.index.isin(top_quality.index)]
-        if not filtered_momentum.empty:
-            n_select = max(10, int(len(filtered_momentum) * 0.25))
-            top_momentum = filtered_momentum.sort_values(ascending=False).head(n_select)
-            final_scores = top_momentum.head(10)
-            return pd.DataFrame({'ticker': final_scores.index, 'rank': range(1, len(final_scores)+1), 'score': final_scores.values})
-    
-    # No momentum filter - just top 10 by quality
-    top10 = quality_scores.sort_values(ascending=False).head(10)
-    return pd.DataFrame({'ticker': top10.index, 'rank': range(1, len(top10)+1), 'score': top10.values})

@@ -363,7 +363,7 @@ def backtest_strategy(
         for i in range(0, len(unique_dates), chunk_size):
             date_chunk = unique_dates[i:i + chunk_size]
             chunk_data = prices_subset[prices_subset['date'].isin(date_chunk)]
-            chunk_pivot = chunk_data.pivot_table(index='date', columns='ticker', values='close', aggfunc='last')
+            chunk_pivot = chunk_data.pivot_table(index='date', columns='ticker', values='close', aggfunc='last', observed=True)
             pivot_chunks.append(chunk_pivot)
             
             # Memory cleanup
@@ -375,7 +375,7 @@ def backtest_strategy(
         del pivot_chunks
         gc.collect()
     else:
-        price_pivot = prices_subset.pivot_table(index='date', columns='ticker', values='close', aggfunc='last').sort_index()
+        price_pivot = prices_subset.pivot_table(index='date', columns='ticker', values='close', aggfunc='last', observed=True).sort_index()
     
     # Clean up large DataFrames
     del prices_subset
@@ -553,14 +553,14 @@ def backtest_strategy(
         "strategy_name": strategy_name,
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
-        "total_return_pct": round(total_return_pct, 2),
-        "sharpe": sharpe,
-        "max_drawdown_pct": max_drawdown_pct,
-        "equity_curve": [(d.isoformat(), round(v, 2)) for d, v in equity_curve[::5]],
-        "monthly_returns": [round(r * 100, 2) for r in monthly_returns],
-        "portfolio_values": [round(v, 2) for v in equity_values[::21]],
-        "total_transaction_costs": round(total_transaction_costs, 2),
-        "transaction_cost_pct": round((total_transaction_costs / INITIAL_CAPITAL) * 100, 2),
+        "total_return_pct": float(round(total_return_pct, 2)),
+        "sharpe": float(sharpe),
+        "max_drawdown_pct": float(max_drawdown_pct),
+        "equity_curve": [(d.isoformat(), float(round(v, 2))) for d, v in equity_curve[::5]],
+        "monthly_returns": [float(round(r * 100, 2)) for r in monthly_returns],
+        "portfolio_values": [float(round(v, 2)) for v in equity_values[::21]],
+        "total_transaction_costs": float(round(total_transaction_costs, 2)),
+        "transaction_cost_pct": float(round((total_transaction_costs / INITIAL_CAPITAL) * 100, 2)),
     }
     
     # Add look-ahead bias warning for strategies using current fundamentals

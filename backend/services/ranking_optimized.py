@@ -116,7 +116,8 @@ def calculate_momentum_score_optimized(prices_df: pd.DataFrame) -> pd.Series:
             index='date', 
             columns='ticker', 
             values='close', 
-            aggfunc='last'
+            aggfunc='last',
+            observed=True
         ).sort_index()
         
         # Convert to float32 to save memory
