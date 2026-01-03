@@ -504,8 +504,10 @@ def validate_strategy_data(name: str, db: Session = Depends(get_db)):
 
 # Strategies
 @v1_router.get("/strategies", response_model=list[StrategyMeta])
-def list_strategies():
+def list_strategies(response: Response):
     logger.info("GET /strategies")
+    # Add HTTP cache headers - strategy list rarely changes
+    response.headers["Cache-Control"] = "public, max-age=3600"  # 1 hour browser cache
     result = []
     for name, config in STRATEGIES_CONFIG.get("strategies", {}).items():
         result.append(StrategyMeta(
@@ -586,7 +588,7 @@ def get_all_strategies_performance(db: Session = Depends(get_db)):
 
 
 @v1_router.get("/strategies/{name}", response_model=list[RankedStock])
-def get_strategy_rankings(name: str, db: Session = Depends(get_db)):
+def get_strategy_rankings(name: str, response: Response, db: Session = Depends(get_db)):
     logger.info(f"GET /strategies/{name}")
     strategies = STRATEGIES_CONFIG.get("strategies", {})
     if name not in strategies:
@@ -596,6 +598,8 @@ def get_strategy_rankings(name: str, db: Session = Depends(get_db)):
     cached_rankings = get_cached_strategy_rankings(db, name)
     if cached_rankings:
         logger.info(f"Serving cached rankings for {name} ({len(cached_rankings)} stocks)")
+        # Add HTTP cache headers - rankings are updated daily at 6 AM
+        response.headers["Cache-Control"] = "public, max-age=300"  # 5 min browser cache
         return cached_rankings
     
     # Fallback: compute if no cache (shouldn't happen in production)
@@ -604,7 +608,7 @@ def get_strategy_rankings(name: str, db: Session = Depends(get_db)):
 
 
 @v1_router.get("/strategies/{name}/top10", response_model=list[RankedStock])
-def get_strategy_top10(name: str, db: Session = Depends(get_db)):
+def get_strategy_top10(name: str, response: Response, db: Session = Depends(get_db)):
     logger.info(f"GET /strategies/{name}/top10")
     strategies = STRATEGIES_CONFIG.get("strategies", {})
     if name not in strategies:
@@ -614,6 +618,8 @@ def get_strategy_top10(name: str, db: Session = Depends(get_db)):
     cached_rankings = get_cached_strategy_rankings(db, name, limit=10)
     if cached_rankings:
         logger.info(f"Serving cached top 10 for {name}")
+        # Add HTTP cache headers
+        response.headers["Cache-Control"] = "public, max-age=300"  # 5 min browser cache
         return cached_rankings
     
     # Fallback: compute if no cache
@@ -1792,6 +1798,58 @@ def compare_all_strategies_historical(
 
 
 # Data Sync
+@v1_router.get("/data/sync-history")
+def get_sync_history(
+    days: int = Query(7, ge=1, le=30),
+    db: Session = Depends(get_db)
+):
+    """Get sync history for the last N days."""
+    from models import SyncLog
+    from datetime import timedelta
+    
+    cutoff = datetime.now() - timedelta(days=days)
+    logs = db.query(SyncLog).filter(
+        SyncLog.timestamp >= cutoff
+    ).order_by(SyncLog.timestamp.desc()).all()
+    
+    # Get next scheduled sync time
+    from config.settings import get_settings
+    settings = get_settings()
+    sync_hour = settings.data_sync_hour
+    
+    now = datetime.now()
+    next_sync = now.replace(hour=sync_hour, minute=0, second=0, microsecond=0)
+    if next_sync <= now:
+        next_sync += timedelta(days=1)
+    
+    # Get last successful sync
+    last_success = db.query(SyncLog).filter(
+        SyncLog.success == True
+    ).order_by(SyncLog.timestamp.desc()).first()
+    
+    return {
+        "history": [
+            {
+                "id": log.id,
+                "timestamp": log.timestamp.isoformat(),
+                "sync_type": log.sync_type,
+                "success": log.success,
+                "duration_seconds": log.duration_seconds,
+                "stocks_updated": log.stocks_updated,
+                "prices_updated": log.prices_updated,
+                "error_message": log.error_message
+            }
+            for log in logs
+        ],
+        "last_successful_sync": last_success.timestamp.isoformat() if last_success else None,
+        "next_scheduled_sync": next_sync.isoformat(),
+        "sync_hour_utc": sync_hour,
+        "total_syncs": len(logs),
+        "successful_syncs": sum(1 for log in logs if log.success),
+        "failed_syncs": sum(1 for log in logs if not log.success)
+    }
+
+
 @v1_router.get("/data/sync-status", response_model=SyncStatus)
 def get_data_sync_status(db: Session = Depends(get_db)):
     """Get sync status from database."""
@@ -1820,6 +1878,10 @@ async def trigger_data_sync(
     market_cap: str = "large",
     method: str = Query("avanza", description="Sync method: avanza only (all other methods removed)")
 ):
+    # Admin check
+    from services.auth import require_admin
+    require_admin(request, db)
+    
     logger.info(f"POST /data/sync-now region={region} market_cap={market_cap} method={method}")
     
     # Send initial log

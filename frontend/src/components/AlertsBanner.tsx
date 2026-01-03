@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { queryKeys } from '../api/hooks';
 import styles from '../styles/App.module.css';
 
 interface Alert {
@@ -12,15 +14,14 @@ interface Alert {
 }
 
 export function AlertsBanner() {
-  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    api.get<{ alerts: { alerts: Alert[] } }>('/alerts')
-      .then(data => setAlerts(data.alerts?.alerts || []))
-      .catch(() => {});
-  }, []);
+  const { data } = useQuery({
+    queryKey: queryKeys.alerts.all,
+    queryFn: () => api.get<{ alerts: { alerts: Alert[] } }>('/alerts'),
+  });
 
+  const alerts = data?.alerts?.alerts || [];
   const visibleAlerts = alerts.filter(a => !dismissed.has(a.message));
   
   if (!visibleAlerts.length) return null;

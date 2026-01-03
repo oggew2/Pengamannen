@@ -11,16 +11,21 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 def get_live_stock_universe(region: str = 'sweden', market_cap: str = 'large', market: str = 'both') -> List[str]:
-    """Get stock universe from database - only active stocks with avanza_id."""
+    """Get stock universe from database - all stocks with avanza_id for sync.
+    
+    Note: Removed is_active filter to allow syncing newly discovered stocks.
+    After sync, mark_stocks_with_fundamentals_active() sets is_active correctly.
+    Strategy calculations in ranking.py filter by stock_type and market_cap.
+    """
     import sqlite3
     
     conn = sqlite3.connect('app.db')
     cur = conn.cursor()
     
-    # Only fetch active stocks (those with fundamentals data)
+    # Fetch all stocks with avanza_id (removed is_active filter)
+    # This allows newly discovered stocks to be synced
     query = """SELECT ticker FROM stocks 
                WHERE stock_type IN ('stock', 'sdb') 
-               AND is_active = 1
                AND avanza_id IS NOT NULL AND avanza_id != ''"""
     if market == 'stockholmsborsen':
         query += " AND market = 'Stockholmsbörsen'"
@@ -31,7 +36,7 @@ def get_live_stock_universe(region: str = 'sweden', market_cap: str = 'large', m
     tickers = [row[0] for row in cur.fetchall()]
     conn.close()
     
-    logger.info(f"Using {len(tickers)} active Swedish stocks ({market})")
+    logger.info(f"Using {len(tickers)} Swedish stocks for sync ({market})")
     return tickers
 
 

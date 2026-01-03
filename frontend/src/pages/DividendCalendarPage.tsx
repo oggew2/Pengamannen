@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { queryKeys } from '../api/hooks';
 import styles from '../styles/App.module.css';
 
 interface DividendEvent {
@@ -16,29 +18,25 @@ interface Holding {
 }
 
 export default function DividendCalendarPage() {
-  const [dividends, setDividends] = useState<DividendEvent[]>([]);
   const [holdings, setHoldings] = useState<Holding[]>([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load holdings from localStorage
     const saved = localStorage.getItem('myHoldings');
     if (saved) setHoldings(JSON.parse(saved));
-
-    // Fetch upcoming dividends
-    api.get<DividendEvent[]>('/dividends/upcoming?days_ahead=90')
-      .then(setDividends)
-      .catch(() => setDividends([]))
-      .finally(() => setLoading(false));
   }, []);
+
+  const { data: dividends = [], isLoading, isError } = useQuery({
+    queryKey: queryKeys.dividends.upcoming(90),
+    queryFn: () => api.get<DividendEvent[]>('/dividends/upcoming?days_ahead=90'),
+  });
 
   const holdingTickers = new Set(holdings.map(h => h.ticker));
   const myDividends = dividends.filter(d => holdingTickers.has(d.ticker));
   const otherDividends = dividends.filter(d => !holdingTickers.has(d.ticker));
-
   const getShares = (ticker: string) => holdings.find(h => h.ticker === ticker)?.shares || 0;
 
-  if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>;
+  if (isError) return <div style={{ padding: '2rem', textAlign: 'center', color: '#ef4444' }}>Failed to load dividends</div>;
+  if (isLoading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>;
 
   return (
     <div style={{ padding: '1rem' }}>

@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Box, Text, VStack, HStack, Flex, SimpleGrid, Input, Button } from '@chakra-ui/react';
 import { Link } from 'react-router-dom';
+import { useQueries } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { useRebalanceDates, queryKeys } from '../api/hooks';
 
 const STRATEGIES = [
   { key: 'sammansatt_momentum', label: 'Momentum', color: '#4299E1', rebalance: 'quarterly', desc: 'Kvartalsvis' },
@@ -37,11 +39,9 @@ export default function MinStrategiPage() {
     const saved = localStorage.getItem(STORAGE_KEYS.strategies);
     return saved ? JSON.parse(saved) : ['sammansatt_momentum'];
   });
-  const [strategyData, setStrategyData] = useState<Record<string, any[]>>({});
   
   // Portfolio state
   const [holdings, setHoldings] = useState<Holding[]>([]);
-  const [prices, setPrices] = useState<Record<string, number>>({});
   const [importResult, setImportResult] = useState<{ holdings: { ticker: string; shares: number }[]; total_fees_paid: number } | null>(null);
   const [newTicker, setNewTicker] = useState('');
   const [newShares, setNewShares] = useState('');
@@ -74,7 +74,6 @@ export default function MinStrategiPage() {
     const saved = localStorage.getItem('executedTrades');
     return saved ? JSON.parse(saved) : { sells: [], buys: [] };
   });
-  const [rebalanceDates, setRebalanceDates] = useState<Record<string, string>>({});
 
   // Momentum banding state
   const [momentumHoldings, setMomentumHoldings] = useState<string[]>(() => {
@@ -84,50 +83,71 @@ export default function MinStrategiPage() {
   const [bandingResult, setBandingResult] = useState<BandingResult | null>(null);
   const [loadingBanding, setLoadingBanding] = useState(false);
 
-  // Load holdings
+  // TanStack Query for rebalance dates
+  const { data: rebalanceDatesData = [] } = useRebalanceDates();
+  const rebalanceDates = useMemo(() => {
+    const map: Record<string, string> = {};
+    rebalanceDatesData.forEach(d => { map[d.strategy_name] = d.next_date; });
+    return map;
+  }, [rebalanceDatesData]);
+
+  // TanStack Query for strategy rankings
+  const allStrategiesToFetch = useMemo(() => {
+    const strategies = [...selected];
+    if (settings.bandingMode && !strategies.includes('sammansatt_momentum')) {
+      strategies.push('sammansatt_momentum');
+    }
+    return strategies;
+  }, [selected, settings.bandingMode]);
+
+  const strategyQueries = useQueries({
+    queries: allStrategiesToFetch.map(key => ({
+      queryKey: queryKeys.strategies.rankings(key),
+      queryFn: () => api.getStrategyRankings(key),
+    })),
+  });
+
+  const strategyData = useMemo(() => {
+    const data: Record<string, any[]> = {};
+    allStrategiesToFetch.forEach((key, i) => {
+      if (strategyQueries[i]?.data) {
+        data[key] = strategyQueries[i].data;
+      }
+    });
+    return data;
+  }, [allStrategiesToFetch, strategyQueries]);
+
+  // TanStack Query for stock prices
+  const priceQueries = useQueries({
+    queries: holdings.map(h => ({
+      queryKey: queryKeys.stocks.prices(h.ticker, 1),
+      queryFn: () => api.getStockPrices(h.ticker, 1),
+      enabled: !!h.ticker,
+    })),
+  });
+
+  const prices = useMemo(() => {
+    const priceMap: Record<string, number> = {};
+    holdings.forEach((h, i) => {
+      const data = priceQueries[i]?.data;
+      if (data?.prices?.[0]) {
+        priceMap[h.ticker] = data.prices[0].close;
+      }
+    });
+    return priceMap;
+  }, [holdings, priceQueries]);
+
+  // Load holdings from localStorage
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.holdings);
     if (saved) setHoldings(JSON.parse(saved));
   }, []);
 
-  // Load rebalance dates
-  useEffect(() => {
-    api.getRebalanceDates().then(dates => {
-      const map: Record<string, string> = {};
-      dates.forEach(d => { map[d.strategy_name] = d.next_date; });
-      setRebalanceDates(map);
-    }).catch(() => {});
-  }, []);
-
-  // Persist selections
+  // Persist selections to localStorage
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.strategies, JSON.stringify(selected)); }, [selected]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.momentumHoldings, JSON.stringify(momentumHoldings)); }, [momentumHoldings]);
   useEffect(() => { if (investAmount) localStorage.setItem('investAmount', investAmount); }, [investAmount]);
-
-  // Fetch strategy data
-  useEffect(() => {
-    selected.forEach(key => {
-      if (!strategyData[key]) {
-        api.getStrategyRankings(key).then(data => setStrategyData(prev => ({ ...prev, [key]: data })));
-      }
-    });
-    // Also fetch momentum data if banding mode is enabled
-    if (settings.bandingMode && !strategyData['sammansatt_momentum']) {
-      api.getStrategyRankings('sammansatt_momentum').then(data => setStrategyData(prev => ({ ...prev, sammansatt_momentum: data })));
-    }
-  }, [selected, strategyData, settings.bandingMode]);
-
-  // Fetch prices
-  useEffect(() => {
-    holdings.forEach(h => {
-      if (!prices[h.ticker]) {
-        api.getStockPrices(h.ticker, 1).then(data => {
-          if (data.prices?.[0]) setPrices(prev => ({ ...prev, [h.ticker]: data.prices[0].close }));
-        }).catch(() => {});
-      }
-    });
-  }, [holdings, prices]);
 
   // Check momentum banding
   const checkMomentumBanding = async (holdingsToCheck?: string[]) => {

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { queryClient } from '../main';
 
 interface User {
   user_id: number;
@@ -89,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await fetch('/v1/auth/logout', { method: 'POST', credentials: 'include' });
+    queryClient.clear(); // Clear all cached data for multi-user support
     setUser(null);
   };
 

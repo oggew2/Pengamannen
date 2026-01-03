@@ -37,17 +37,57 @@ import re
 WARRANT_PATTERN = re.compile(r'^[A-Z]+\d+[A-Z]\d+$')  # TICKER + digits + letter + digits
 MINI_PATTERN = re.compile(r'^MINI [LS] ')  # Mini futures
 
+# Additional warrant patterns for Swedish bank warrants
+SHB_WARRANT_PATTERN = re.compile(r'.*\d[A-Z]\s*\d+SHB$')  # e.g., ABB6A 700SHB
+NDS_WARRANT_PATTERN = re.compile(r'.*\d[A-Z]\s*\d+NDS[X]?$')  # e.g., VOL6A 277NDSX
+WARRANT_SERIES_PATTERN = re.compile(r'^[A-Z]{2,5}\d[A-Z]')  # e.g., ABB6A, VOL6M (warrant series)
+
+# Bond patterns
+BOND_UNDERSCORE_PATTERN = re.compile(r'^[A-Z]+_\d+')  # e.g., FABG_125, HEBA_101GB
+
+# Index product patterns
+INDEX_PATTERNS = ['OMXS30', 'S30MIN', 'OMXSML']
+
 
 def classify_stock_type(ticker: str, name: str = '') -> str:
-    """Classify stock type based on ticker and name patterns."""
+    """Classify stock type based on ticker and name patterns.
+    
+    Classification hierarchy:
+    1. Warrants/options (bank warrants, structured products)
+    2. Index products (OMXS30 options, etc.)
+    3. ETF/Certificates (BULL, BEAR, MINI, trackers)
+    4. Bonds (underscore + number patterns)
+    5. Preference shares
+    6. Swedish Depositary Receipts (SDB)
+    7. Regular stocks (default)
+    """
     ticker_upper = ticker.upper()
     name_upper = name.upper() if name else ''
     
-    # Warrants/options (ASSAB7R200, HMB6B170, etc.)
+    # === WARRANTS/OPTIONS ===
+    # SHB bank warrants (ABB6A 700SHB, VOL6M 235SHB)
+    if ticker_upper.endswith('SHB'):
+        return 'warrant'
+    # Nordea warrants (VOL6A 277NDSX, SEB6M 129NDSX)
+    if 'NDS' in ticker_upper and re.search(r'\d[A-Z]\s*\d+NDS', ticker_upper):
+        return 'warrant'
+    # Warrant series pattern (ABB6A, VOL6M, HM 6A - letter+digit+letter at position 2-5)
+    if WARRANT_SERIES_PATTERN.match(ticker_upper) and re.search(r'\d[A-Z]\s', ticker_upper):
+        return 'warrant'
+    # Original warrant pattern (ASSAB7R200, HMB6B170)
     if WARRANT_PATTERN.match(ticker_upper):
-        return 'etf_certificate'
+        return 'warrant'
+    
+    # === INDEX PRODUCTS ===
+    if any(ticker_upper.startswith(p) for p in INDEX_PATTERNS):
+        return 'index_product'
+    
+    # === ETF/CERTIFICATES ===
     # Mini futures
     if MINI_PATTERN.match(ticker_upper):
+        return 'etf_certificate'
+    # BULL/BEAR leveraged products
+    if ticker_upper.startswith(('BULL', 'BEAR')):
         return 'etf_certificate'
     # ETF/Certificate patterns
     if any(p in ticker_upper for p in ETF_PATTERNS):
@@ -70,12 +110,20 @@ def classify_stock_type(ticker: str, name: str = '') -> str:
     # Name-based ETP detection
     if any(p.upper() in name_upper for p in ETP_NAME_PATTERNS):
         return 'etf_certificate'
-    # Preference shares
+    
+    # === BONDS ===
+    # Underscore + number pattern (FABG_125, HEBA_101GB, CAST_448)
+    if BOND_UNDERSCORE_PATTERN.match(ticker_upper):
+        return 'bond'
+    
+    # === PREFERENCE SHARES ===
     if ' PREF' in ticker_upper:
         return 'preference'
-    # Swedish Depositary Receipts
+    
+    # === SWEDISH DEPOSITARY RECEIPTS ===
     if ' SDB' in ticker_upper or ticker_upper.endswith('SDB'):
         return 'sdb'
+    
     return 'stock'
 
 

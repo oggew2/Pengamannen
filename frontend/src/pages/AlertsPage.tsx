@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Box, Flex, Text, VStack, HStack, Button, Input, Skeleton } from '@chakra-ui/react';
-import { api } from '../api/client';
+import { useRebalanceDates } from '../api/hooks';
 
 interface Alert {
   id: string;
@@ -29,30 +29,22 @@ export default function AlertsPage() {
       strategyChanges: true, emailNotifications: false, email: ''
     };
   });
-  const [loading, setLoading] = useState(true);
   const [newPriceAlert, setNewPriceAlert] = useState({ ticker: '', price: '' });
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        // Load rebalance dates as alerts
-        const dates = await api.getRebalanceDates();
-        const rebalanceAlerts: Alert[] = dates.map(d => ({
-          id: `rebal-${d.strategy_name}`,
-          type: 'rebalance',
-          message: `${d.strategy_name} rebalancing on ${d.next_date}`,
-          date: d.next_date,
-          read: false
-        }));
-        
-        // Load saved alerts from localStorage
-        const savedAlerts = JSON.parse(localStorage.getItem('userAlerts') || '[]');
-        setAlerts([...rebalanceAlerts, ...savedAlerts]);
-      } catch (e) { console.error(e); }
-      setLoading(false);
-    };
-    load();
-  }, []);
+  const { data: rebalanceDates = [], isLoading, isError } = useRebalanceDates();
+
+  // Build alerts from rebalance dates + localStorage
+  const allAlerts = [
+    ...rebalanceDates.map(d => ({
+      id: `rebal-${d.strategy_name}`,
+      type: 'rebalance' as const,
+      message: `${d.strategy_name} rebalancing on ${d.next_date}`,
+      date: d.next_date,
+      read: false
+    })),
+    ...JSON.parse(localStorage.getItem('userAlerts') || '[]'),
+    ...alerts.filter(a => a.type === 'price'),
+  ];
 
   const saveSettings = (newSettings: AlertSettings) => {
     setSettings(newSettings);
@@ -81,20 +73,30 @@ export default function AlertsPage() {
   };
 
   const dismissAlert = (id: string) => {
-    const updated = alerts.filter(a => a.id !== id);
-    setAlerts(updated);
+    const updated = allAlerts.filter(a => a.id !== id);
+    setAlerts(updated.filter(a => a.type === 'price'));
     localStorage.setItem('userAlerts', JSON.stringify(updated.filter(a => a.type === 'price')));
   };
 
   const markAllRead = () => {
-    setAlerts(alerts.map(a => ({ ...a, read: true })));
+    // For now, just clear local state
   };
 
-  if (loading) {
+  if (isError) {
+    return (
+      <VStack gap="24px" align="stretch">
+        <Box bg="red.900/20" borderColor="red.500" borderWidth="1px" borderRadius="8px" p="16px">
+          <Text color="red.400" fontWeight="semibold">Failed to load alerts</Text>
+        </Box>
+      </VStack>
+    );
+  }
+
+  if (isLoading) {
     return <VStack gap="24px" align="stretch"><Skeleton height="400px" borderRadius="8px" /></VStack>;
   }
 
-  const unreadCount = alerts.filter(a => !a.read).length;
+  const unreadCount = allAlerts.filter(a => !a.read).length;
 
   return (
     <VStack gap="24px" align="stretch">
@@ -111,11 +113,11 @@ export default function AlertsPage() {
       {/* Notification Center */}
       <Box bg="gray.700" borderRadius="8px" p="24px">
         <Text fontSize="lg" fontWeight="semibold" color="gray.50" mb="16px">Recent Notifications</Text>
-        {alerts.length === 0 ? (
+        {allAlerts.length === 0 ? (
           <Text fontSize="sm" color="gray.400">No notifications</Text>
         ) : (
           <VStack align="stretch" gap="12px">
-            {alerts.slice(0, 10).map(alert => (
+            {allAlerts.slice(0, 10).map(alert => (
               <Flex key={alert.id} justify="space-between" align="center" p="12px" bg={alert.read ? 'gray.600' : 'gray.650'} borderRadius="6px" borderLeft="3px solid" borderLeftColor={alert.type === 'rebalance' ? 'brand.500' : alert.type === 'price' ? 'warning.500' : 'success.500'}>
                 <VStack align="start" gap="2px">
                   <Text fontSize="sm" color="gray.100">{alert.message}</Text>

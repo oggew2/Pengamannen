@@ -14,10 +14,24 @@ logger = logging.getLogger(__name__)
 
 scheduler = BackgroundScheduler()
 
-def sync_job():
+# Track retry state
+_sync_retry_count = 0
+_MAX_RETRIES = 2
+
+
+def sync_job(is_retry: bool = False):
     """Job to sync all stock data (fundamentals + prices) using Avanza."""
-    logger.info("Starting scheduled Avanza sync")
+    global _sync_retry_count
+    
+    if is_retry:
+        logger.info(f"Starting RETRY sync (attempt {_sync_retry_count + 1}/{_MAX_RETRIES})")
+    else:
+        logger.info("Starting scheduled Avanza sync")
+        _sync_retry_count = 0  # Reset retry count for new scheduled sync
+    
     db = SessionLocal()
+    sync_success = False
+    
     try:
         from services.avanza_fetcher_v2 import avanza_sync
         from services.stock_validator import mark_stocks_with_fundamentals_active
@@ -29,6 +43,8 @@ def sync_job():
         
         result = asyncio.run(avanza_sync(db, region="sweden", market_cap="large"))
         logger.info(f"Sync complete: {result}")
+        sync_success = True
+        _sync_retry_count = 0  # Reset on success
         
         # Clear backtest cache - results are stale after new data
         from models import BacktestResult
@@ -74,11 +90,47 @@ def sync_job():
         
     except Exception as e:
         logger.error(f"Sync failed: {e}")
+        sync_success = False
+        
+        # Schedule retry if not already a retry and under max retries
+        if _sync_retry_count < _MAX_RETRIES:
+            _sync_retry_count += 1
+            retry_hour = get_settings().data_sync_hour + _sync_retry_count
+            logger.warning(f"Scheduling retry #{_sync_retry_count} at hour {retry_hour}")
+            
+            # Schedule one-time retry job
+            scheduler.add_job(
+                lambda: sync_job(is_retry=True),
+                CronTrigger(hour=retry_hour, minute=0),
+                id=f"sync_retry_{_sync_retry_count}",
+                replace_existing=True,
+                max_instances=1
+            )
+        else:
+            # All retries exhausted - send critical alert
+            logger.critical(f"All sync retries exhausted. Sending alert.")
+            try:
+                settings = get_settings()
+                if settings.alert_email:
+                    from services.alerting import send_alert_email
+                    send_alert_email(
+                        [{'severity': 'CRITICAL', 'message': f'Data sync failed after {_MAX_RETRIES} retries: {e}'}],
+                        {
+                            'alert_email': settings.alert_email,
+                            'smtp_host': settings.smtp_host,
+                            'smtp_port': settings.smtp_port,
+                            'smtp_user': settings.smtp_user,
+                            'smtp_password': settings.smtp_password,
+                            'smtp_from': settings.smtp_from
+                        }
+                    )
+            except Exception as alert_err:
+                logger.error(f"Failed to send sync failure alert: {alert_err}")
     finally:
         # CRITICAL FIX: Ensure database session is properly closed
         try:
             db.close()
-        except:
+        except Exception:
             pass
         
         # Additional cleanup
@@ -86,20 +138,36 @@ def sync_job():
         gc.collect()
 
 def scan_new_stocks_job():
-    """Job to scan for new stocks - runs every 2 weeks at night."""
+    """Job to scan for new stocks - runs every 2 weeks at night.
+    
+    Also reclassifies existing stocks to catch any misclassified warrants/bonds.
+    """
     logger.info("Starting scheduled stock scan for new listings")
     try:
-        from services.stock_scanner import scan_for_new_stocks, get_scan_status
+        from services.stock_scanner import scan_for_new_stocks, classify_stock_type
         import sqlite3
         
-        # Get current max ID
         conn = sqlite3.connect('app.db')
         cur = conn.cursor()
+        
+        # Step 1: Reclassify existing stocks (fast - just DB update)
+        logger.info("Reclassifying existing stocks...")
+        cur.execute("SELECT ticker, name FROM stocks WHERE stock_type = 'stock'")
+        stocks = cur.fetchall()
+        reclassified = 0
+        for ticker, name in stocks:
+            new_type = classify_stock_type(ticker, name or '')
+            if new_type != 'stock':
+                cur.execute("UPDATE stocks SET stock_type = ? WHERE ticker = ?", (new_type, ticker))
+                reclassified += 1
+        conn.commit()
+        logger.info(f"Reclassified {reclassified} stocks")
+        
+        # Step 2: Scan for new stocks (incremental - new IDs only)
         cur.execute('SELECT MAX(CAST(avanza_id AS INTEGER)) FROM stocks WHERE avanza_id IS NOT NULL')
         current_max = cur.fetchone()[0] or 2250000
         conn.close()
         
-        # Scan from current max to max + 500k
         start_id = current_max + 1
         end_id = current_max + 500000
         

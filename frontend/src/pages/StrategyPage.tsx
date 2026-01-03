@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Box, Flex, Text, Button, HStack, VStack, Skeleton } from '@chakra-ui/react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { useQueries } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { useStrategies, useStrategyRankings, useBacktest, queryKeys } from '../api/hooks';
 import { Pagination } from '../components/Pagination';
 import { DataIntegrityBanner } from '../components/DataIntegrityBanner';
-import type { RankedStock, StrategyMeta } from '../types';
+import type { StrategyMeta } from '../types';
 
 const STRATEGY_INFO: Record<string, { description: string; rules: string[] }> = {
   sammansatt_momentum: {
@@ -28,12 +30,6 @@ const STRATEGY_INFO: Record<string, { description: string; rules: string[] }> = 
 
 export function StrategyPage() {
   const { type } = useParams<{ type: string }>();
-  const [stocks, setStocks] = useState<RankedStock[]>([]);
-  const [strategy, setStrategy] = useState<StrategyMeta | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [chartData, setChartData] = useState<Array<{ date: string; value: number }>>([]);
-  const [stockDetails, setStockDetails] = useState<Record<string, { return_1m: number | null; return_3m: number | null; return_6m: number | null }>>({});
-  const [backtestResult, setBacktestResult] = useState<{ total_return_pct: number; sharpe: number; max_drawdown_pct: number } | null>(null);
   const [rankingsPage, setRankingsPage] = useState(1);
 
   const apiName = type === 'momentum' ? 'sammansatt_momentum' 
@@ -41,56 +37,71 @@ export function StrategyPage() {
     : type === 'dividend' ? 'trendande_utdelning'
     : type === 'quality' ? 'trendande_kvalitet' : '';
 
-  useEffect(() => {
-    if (!apiName) return;
-    setLoading(true);
-    
-    // Calculate date range for backtest (1 year)
-    const endDate = new Date().toISOString().split('T')[0];
-    const startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    
-    Promise.all([
-      api.getStrategyRankings(apiName),
-      api.getStrategies(),
-      api.runBacktest({ strategy_name: apiName, start_date: startDate, end_date: endDate }).catch(() => null)
-    ]).then(async ([rankings, strategies, backtest]) => {
-      const top40 = rankings.slice(0, 40);
-      setStocks(top40);
-      setStrategy(strategies.find(s => s.name === apiName) || null);
-      
-      // Fetch stock details for returns (ALL stocks, not just top 10)
-      const details: Record<string, { return_1m: number | null; return_3m: number | null; return_6m: number | null }> = {};
-      await Promise.all(top40.map(async (stock) => {
-        try {
-          const detail = await api.getStock(stock.ticker);
-          details[stock.ticker] = {
-            return_1m: detail.return_1m,
-            return_3m: detail.return_3m,
-            return_6m: detail.return_6m,
-          };
-        } catch {}
-      }));
-      setStockDetails(details);
-      
-      if (backtest?.portfolio_values && backtest.portfolio_values.length > 0) {
-        setBacktestResult({
-          total_return_pct: backtest.total_return_pct,
-          sharpe: backtest.sharpe,
-          max_drawdown_pct: backtest.max_drawdown_pct,
-        });
-        const startDateObj = new Date(backtest.start_date);
-        setChartData(backtest.portfolio_values.map((v: number, i: number) => ({ 
-          date: new Date(startDateObj.getTime() + i * 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], 
-          value: ((v / backtest.portfolio_values![0]) - 1) * 100
-        })));
+  // TanStack Query hooks - select top 40 to reduce re-renders
+  const { data: stocks = [], isLoading: rankingsLoading, isError: rankingsError } = useStrategyRankings(apiName, {
+    select: (data) => data.slice(0, 40),
+  });
+  const { data: strategies = [] } = useStrategies();
+  
+  // Backtest params
+  const endDate = new Date().toISOString().split('T')[0];
+  const startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const { data: backtest } = useBacktest({ strategy_name: apiName, start_date: startDate, end_date: endDate }, !!apiName);
+
+  const strategy = strategies.find((s: StrategyMeta) => s.name === apiName) || null;
+
+  // Fetch stock details for all 40 stocks
+  const stockQueries = useQueries({
+    queries: stocks.map(stock => ({
+      queryKey: queryKeys.stocks.detail(stock.ticker),
+      queryFn: () => api.getStock(stock.ticker),
+      enabled: !!stock.ticker,
+    })),
+  });
+
+  // Build stock details map
+  const stockDetails = useMemo(() => {
+    const details: Record<string, { return_1m: number | null; return_3m: number | null; return_6m: number | null }> = {};
+    stocks.forEach((stock, i) => {
+      const data = stockQueries[i]?.data;
+      if (data) {
+        details[stock.ticker] = { return_1m: data.return_1m, return_3m: data.return_3m, return_6m: data.return_6m };
       }
-    }).catch(() => {}).finally(() => setLoading(false));
-  }, [apiName]);
+    });
+    return details;
+  }, [stocks, stockQueries]);
+
+  // Build chart data from backtest
+  const chartData = useMemo(() => {
+    if (!backtest?.portfolio_values?.length) return [];
+    const startDateObj = new Date(backtest.start_date);
+    return backtest.portfolio_values.map((v: number, i: number) => ({ 
+      date: new Date(startDateObj.getTime() + i * 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], 
+      value: ((v / backtest.portfolio_values![0]) - 1) * 100
+    }));
+  }, [backtest]);
+
+  const backtestResult = backtest ? {
+    total_return_pct: backtest.total_return_pct,
+    sharpe: backtest.sharpe,
+    max_drawdown_pct: backtest.max_drawdown_pct,
+  } : null;
 
   const info = STRATEGY_INFO[apiName];
   const formatPct = (v: number | null) => v != null ? `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%` : '—';
 
-  if (loading) {
+  if (rankingsError) {
+    return (
+      <VStack gap="24px" align="stretch">
+        <Box bg="red.900/20" borderColor="red.500" borderWidth="1px" borderRadius="8px" p="16px">
+          <Text color="red.400" fontWeight="semibold">Failed to load strategy rankings</Text>
+          <Text color="gray.300" fontSize="sm">Please check your connection and try again.</Text>
+        </Box>
+      </VStack>
+    );
+  }
+
+  if (rankingsLoading) {
     return (
       <VStack gap="24px" align="stretch">
         <Skeleton height="200px" borderRadius="8px" />

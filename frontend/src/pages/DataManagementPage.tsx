@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Box, Flex, Text, VStack, HStack, Button } from '@chakra-ui/react';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { queryKeys, useSyncData, useScanStocks, useSyncPrices, type ScanResult } from '../api/hooks';
 
 interface SyncStatus {
   stocks: number;
@@ -24,9 +26,101 @@ interface ScanRange {
   stocks_found?: number;
 }
 
-interface ScanResult {
-  new_stocks_found: number;
-  new_stocks: Array<{ ticker: string; name: string }>;
+interface SyncHistoryEntry {
+  id: number;
+  timestamp: string;
+  sync_type: string;
+  success: boolean;
+  duration_seconds: number | null;
+  stocks_updated: number;
+  prices_updated: number;
+  error_message: string | null;
+}
+
+interface SyncHistoryResponse {
+  history: SyncHistoryEntry[];
+  last_successful_sync: string | null;
+  next_scheduled_sync: string;
+  sync_hour_utc: number;
+  total_syncs: number;
+  successful_syncs: number;
+  failed_syncs: number;
+}
+
+function SyncStatusPanel() {
+  const { data: history } = useQuery({
+    queryKey: queryKeys.data.syncHistory(7),
+    queryFn: () => api.get<SyncHistoryResponse>('/data/sync-history?days=7'),
+    staleTime: 60 * 1000, // 1 min
+  });
+
+  if (!history) return null;
+
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString('sv-SE') + ' ' + d.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <Box bg="gray.800" borderRadius="lg" p="6">
+      <Flex justify="space-between" align="center" mb="4">
+        <Text fontSize="lg" fontWeight="semibold" color="white">Sync History (7 days)</Text>
+        <HStack gap="4">
+          <Text fontSize="sm" color="green.400">✓ {history.successful_syncs}</Text>
+          {history.failed_syncs > 0 && <Text fontSize="sm" color="red.400">✗ {history.failed_syncs}</Text>}
+        </HStack>
+      </Flex>
+
+      <VStack align="stretch" gap="2" mb="4">
+        <Flex justify="space-between" p="2" bg="gray.700" borderRadius="md">
+          <Text color="gray.400" fontSize="sm">Last successful sync</Text>
+          <Text color="green.400" fontSize="sm">
+            {history.last_successful_sync ? formatDate(history.last_successful_sync) : 'Never'}
+          </Text>
+        </Flex>
+        <Flex justify="space-between" p="2" bg="gray.700" borderRadius="md">
+          <Text color="gray.400" fontSize="sm">Next scheduled sync</Text>
+          <Text color="blue.400" fontSize="sm">{formatDate(history.next_scheduled_sync)}</Text>
+        </Flex>
+      </VStack>
+
+      {history.history.length > 0 && (
+        <VStack align="stretch" gap="1">
+          <Text fontSize="sm" color="gray.400" mb="1">Recent syncs</Text>
+          {history.history.slice(0, 5).map((entry) => (
+            <Flex 
+              key={entry.id} 
+              justify="space-between" 
+              p="2" 
+              bg={entry.success ? 'gray.750' : 'red.900'} 
+              borderRadius="md"
+              borderLeftWidth="3px"
+              borderColor={entry.success ? 'green.500' : 'red.500'}
+            >
+              <HStack gap="3">
+                <Text color={entry.success ? 'green.400' : 'red.400'} fontSize="sm">
+                  {entry.success ? '✓' : '✗'}
+                </Text>
+                <Text color="gray.300" fontSize="sm">{formatDate(entry.timestamp)}</Text>
+              </HStack>
+              <HStack gap="4">
+                {entry.duration_seconds && (
+                  <Text color="gray.500" fontSize="xs">{entry.duration_seconds.toFixed(0)}s</Text>
+                )}
+                <Text color="gray.400" fontSize="xs">{entry.stocks_updated} stocks</Text>
+              </HStack>
+            </Flex>
+          ))}
+        </VStack>
+      )}
+
+      {history.history.length === 0 && (
+        <Text color="gray.500" fontSize="sm" textAlign="center" py="4">
+          No sync history available
+        </Text>
+      )}
+    </Box>
+  );
 }
 
 export default function DataManagementPage() {
@@ -34,13 +128,15 @@ export default function DataManagementPage() {
   const [stockUniverse, setStockUniverse] = useState<StockUniverse | null>(null);
   const [scanRanges, setScanRanges] = useState<ScanRange[]>([]);
   const [selectedRanges, setSelectedRanges] = useState<Set<string>>(new Set());
-  const [syncing, setSyncing] = useState(false);
-  const [scanning, setScanning] = useState(false);
-  const [syncingPrices, setSyncingPrices] = useState(false);
   const [message, setMessage] = useState('');
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [threads, setThreads] = useState(10);
   const [priceYears, setPriceYears] = useState(10);
+
+  // Mutation hooks
+  const syncMutation = useSyncData();
+  const scanMutation = useScanStocks();
+  const priceSyncMutation = useSyncPrices();
 
   useEffect(() => {
     loadData();
@@ -61,39 +157,32 @@ export default function DataManagementPage() {
     }
   };
 
-  const triggerSync = async () => {
-    setSyncing(true);
+  const triggerSync = () => {
     setMessage('Syncing...');
-    try {
-      await api.post('/data/sync-now?region=sweden&market_cap=large&method=avanza', {});
-      setMessage('Sync complete!');
-      loadData();
-    } catch {
-      setMessage('Sync failed');
-    } finally {
-      setSyncing(false);
-    }
+    syncMutation.mutate(undefined, {
+      onSuccess: () => {
+        setMessage('Sync complete!');
+        loadData();
+      },
+      onError: () => setMessage('Sync failed'),
+    });
   };
 
-  const scanForStocks = async () => {
-    setScanning(true);
+  const scanForStocks = () => {
     setScanResult(null);
     setMessage('Scanning...');
-    try {
-      // Build ranges from selection or use defaults
-      const ranges = selectedRanges.size > 0 
-        ? scanRanges.filter(r => selectedRanges.has(`${r.start}-${r.end}`)).map(r => ({ start: r.start, end: r.end }))
-        : undefined;
-      
-      const result = await api.post<ScanResult>(`/data/stocks/scan?threads=${threads}`, { ranges });
-      setScanResult(result);
-      setMessage(`Found ${result.new_stocks_found} new stocks`);
-      loadData();
-    } catch {
-      setMessage('Scan failed');
-    } finally {
-      setScanning(false);
-    }
+    const ranges = selectedRanges.size > 0 
+      ? scanRanges.filter(r => selectedRanges.has(`${r.start}-${r.end}`)).map(r => ({ start: r.start, end: r.end }))
+      : undefined;
+    
+    scanMutation.mutate({ threads, ranges }, {
+      onSuccess: (result) => {
+        setScanResult(result);
+        setMessage(`Found ${result.new_stocks_found} new stocks`);
+        loadData();
+      },
+      onError: () => setMessage('Scan failed'),
+    });
   };
 
   const toggleRange = (key: string) => {
@@ -102,20 +191,15 @@ export default function DataManagementPage() {
     setSelectedRanges(s);
   };
 
-  const syncExtendedPrices = async () => {
-    setSyncingPrices(true);
+  const syncExtendedPrices = () => {
     setMessage(`Syncing ${priceYears} years of prices...`);
-    try {
-      const result = await api.post<{ stocks_synced: number; years: number }>(
-        `/data/sync-prices-extended?threads=3&years=${priceYears}`, {}
-      );
-      setMessage(`Synced ${result.stocks_synced} stocks with ${priceYears} years of data`);
-      loadData();
-    } catch {
-      setMessage('Extended price sync failed');
-    } finally {
-      setSyncingPrices(false);
-    }
+    priceSyncMutation.mutate(priceYears, {
+      onSuccess: (result) => {
+        setMessage(`Synced ${result.stocks_synced} stocks with ${priceYears} years of data`);
+        loadData();
+      },
+      onError: () => setMessage('Extended price sync failed'),
+    });
   };
 
   return (
@@ -128,12 +212,15 @@ export default function DataManagementPage() {
             colorPalette="blue" 
             size="sm" 
             onClick={triggerSync} 
-            loading={syncing}
+            loading={syncMutation.isPending}
           >
             Sync Now
           </Button>
         </HStack>
       </Flex>
+
+      {/* Sync History Panel */}
+      <SyncStatusPanel />
 
       {/* Data Status */}
       <Box bg="gray.800" borderRadius="lg" p="6">
@@ -170,7 +257,7 @@ export default function DataManagementPage() {
             >
               {[5, 10, 15, 20].map(n => <option key={n} value={n}>{n} threads</option>)}
             </select>
-            <Button size="sm" colorPalette="blue" onClick={scanForStocks} loading={scanning}>
+            <Button size="sm" colorPalette="blue" onClick={scanForStocks} loading={scanMutation.isPending}>
               Scan All
             </Button>
           </HStack>
@@ -250,7 +337,7 @@ export default function DataManagementPage() {
             >
               {[5, 10, 15, 20].map(n => <option key={n} value={n}>{n} years</option>)}
             </select>
-            <Button size="sm" colorPalette="orange" onClick={syncExtendedPrices} loading={syncingPrices}>
+            <Button size="sm" colorPalette="orange" onClick={syncExtendedPrices} loading={priceSyncMutation.isPending}>
               Sync Extended
             </Button>
           </HStack>

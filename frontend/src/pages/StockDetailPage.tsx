@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Box, Flex, Text, Button, HStack, VStack, Skeleton, Input } from '@chakra-ui/react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { useQueries } from '@tanstack/react-query';
 import { api } from '../api/client';
-import type { StockDetail } from '../types';
+import { useStock, useStockPrices, useStrategies, queryKeys } from '../api/hooks';
 
 type Period = '1D' | '5D' | '1M' | '3M' | '1Y' | 'ALL';
 
@@ -15,50 +16,49 @@ interface UserHolding {
 
 export default function StockDetailPage() {
   const { ticker } = useParams<{ ticker: string }>();
-  const [stock, setStock] = useState<StockDetail | null>(null);
-  const [prices, setPrices] = useState<{ date: string; close: number }[]>([]);
-  const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>('1Y');
   const [priceAlert, setPriceAlert] = useState('');
   const [userHolding, setUserHolding] = useState<UserHolding | null>(null);
-  const [inStrategies, setInStrategies] = useState<string[]>([]);
 
+  // TanStack Query hooks
+  const { data: stock, isLoading: stockLoading, isError: stockError } = useStock(ticker || '');
+  const days = { '1D': 1, '5D': 5, '1M': 30, '3M': 90, '1Y': 365, 'ALL': 1825 }[period];
+  const { data: priceData, isLoading: pricesLoading } = useStockPrices(ticker || '', days);
+  const { data: strategies = [] } = useStrategies();
+
+  // Fetch top 10 for each strategy to check if stock is in any
+  const strategyTop10Queries = useQueries({
+    queries: strategies.map(s => ({
+      queryKey: [...queryKeys.strategies.rankings(s.name), 'top10'],
+      queryFn: () => api.getStrategyTop10(s.name),
+      enabled: !!s.name,
+    })),
+  });
+
+  const inStrategies = useMemo(() => {
+    const found: string[] = [];
+    strategies.forEach((s, i) => {
+      const rankings = strategyTop10Queries[i]?.data;
+      if (rankings?.some(r => r.ticker === ticker || r.ticker.replace('.ST', '') === ticker?.replace('.ST', ''))) {
+        found.push(s.display_name);
+      }
+    });
+    return found;
+  }, [strategies, strategyTop10Queries, ticker]);
+
+  const prices = priceData?.prices || [];
+  const loading = stockLoading || pricesLoading;
+
+  // Load user's holding from localStorage
   useEffect(() => {
     if (!ticker) return;
-    // Load user's holding from localStorage
     const saved = localStorage.getItem('myHoldings');
     if (saved) {
       const holdings: UserHolding[] = JSON.parse(saved);
       const found = holdings.find(h => h.ticker === ticker || h.ticker === ticker.replace('.ST', ''));
       if (found) setUserHolding(found);
     }
-    // Check which strategies contain this stock
-    api.getStrategies().then(async (strategies) => {
-      const found: string[] = [];
-      for (const s of strategies) {
-        try {
-          const rankings = await api.getStrategyTop10(s.name);
-          if (rankings.some(r => r.ticker === ticker || r.ticker.replace('.ST', '') === ticker?.replace('.ST', ''))) {
-            found.push(s.display_name);
-          }
-        } catch {}
-      }
-      setInStrategies(found);
-    });
   }, [ticker]);
-
-  useEffect(() => {
-    if (!ticker) return;
-    setLoading(true);
-    const days = { '1D': 1, '5D': 5, '1M': 30, '3M': 90, '1Y': 365, 'ALL': 1825 }[period];
-    Promise.all([
-      api.getStock(ticker),
-      api.getStockPrices(ticker, days).catch(() => ({ prices: [] }))
-    ]).then(([stockData, priceData]) => {
-      setStock(stockData);
-      setPrices(priceData.prices || []);
-    }).catch(() => {}).finally(() => setLoading(false));
-  }, [ticker, period]);
 
   const currentPrice = prices.length > 0 ? prices[prices.length - 1].close : 0;
   const prevPrice = prices.length > 1 ? prices[0].close : currentPrice;
@@ -68,6 +68,17 @@ export default function StockDetailPage() {
   const formatPct = (v: number | null) => v != null ? `${v >= 0 ? '+' : ''}${v.toFixed(1)}%` : '—';
   const formatNum = (v: number | null) => v != null ? v.toFixed(2) : '—';
   const formatSEK = (v: number) => new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', minimumFractionDigits: 0 }).format(v);
+
+  if (stockError) {
+    return (
+      <VStack gap="24px" align="stretch">
+        <Box bg="red.900/20" borderColor="red.500" borderWidth="1px" borderRadius="8px" p="16px">
+          <Text color="red.400" fontWeight="semibold">Failed to load stock data</Text>
+          <Text color="gray.300" fontSize="sm">Stock "{ticker}" could not be loaded.</Text>
+        </Box>
+      </VStack>
+    );
+  }
 
   if (loading) {
     return (
