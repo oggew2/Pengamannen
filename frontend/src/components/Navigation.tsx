@@ -44,11 +44,6 @@ const StrategyIcon = () => (
     <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18M10 4v18"/>
   </svg>
 );
-const PortfolioIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
-  </svg>
-);
 const AnalysisIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <path d="M21 21H3V3"/><path d="M18 9l-5 5-4-4-3 3"/>
@@ -83,13 +78,12 @@ const RocketIcon = () => (
 const navLinks = [
   { to: '/', label: 'Dashboard', icon: <HomeIcon /> },
   { to: '/getting-started', label: 'Kom igång', icon: <RocketIcon /> },
+  { to: '/rebalancing', label: 'Min Strategi', icon: <StrategyIcon /> },
   { to: '/strategies/momentum', label: 'Momentum', icon: <TrendingIcon /> },
   { to: '/strategies/value', label: 'Värde', icon: <ValueIcon /> },
   { to: '/strategies/dividend', label: 'Utdelning', icon: <DividendIcon /> },
   { to: '/strategies/quality', label: 'Kvalitet', icon: <QualityIcon /> },
-  { to: '/rebalancing', label: 'Min Strategi', icon: <StrategyIcon /> },
-  { to: '/portfolio/my', label: 'Portfölj', icon: <PortfolioIcon /> },
-  { to: '/portfolio/analysis', label: 'Analys', icon: <AnalysisIcon /> },
+  { to: '/backtesting/historical', label: 'Backtest', icon: <AnalysisIcon /> },
   { to: '/learn', label: 'Lär dig mer', icon: <LearnIcon /> },
   { to: '/data', label: 'Data', icon: <DataIcon /> },
   { to: '/alerts', label: 'Notiser', icon: <BellIcon /> },
@@ -98,8 +92,8 @@ const navLinks = [
 
 const mobileLinks = [
   { to: '/', label: 'Hem', icon: <HomeIcon /> },
+  { to: '/rebalancing', label: 'Min Strategi', icon: <StrategyIcon /> },
   { to: '/strategies/momentum', label: 'Strategier', icon: <TrendingIcon /> },
-  { to: '/rebalancing', label: 'Rebalans', icon: <StrategyIcon /> },
   { to: '/alerts', label: 'Notiser', icon: <BellIcon /> },
   { to: '/settings', label: 'Mer', icon: <SettingsIcon /> },
 ];

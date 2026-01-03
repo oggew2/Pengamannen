@@ -308,8 +308,57 @@ def get_all_users(request: Request, db: Session = Depends(get_db)):
             "invited_by": u.invited_by
         } for u in users]
     }
+
+@v1_router.delete("/admin/users/{user_id}")
+def delete_user(request: Request, user_id: int, db: Session = Depends(get_db)):
+    """Delete a user (admin only)."""
+    from services.auth import require_admin
+    from models import User
+    admin = require_admin(request, db)
+    if admin.id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    db.delete(user)
     db.commit()
-    return {"market_filter": user.market_filter}
+    return {"status": "deleted", "id": user_id}
+
+
+@v1_router.post("/admin/users/{user_id}/make-admin")
+def make_user_admin(request: Request, user_id: int, db: Session = Depends(get_db)):
+    """Make a user an admin (admin only)."""
+    from services.auth import require_admin
+    from models import User
+    require_admin(request, db)
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.is_admin:
+        return {"status": "already_admin", "id": user_id}
+    user.is_admin = True
+    # Give them an invite code when they become admin
+    if not user.invite_code:
+        user.invite_code = User.generate_invite_code()
+    db.commit()
+    return {"status": "promoted", "id": user_id, "invite_code": user.invite_code}
+
+
+@v1_router.post("/admin/users/{user_id}/remove-admin")
+def remove_user_admin(request: Request, user_id: int, db: Session = Depends(get_db)):
+    """Remove admin status from a user (admin only)."""
+    from services.auth import require_admin
+    from models import User
+    admin = require_admin(request, db)
+    if admin.id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot remove your own admin status")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.is_admin = False
+    user.invite_code = None  # Remove invite code when no longer admin
+    db.commit()
+    return {"status": "demoted", "id": user_id}
 
 
 # Health

@@ -292,10 +292,10 @@ export function StrategyPage() {
 
       {/* Actions */}
       <HStack gap="8px">
-        <Link to="/compare">
-          <Button size="sm" variant="outline" borderColor="brand.500" color="brand.500">Compare Strategies</Button>
+        <Link to="/rebalancing">
+          <Button size="sm" variant="outline" borderColor="brand.500" color="brand.500">Min Strategi</Button>
         </Link>
-        <Link to="/backtesting">
+        <Link to="/backtesting/historical">
           <Button size="sm" variant="outline" borderColor="brand.500" color="brand.500">Run Backtest</Button>
         </Link>
       </HStack>

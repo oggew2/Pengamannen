@@ -12,7 +12,7 @@ COOKIE_MAX_AGE = 30 * 24 * 60 * 60  # 30 days
 
 
 def register_user(db: Session, email: str, password: str, invite_code: str, name: str = None) -> User:
-    """Register a new user with invite code."""
+    """Register a new user with invite code. Only admins get invite codes."""
     if not email or not email.strip():
         raise HTTPException(status_code=400, detail="Email is required")
     if not password or len(password) < 6:
@@ -24,8 +24,8 @@ def register_user(db: Session, email: str, password: str, invite_code: str, name
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Validate invite code
-    inviter = db.query(User).filter(User.invite_code == invite_code).first()
+    # Validate invite code - must be from an admin
+    inviter = db.query(User).filter(User.invite_code == invite_code, User.is_admin == True).first()
     if not inviter:
         raise HTTPException(status_code=400, detail="Invalid invite code")
     
@@ -34,7 +34,7 @@ def register_user(db: Session, email: str, password: str, invite_code: str, name
         password_hash=User.hash_password(password),
         name=name or email.split('@')[0],
         invited_by=inviter.id,
-        invite_code=User.generate_invite_code()  # New user gets their own invite code
+        invite_code=None  # Regular users don't get invite codes
     )
     db.add(user)
     db.commit()

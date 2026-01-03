@@ -33,7 +33,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <Text color="gray.600">
               Ett oväntat fel uppstod. Försök ladda om sidan.
             </Text>
-            <Button onClick={() => window.location.reload()} colorScheme="blue">
+            <Button onClick={() => window.location.reload()} colorPalette="blue">
               Ladda om
             </Button>
           </VStack>

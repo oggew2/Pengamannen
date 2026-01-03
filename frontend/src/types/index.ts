@@ -73,14 +73,3 @@ export interface BacktestResult {
   max_drawdown_pct: number;
   portfolio_values?: number[];
 }
-
-export interface CombinerRequest {
-  strategies: string[];
-  weights?: number[];
-}
-
-export interface SavedCombination {
-  name: string;
-  weights: Record<string, number>;
-  createdAt: string;
-}

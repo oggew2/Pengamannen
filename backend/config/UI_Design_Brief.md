@@ -34,7 +34,7 @@ Important: No shortcuts or mock data. dont remove existing functionality - if it
 ## Visual Vision & Design Principles
 
 ### Overall Aesthetic
-Create a **modern, minimalist fintech dashboard** inspired by 2025 design trends:
+Create a **modern, minimalist fintech dashboard** inspired by 2026 design trends:
 - Clean, spacious layouts (Robinhood + Betterment aesthetic)
 - Dark mode as primary (reduce eye strain, professional look)
 - Data visualization-first (charts prioritized over raw numbers)
@@ -48,6 +48,58 @@ Create a **modern, minimalist fintech dashboard** inspired by 2025 design trends
 - **Clarity**: Users understand their portfolio at a glance
 - **Responsiveness**: Real-time feedback, smooth animations
 - **Accessibility**: WCAG 2.1 AA compliant, keyboard navigation supported
+
+---
+
+## 2026 Calm Design Principles
+
+### Core Philosophy
+Finance is inherently stressful. Our UI reduces anxiety by making every movement meaningful. Users should feel *safe*, not impressed.
+
+### Principles
+
+#### 1. One Clear Action Per View
+- Each screen has ONE primary button/action
+- Secondary actions are visually subdued (ghost/outline buttons)
+- Users never wonder "what should I do here?"
+- Example: Rebalancing page → Primary action is "Generera affärer"
+
+#### 2. Narrative Metrics
+- Never show a number without context
+- Bad: `+12.3%`
+- Good: `+12.3% (50 230 kr i vinst i år)`
+- Include human-readable explanations next to key figures
+
+#### 3. Progressive Disclosure
+- Show summary first, details on demand
+- Use expandable sections for complex data
+- Reduce cognitive load on initial view
+- Example: Show "4 ändringar" collapsed, expand to see individual stocks
+
+#### 4. Calm Motion
+- Motion confirms actions, never entertains
+- Subtle transitions (200ms max duration)
+- No bouncing, no attention-grabbing animations
+- Preferred: fade, slide, scale (subtle)
+- Avoid: bounce, shake, pulse (distracting)
+
+#### 5. Visual Respiration
+- Generous whitespace between decision points
+- Cards have 24px+ padding
+- Sections separated by 32px+ gaps
+- One piece of information per "breath"
+
+#### 6. Micro-Confidence
+- Small visual confirmations after every action
+- Checkmarks, subtle color changes, brief text feedback
+- Example: "Sparad ✓" appears briefly after saving settings
+- Builds trust through consistent feedback
+
+#### 7. Trust Typography
+- Typography whispers security, doesn't shout
+- Headings: semibold (600), not bold (700+)
+- Body: regular (400), comfortable line-height (1.5)
+- Numbers: monospace for alignment, medium weight (500)
 
 ---
 
@@ -830,6 +882,146 @@ Resting         Hover           Active
 
 ---
 
+### Tab-Based Navigation Pattern
+
+**Purpose**: Organize complex workflows into digestible sections  
+**Usage**: Pages with multiple related but distinct functions (e.g., Min Strategi)
+
+**Layout**:
+```
+┌────────────────────────────────────────────────┐
+│ Page Title                                     │
+├────────────────────────────────────────────────┤
+│ [Tab 1] [Tab 2] [Tab 3]                       │ ← Horizontal tabs
+├────────────────────────────────────────────────┤
+│                                                │
+│  Tab Content Area                              │
+│  (changes based on selected tab)               │
+│                                                │
+└────────────────────────────────────────────────┘
+```
+
+**Tab Properties**:
+- Height: 48px
+- Padding: 16px horizontal
+- Active: Bottom border 2px `#00b4d8`, text `#f5f5f5`
+- Inactive: No border, text `#9ca3af`
+- Hover: text `#d1d5db`
+- Transition: 150ms
+
+**Mobile**: Tabs become horizontally scrollable or dropdown selector
+
+---
+
+### CSV Upload Flow Pattern
+
+**Purpose**: Import portfolio data from broker exports  
+**Usage**: Portfolio import, holdings sync
+
+**Layout**:
+```
+┌────────────────────────────────────────────────┐
+│ Importera Portfölj                             │
+├────────────────────────────────────────────────┤
+│ ┌────────────────────────────────────────────┐ │
+│ │                                            │ │
+│ │     📁 Dra och släpp CSV-fil här          │ │
+│ │         eller klicka för att välja        │ │
+│ │                                            │ │
+│ │     Stöder: Avanza, Nordnet CSV-export    │ │
+│ └────────────────────────────────────────────┘ │
+│                                                │
+│ Efter upload:                                  │
+│ ┌────────────────────────────────────────────┐ │
+│ │ ✓ 12 innehav hittade                       │ │
+│ │                                            │ │
+│ │ Ticker  │ Antal │ Värde                   │ │
+│ │ SAAB    │ 50    │ 9 250 kr                │ │
+│ │ ADD     │ 30    │ 4 275 kr                │ │
+│ │ ...                                        │ │
+│ │                                            │ │
+│ │ [Avbryt]              [Importera innehav] │ │
+│ └────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────┘
+```
+
+**States**:
+- Empty: Dashed border, muted text, upload icon
+- Drag over: Solid border `#00b4d8`, background highlight
+- Processing: Skeleton loader
+- Preview: Table with parsed data, confirm/cancel buttons
+- Error: Red border, error message, retry option
+
+---
+
+### Banding/Tolerance Settings Pattern
+
+**Purpose**: Configure rebalancing thresholds  
+**Usage**: When to trigger rebalancing based on drift from target
+
+**Layout**:
+```
+┌────────────────────────────────────────────────┐
+│ Rebalanseringströsklar                         │
+│                                                │
+│ Toleransband: 20%                              │
+│ ├──────────●──────────────────────────────┤   │
+│ 5%        20%                            50%   │
+│                                                │
+│ 💡 Rebalansera endast när en position         │
+│    avviker mer än 20% från målvikten.         │
+│                                                │
+│ Exempel med 10% målvikt per aktie:            │
+│ • Sälj om position > 12% (10% + 20%)          │
+│ • Köp om position < 8% (10% - 20%)            │
+└────────────────────────────────────────────────┘
+```
+
+**Components**:
+- Slider: Range 5-50%, step 5%
+- Input: Numeric input synced with slider
+- Explanation: Always show human-readable impact
+- Example: Concrete numbers based on current settings
+
+---
+
+### Timing/Scheduling Configuration Pattern
+
+**Purpose**: Set rebalancing frequency and reminders  
+**Usage**: When to check and execute rebalancing
+
+**Layout**:
+```
+┌────────────────────────────────────────────────┐
+│ Rebalanseringsschema                           │
+│                                                │
+│ Frekvens:                                      │
+│ ○ Kvartalsvis (rekommenderat för Momentum)    │
+│ ● Årsvis (rekommenderat för Trendande)        │
+│ ○ Anpassad                                     │
+│                                                │
+│ Nästa rebalansering:                          │
+│ 📅 Mars 2026                    [Ändra datum] │
+│                                                │
+│ Påminnelser:                                   │
+│ ☑️ 1 vecka innan                              │
+│ ☑️ Dagen innan                                │
+│ ☐ På rebalanseringsdagen                      │
+│                                                │
+│ 💡 Rekommendation:                            │
+│    Sammansatt Momentum: Kvartalsvis           │
+│    Trendande strategier: Årsvis               │
+└────────────────────────────────────────────────┘
+```
+
+**Components**:
+- Radio buttons for frequency
+- Date picker for next date
+- Checkboxes for reminders
+- Info box with recommendations
+
+---
+
 ### Generic Page Template
 
 **For any unknown/future pages not specified above**
@@ -1252,6 +1444,14 @@ npm install lucide-react
 ---
 
 ## Version History
+
+- **v1.1** (Jan 3, 2026): 2026 Calm Design Update
+  - Added "2026 Calm Design Principles" section
+  - Added Tab-Based Navigation pattern
+  - Added CSV Upload Flow pattern
+  - Added Banding/Tolerance Settings pattern
+  - Added Timing/Scheduling Configuration pattern
+  - Updated aesthetic references from 2025 to 2026
 
 - **v1.0** (Dec 30, 2025): Initial design brief created
   - Core design system

@@ -228,12 +228,12 @@ export function Dashboard() {
   });
 
   // Chart drag handlers
-  const handleMouseDown = (e: any) => {
-    if (e?.activeLabel) setRefAreaLeft(e.activeLabel);
+  const handleMouseDown = (e: { activeLabel?: string | number }) => {
+    if (e?.activeLabel) setRefAreaLeft(String(e.activeLabel));
   };
   
-  const handleMouseMove = (e: any) => {
-    if (refAreaLeft && e?.activeLabel) setRefAreaRight(e.activeLabel);
+  const handleMouseMove = (e: { activeLabel?: string | number }) => {
+    if (refAreaLeft && e?.activeLabel) setRefAreaRight(String(e.activeLabel));
   };
   
   const handleMouseUp = () => {
@@ -311,7 +311,7 @@ export function Dashboard() {
               </HStack>
               <Text fontSize="xs" color="fg.subtle">
                 This shows how {strategies[0]?.name?.replace('_', ' ') || 'the strategy'} would have performed. 
-                <Link to="/portfolio" style={{ color: tokens.colors.brand.primary, marginLeft: '4px' }}>Import your portfolio →</Link>
+                <Link to="/rebalancing" style={{ color: tokens.colors.brand.primary, marginLeft: '4px' }}>Import your portfolio →</Link>
               </Text>
             </VStack>
           ) : (
@@ -475,7 +475,7 @@ export function Dashboard() {
         <Flex justify="space-between" align="center" mb="16px">
           <Text fontSize="lg" fontWeight="semibold" color="fg">Recent Holdings</Text>
           <HStack gap="8px">
-            <Link to="/portfolio/my"><Button size="sm" variant="ghost" color="fg.muted">View All</Button></Link>
+            <Link to="/rebalancing"><Button size="sm" variant="ghost" color="fg.muted">View All</Button></Link>
             <Button size="sm" variant="ghost" color="fg.muted" onClick={() => {
               const csv = ['Symbol,Strategy,Price,Change,1M %', ...sortedHoldings.map(h => 
                 `${h.ticker},${h.strategy},${h.price.toFixed(2)},${h.change.toFixed(2)}%,${h.monthChange.toFixed(2)}%`

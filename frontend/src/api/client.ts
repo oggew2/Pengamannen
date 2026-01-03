@@ -1,4 +1,4 @@
-import type { StrategyMeta, RankedStock, PortfolioResponse, RebalanceDate, StockDetail, BacktestRequest, BacktestResult, CombinerRequest } from '../types';
+import type { StrategyMeta, RankedStock, PortfolioResponse, RebalanceDate, StockDetail, BacktestRequest, BacktestResult } from '../types';
 
 const BASE_URL = '/v1';
 
@@ -40,21 +40,12 @@ export const api = {
   getStock: (ticker: string) => fetchJson<StockDetail>(`/stocks/${encodeURIComponent(ticker)}`),
   getStockPrices: (ticker: string, days?: number) => fetchJson<{prices: Array<{date: string; close: number}>}>(`/stocks/${encodeURIComponent(ticker)}/prices${days ? `?days=${days}` : ''}`),
   
-  // Data integrity - CRITICAL for trading
-  getDataIntegrity: () => fetchJson<DataIntegrityResponse>('/data/integrity/quick'),
-  getDataIntegrityFull: () => fetchJson<DataIntegrityFullResponse>('/data/integrity'),
-  validateStrategy: (name: string) => fetchJson<StrategyValidation>(`/strategies/${name}/validate`),
-  
-  // Rebalancing endpoints
+  // Rebalancing
   getRebalanceTrades: (strategy: string, portfolioValue: number, currentHoldings?: Array<{ticker: string; shares: number; value: number}>) => 
     postJson<RebalanceTradesResponse>(`/rebalance/trades?strategy=${encodeURIComponent(strategy)}&portfolio_value=${portfolioValue}`, currentHoldings || []),
-  sendRebalanceReminder: (email: string, strategy: string) =>
-    postJson<{message: string}>(`/notifications/rebalance-reminder?email=${encodeURIComponent(email)}&strategy=${encodeURIComponent(strategy)}`, {}),
   
-  // Other endpoints
-  combinePortfolio: (req: CombinerRequest) => postJson<PortfolioResponse>('/portfolio/combiner', req),
+  // Backtesting
   runBacktest: (req: BacktestRequest) => postJson<BacktestResult>('/backtesting/run', req),
-  getBacktestResults: (strategy: string) => fetchJson<BacktestResult[]>(`/backtesting/results/${strategy}`),
 };
 
 // Rebalancing types
@@ -80,31 +71,4 @@ export interface RebalanceTradesResponse {
     total: number;
     percentage: number;
   };
-}
-
-// Data integrity types
-export interface DataIntegrityResponse {
-  safe_to_trade: boolean;
-  status: 'OK' | 'WARNING' | 'CRITICAL';
-  recommendation: string;
-  critical_issues: Array<{ type: string; message: string }>;
-  warning_count: number;
-}
-
-export interface DataIntegrityFullResponse {
-  status: 'OK' | 'WARNING' | 'CRITICAL';
-  recommendation: string;
-  safe_to_trade: boolean;
-  checked_at: string;
-  checks: Record<string, { status: string; message: string }>;
-  issues: Array<{ type: string; message: string }>;
-  warnings: Array<{ type: string; message: string }>;
-}
-
-export interface StrategyValidation {
-  strategy: string;
-  safe_to_trade: boolean;
-  message: string;
-  issues: Array<{ type: string; message: string }>;
-  checked_at: string;
 }

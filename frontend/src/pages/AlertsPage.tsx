@@ -153,7 +153,7 @@ export default function AlertsPage() {
                 <Text fontSize="sm" color="gray.100">{label}</Text>
                 <Text fontSize="xs" color="gray.400">{desc}</Text>
               </VStack>
-              <Box as="button" w="44px" h="24px" borderRadius="12px" bg={settings[key as keyof AlertSettings] ? 'brand.500' : 'gray.500'} position="relative" onClick={() => toggleSetting(key as keyof AlertSettings)} transition="background 200ms">
+              <Box as="button" role="switch" aria-checked={settings[key as keyof AlertSettings] ? 'true' : 'false'} aria-label={label} w="44px" h="24px" borderRadius="12px" bg={settings[key as keyof AlertSettings] ? 'brand.500' : 'gray.500'} position="relative" onClick={() => toggleSetting(key as keyof AlertSettings)} transition="background 200ms">
                 <Box position="absolute" top="2px" left={settings[key as keyof AlertSettings] ? '22px' : '2px'} w="20px" h="20px" borderRadius="full" bg="white" transition="left 200ms" boxShadow="sm" />
               </Box>
             </Flex>
@@ -166,7 +166,7 @@ export default function AlertsPage() {
               <Text fontSize="sm" color="gray.100">Email Notifications</Text>
               <Text fontSize="xs" color="gray.400">Receive alerts via email</Text>
             </VStack>
-            <Box as="button" w="44px" h="24px" borderRadius="12px" bg={settings.emailNotifications ? 'brand.500' : 'gray.500'} position="relative" onClick={() => toggleSetting('emailNotifications')} transition="background 200ms">
+            <Box as="button" role="switch" aria-checked={settings.emailNotifications ? 'true' : 'false'} aria-label="Email Notifications" w="44px" h="24px" borderRadius="12px" bg={settings.emailNotifications ? 'brand.500' : 'gray.500'} position="relative" onClick={() => toggleSetting('emailNotifications')} transition="background 200ms">
               <Box position="absolute" top="2px" left={settings.emailNotifications ? '22px' : '2px'} w="20px" h="20px" borderRadius="full" bg="white" transition="left 200ms" boxShadow="sm" />
             </Box>
           </Flex>

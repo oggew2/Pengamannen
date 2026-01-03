@@ -76,7 +76,7 @@ export default function DividendCalendarPage() {
 
       {holdings.length === 0 && (
         <div className={styles.card} style={{ marginBottom: '1.5rem', textAlign: 'center', padding: '2rem' }}>
-          <p>Add holdings in <a href="/portfolio/my" style={{ color: '#3b82f6' }}>My Portfolio</a> to see your dividend calendar</p>
+          <p>Add holdings in <a href="/rebalancing" style={{ color: '#3b82f6' }}>Min Strategi</a> to see your dividend calendar</p>
         </div>
       )}
 

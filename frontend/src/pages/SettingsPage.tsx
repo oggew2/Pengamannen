@@ -89,13 +89,15 @@ export default function SettingsPage() {
             </VStack>
             <Button size="sm" variant="outline" borderColor="error.fg" color="error.fg" onClick={logout}>Logout</Button>
           </Flex>
-          <Flex justify="space-between" align="center">
-            <VStack align="start" gap="0">
-              <Text fontSize="sm" color="fg">Your Invite Code</Text>
-              <Text fontSize="xs" color="fg.muted">Share this to let others register</Text>
-            </VStack>
-            <Text fontSize="sm" color="brand.fg" fontFamily="mono" fontWeight="bold">{user?.invite_code}</Text>
-          </Flex>
+          {user?.is_admin && user?.invite_code && (
+            <Flex justify="space-between" align="center">
+              <VStack align="start" gap="0">
+                <Text fontSize="sm" color="fg">Your Invite Code</Text>
+                <Text fontSize="xs" color="fg.muted">Share this to let others register</Text>
+              </VStack>
+              <Text fontSize="sm" color="brand.fg" fontFamily="mono" fontWeight="bold">{user.invite_code}</Text>
+            </Flex>
+          )}
         </VStack>
       </Box>
 
@@ -120,9 +122,33 @@ export default function SettingsPage() {
                     </HStack>
                     <Text fontSize="xs" color="fg.muted">{u.email}</Text>
                   </VStack>
-                  <Text fontSize="xs" color="fg.subtle">
-                    {u.created_at ? new Date(u.created_at).toLocaleDateString('sv-SE') : 'N/A'}
-                  </Text>
+                  <HStack gap="8px">
+                    <Text fontSize="xs" color="fg.subtle">
+                      {u.created_at ? new Date(u.created_at).toLocaleDateString('sv-SE') : 'N/A'}
+                    </Text>
+                    {u.id !== user.user_id && (
+                      <>
+                        {u.is_admin ? (
+                          <Button size="xs" variant="ghost" color="fg.muted" onClick={async () => {
+                            if (confirm(`Remove admin status from ${u.email}?`)) {
+                              try { await fetch(`/v1/admin/users/${u.id}/remove-admin`, { method: 'POST', credentials: 'include' }); loadUsers(); } catch {}
+                            }
+                          }}>Remove Admin</Button>
+                        ) : (
+                          <Button size="xs" variant="ghost" color="brand.fg" onClick={async () => {
+                            if (confirm(`Make ${u.email} an admin?`)) {
+                              try { await fetch(`/v1/admin/users/${u.id}/make-admin`, { method: 'POST', credentials: 'include' }); loadUsers(); } catch {}
+                            }
+                          }}>Make Admin</Button>
+                        )}
+                        <Button size="xs" variant="ghost" color="error.fg" onClick={async () => {
+                          if (confirm(`Delete user ${u.email}?`)) {
+                            try { await fetch(`/v1/admin/users/${u.id}`, { method: 'DELETE', credentials: 'include' }); loadUsers(); } catch {}
+                          }
+                        }}>Delete</Button>
+                      </>
+                    )}
+                  </HStack>
                 </Flex>
               ))}
             </VStack>
