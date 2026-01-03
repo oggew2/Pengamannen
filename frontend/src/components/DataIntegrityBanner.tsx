@@ -104,13 +104,30 @@ export function DataIntegrityBanner() {
   );
 }
 
-// Compact indicator for header/nav
+// Compact indicator for header/nav with click-to-expand details
 export function DataIntegrityIndicator() {
   const [integrity, setIntegrity] = useState<IntegrityCheck | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
+  const [syncInfo, setSyncInfo] = useState<{last_sync: string | null, fresh_pct: number} | null>(null);
 
   useEffect(() => {
     api.get<IntegrityCheck>('/data/integrity/quick')
       .then(setIntegrity)
+      .catch(() => {});
+    
+    // Also fetch freshness info
+    api.get<{summary?: {fresh_percentage: number, fresh_count: number, total_stocks: number}}>('/data/status/detailed')
+      .then(data => {
+        if (data.summary) {
+          setSyncInfo({ last_sync: null, fresh_pct: data.summary.fresh_percentage });
+        }
+      })
+      .catch(() => {});
+    
+    api.get<{last_successful_sync: string | null}>('/data/sync-history?days=1')
+      .then(data => {
+        setSyncInfo(prev => prev ? {...prev, last_sync: data.last_successful_sync} : null);
+      })
       .catch(() => {});
   }, []);
 
@@ -128,10 +145,91 @@ export function DataIntegrityIndicator() {
     ? 'Data Warning'
     : 'Data Issue';
 
+  const formatTimeAgo = (dateStr: string) => {
+    const diffMs = Date.now() - new Date(dateStr).getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${Math.floor(diffHours / 24)}d ago`;
+  };
+
   return (
-    <HStack gap={tokens.spacing.xs} fontSize={tokens.fontSizes.xs} color={tokens.colors.text.muted}>
-      <Box w="8px" h="8px" borderRadius="50%" bg={color} />
-      <Text>{label}</Text>
-    </HStack>
+    <Box position="relative">
+      <HStack 
+        gap={tokens.spacing.xs} 
+        fontSize={tokens.fontSizes.xs} 
+        color={tokens.colors.text.muted}
+        cursor="pointer"
+        onClick={() => setShowDetails(!showDetails)}
+        _hover={{ color: tokens.colors.text.primary }}
+        transition="color 0.15s"
+      >
+        <Box w="8px" h="8px" borderRadius="50%" bg={color} />
+        <Text>{label}</Text>
+        {syncInfo?.last_sync && (
+          <Text color={tokens.colors.text.muted}>· {formatTimeAgo(syncInfo.last_sync)}</Text>
+        )}
+      </HStack>
+      
+      {showDetails && (
+        <>
+          <Box 
+            position="fixed" 
+            inset={0} 
+            zIndex={40} 
+            onClick={() => setShowDetails(false)}
+          />
+          <Box
+            position="absolute"
+            top="100%"
+            left={0}
+            mt={tokens.spacing.sm}
+            p={tokens.spacing.md}
+            bg="gray.700"
+            border="1px solid"
+            borderColor="gray.600"
+            borderRadius={tokens.radii.md}
+            boxShadow="lg"
+            fontSize={tokens.fontSizes.xs}
+            minW="200px"
+            zIndex={50}
+          >
+            <VStack align="stretch" gap={tokens.spacing.xs}>
+              <HStack justify="space-between">
+                <Text color={tokens.colors.text.muted}>Status</Text>
+                <HStack gap={tokens.spacing.xs}>
+                  <Box w="8px" h="8px" borderRadius="50%" bg={color} />
+                  <Text fontWeight="500">{label}</Text>
+                </HStack>
+              </HStack>
+              {syncInfo && (
+                <>
+                  <HStack justify="space-between">
+                    <Text color={tokens.colors.text.muted}>Freshness</Text>
+                    <Text fontWeight="500" color={syncInfo.fresh_pct >= 80 ? tokens.colors.semantic.success : tokens.colors.semantic.warning}>
+                      {syncInfo.fresh_pct.toFixed(0)}%
+                    </Text>
+                  </HStack>
+                  {syncInfo.last_sync && (
+                    <HStack justify="space-between">
+                      <Text color={tokens.colors.text.muted}>Last sync</Text>
+                      <Text fontWeight="500">{formatTimeAgo(syncInfo.last_sync)}</Text>
+                    </HStack>
+                  )}
+                </>
+              )}
+              {integrity.warning_count > 0 && (
+                <Box mt={tokens.spacing.xs} pt={tokens.spacing.xs} borderTop="1px solid" borderColor="gray.600">
+                  <Text color={tokens.colors.semantic.warning} fontSize="11px">
+                    {integrity.warning_count} warning{integrity.warning_count > 1 ? 's' : ''}
+                  </Text>
+                </Box>
+              )}
+            </VStack>
+          </Box>
+        </>
+      )}
+    </Box>
   );
 }
