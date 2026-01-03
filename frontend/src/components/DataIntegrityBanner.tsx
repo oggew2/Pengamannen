@@ -104,55 +104,48 @@ export function DataIntegrityBanner() {
   );
 }
 
-// Compact indicator for header/nav with click-to-expand details
+// Compact indicator for header/nav - mirrors DataFreshnessIndicator from Dashboard
 export function DataIntegrityIndicator() {
-  const [integrity, setIntegrity] = useState<IntegrityCheck | null>(null);
   const [showDetails, setShowDetails] = useState(false);
-  const [syncInfo, setSyncInfo] = useState<{last_sync: string | null, fresh_pct: number} | null>(null);
+  const [status, setStatus] = useState<{summary?: {total_stocks: number, fresh_count: number, fresh_percentage: number}} | null>(null);
+  const [syncHistory, setSyncHistory] = useState<{last_successful_sync: string | null, next_scheduled_sync: string, total_syncs: number, successful_syncs: number} | null>(null);
 
   useEffect(() => {
-    api.get<IntegrityCheck>('/data/integrity/quick')
-      .then(setIntegrity)
+    api.get<{summary?: {total_stocks: number, fresh_count: number, fresh_percentage: number}}>('/data/status/detailed')
+      .then(setStatus)
       .catch(() => {});
-    
-    // Also fetch freshness info
-    api.get<{summary?: {fresh_percentage: number, fresh_count: number, total_stocks: number}}>('/data/status/detailed')
-      .then(data => {
-        if (data.summary) {
-          setSyncInfo({ last_sync: null, fresh_pct: data.summary.fresh_percentage });
-        }
-      })
-      .catch(() => {});
-    
-    api.get<{last_successful_sync: string | null}>('/data/sync-history?days=1')
-      .then(data => {
-        setSyncInfo(prev => prev ? {...prev, last_sync: data.last_successful_sync} : null);
-      })
+    api.get<{last_successful_sync: string | null, next_scheduled_sync: string, total_syncs: number, successful_syncs: number}>('/data/sync-history?days=1')
+      .then(setSyncHistory)
       .catch(() => {});
   }, []);
 
-  if (!integrity) return null;
+  if (!status?.summary) return null;
 
-  const color = integrity.status === 'OK' 
-    ? tokens.colors.semantic.success 
-    : integrity.status === 'WARNING'
-    ? tokens.colors.semantic.warning
-    : tokens.colors.semantic.error;
-
-  const label = integrity.status === 'OK' 
-    ? 'Data OK' 
-    : integrity.status === 'WARNING'
-    ? 'Data Warning'
-    : 'Data Issue';
+  const { fresh_percentage, total_stocks, fresh_count } = status.summary;
+  const color = fresh_percentage >= 80 ? tokens.colors.semantic.success : fresh_percentage >= 50 ? tokens.colors.semantic.warning : tokens.colors.semantic.error;
+  const statusLabel = fresh_percentage >= 80 ? 'OK' : fresh_percentage >= 50 ? 'Stale' : 'Outdated';
 
   const formatTimeAgo = (dateStr: string) => {
     const diffMs = Date.now() - new Date(dateStr).getTime();
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMins / 60);
+    if (diffMins < 1) return 'just now';
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     return `${Math.floor(diffHours / 24)}d ago`;
   };
+
+  const formatTimeUntil = (dateStr: string) => {
+    const diffMs = new Date(dateStr).getTime() - Date.now();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffMins < 1) return 'now';
+    if (diffMins < 60) return `in ${diffMins}m`;
+    return `in ${diffHours}h ${diffMins % 60}m`;
+  };
+
+  const lastSync = syncHistory?.last_successful_sync;
+  const lastSyncRelative = lastSync ? formatTimeAgo(lastSync) : 'Never';
 
   return (
     <Box position="relative">
@@ -166,20 +159,12 @@ export function DataIntegrityIndicator() {
         transition="color 0.15s"
       >
         <Box w="8px" h="8px" borderRadius="50%" bg={color} />
-        <Text>{label}</Text>
-        {syncInfo?.last_sync && (
-          <Text color={tokens.colors.text.muted}>· {formatTimeAgo(syncInfo.last_sync)}</Text>
-        )}
+        <Text>Data {statusLabel} · {lastSyncRelative}</Text>
       </HStack>
       
       {showDetails && (
         <>
-          <Box 
-            position="fixed" 
-            inset={0} 
-            zIndex={40} 
-            onClick={() => setShowDetails(false)}
-          />
+          <Box position="fixed" inset={0} zIndex={40} onClick={() => setShowDetails(false)} />
           <Box
             position="absolute"
             top="100%"
@@ -192,41 +177,40 @@ export function DataIntegrityIndicator() {
             borderRadius={tokens.radii.md}
             boxShadow="lg"
             fontSize={tokens.fontSizes.xs}
-            minW="200px"
+            minW="220px"
             zIndex={50}
           >
+            <HStack gap={tokens.spacing.xs} fontWeight="600" mb={tokens.spacing.sm}>
+              <Box w="8px" h="8px" borderRadius="50%" bg={color} />
+              <Text>Data {statusLabel}</Text>
+            </HStack>
+            
             <VStack align="stretch" gap={tokens.spacing.xs}>
               <HStack justify="space-between">
-                <Text color={tokens.colors.text.muted}>Status</Text>
-                <HStack gap={tokens.spacing.xs}>
-                  <Box w="8px" h="8px" borderRadius="50%" bg={color} />
-                  <Text fontWeight="500">{label}</Text>
-                </HStack>
+                <Text color={tokens.colors.text.muted}>Coverage</Text>
+                <Text fontWeight="500" color={color}>{fresh_count}/{total_stocks} ({fresh_percentage.toFixed(0)}%)</Text>
               </HStack>
-              {syncInfo && (
-                <>
-                  <HStack justify="space-between">
-                    <Text color={tokens.colors.text.muted}>Freshness</Text>
-                    <Text fontWeight="500" color={syncInfo.fresh_pct >= 80 ? tokens.colors.semantic.success : tokens.colors.semantic.warning}>
-                      {syncInfo.fresh_pct.toFixed(0)}%
-                    </Text>
-                  </HStack>
-                  {syncInfo.last_sync && (
-                    <HStack justify="space-between">
-                      <Text color={tokens.colors.text.muted}>Last sync</Text>
-                      <Text fontWeight="500">{formatTimeAgo(syncInfo.last_sync)}</Text>
-                    </HStack>
-                  )}
-                </>
-              )}
-              {integrity.warning_count > 0 && (
-                <Box mt={tokens.spacing.xs} pt={tokens.spacing.xs} borderTop="1px solid" borderColor="gray.600">
-                  <Text color={tokens.colors.semantic.warning} fontSize="11px">
-                    {integrity.warning_count} warning{integrity.warning_count > 1 ? 's' : ''}
-                  </Text>
-                </Box>
+              <HStack justify="space-between">
+                <Text color={tokens.colors.text.muted}>Last sync</Text>
+                <Text fontWeight="500">{lastSyncRelative}</Text>
+              </HStack>
+              <HStack justify="space-between">
+                <Text color={tokens.colors.text.muted}>Next sync</Text>
+                <Text fontWeight="500">{syncHistory?.next_scheduled_sync ? formatTimeUntil(syncHistory.next_scheduled_sync) : '—'}</Text>
+              </HStack>
+              {syncHistory && syncHistory.total_syncs > 0 && (
+                <HStack justify="space-between" mt={tokens.spacing.xs} pt={tokens.spacing.xs} borderTop="1px solid" borderColor="gray.600">
+                  <Text color={tokens.colors.text.muted}>24h syncs</Text>
+                  <Text fontWeight="500">{syncHistory.successful_syncs}/{syncHistory.total_syncs} OK</Text>
+                </HStack>
               )}
             </VStack>
+
+            {fresh_percentage < 80 && (
+              <Box mt={tokens.spacing.sm} p={tokens.spacing.sm} bg="yellow.900" borderRadius={tokens.radii.sm} fontSize="11px" color="yellow.200">
+                Data may be outdated. Check Data Management.
+              </Box>
+            )}
           </Box>
         </>
       )}
