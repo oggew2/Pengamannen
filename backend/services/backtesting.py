@@ -222,18 +222,22 @@ def get_market_caps_for_date(mcap_df: pd.DataFrame, as_of_date: date, financial_
     if mcap_df.empty:
         return set()
     
-    # Get data within 35 days before as_of_date
-    # CRITICAL FIX: Ensure date column is not categorical before comparison
-    if mcap_df['date'].dtype.name == 'category':
-        mcap_df['date'] = pd.to_datetime(mcap_df['date'])
+    # Ensure date column is proper date type for comparison
+    if mcap_df['date'].dtype == 'object':
+        mcap_df = mcap_df.copy()
+        mcap_df['date'] = pd.to_datetime(mcap_df['date']).dt.date
+    elif mcap_df['date'].dtype.name == 'category':
+        mcap_df = mcap_df.copy()
+        mcap_df['date'] = pd.to_datetime(mcap_df['date']).dt.date
     
+    # Get data within 35 days before as_of_date
     mask = (mcap_df['date'] <= as_of_date) & (mcap_df['date'] >= as_of_date - timedelta(days=35))
     recent = mcap_df[mask]
     if recent.empty:
         return set()
     
     # Get latest market cap per ticker
-    latest = recent.loc[recent.groupby('ticker')['date'].idxmax()]
+    latest = recent.loc[recent.groupby('ticker', observed=True)['date'].idxmax()]
     latest = latest[~latest['ticker'].isin(financial_tickers)]
     
     # Top 40% by market cap
@@ -261,6 +265,42 @@ def get_finbas_prices(db, start_date: date, end_date: date) -> pd.DataFrame:
     df = pd.DataFrame([{'ticker': r[0], 'date': r[1], 'close': r[2]} for r in result])
     df['date'] = pd.to_datetime(df['date']).dt.date  # Convert string to date
     return df
+
+
+def calculate_benchmark_returns(db, start_date: date, end_date: date) -> dict:
+    """Calculate OMXS30 benchmark returns for comparison."""
+    from models import IndexPrice
+    
+    prices = db.query(IndexPrice).filter(
+        IndexPrice.index_id == "OMXS30",
+        IndexPrice.date >= start_date,
+        IndexPrice.date <= end_date
+    ).order_by(IndexPrice.date).all()
+    
+    if len(prices) < 2:
+        return {"name": "OMXS30", "total_return_pct": None, "error": "Insufficient data"}
+    
+    start_price = prices[0].close
+    end_price = prices[-1].close
+    total_return = ((end_price - start_price) / start_price) * 100
+    
+    # Calculate max drawdown
+    peak = prices[0].close
+    max_dd = 0.0
+    for p in prices:
+        if p.close > peak:
+            peak = p.close
+        dd = (p.close - peak) / peak
+        if dd < max_dd:
+            max_dd = dd
+    
+    return {
+        "name": "OMXS30",
+        "total_return_pct": round(total_return, 2),
+        "max_drawdown_pct": round(max_dd * 100, 2),
+        "start_value": round(start_price, 2),
+        "end_value": round(end_price, 2)
+    }
 
 
 def get_financial_tickers(db) -> set:
@@ -549,6 +589,9 @@ def backtest_strategy(
     # Determine if strategy has look-ahead bias
     has_look_ahead_bias = strategy_type in ['value', 'dividend', 'quality']
     
+    # Calculate OMXS30 benchmark returns
+    benchmark = calculate_benchmark_returns(db, start_date, end_date)
+    
     result = {
         "strategy_name": strategy_name,
         "start_date": start_date.isoformat(),
@@ -561,6 +604,7 @@ def backtest_strategy(
         "portfolio_values": [float(round(v, 2)) for v in equity_values[::21]],
         "total_transaction_costs": float(round(total_transaction_costs, 2)),
         "transaction_cost_pct": float(round((total_transaction_costs / INITIAL_CAPITAL) * 100, 2)),
+        "benchmark": benchmark,
     }
     
     # Add look-ahead bias warning for strategies using current fundamentals

@@ -790,3 +790,93 @@ def _log_sync_result(db, successful: int, failed: int, duration: float, failed_t
         db.commit()
     except Exception as e:
         logger.error(f"Failed to log sync result: {e}")
+
+
+def sync_omxs30_index(db) -> dict:
+    """
+    Sync OMXS30 index historical prices from Avanza.
+    Only fetches new data since last stored date (incremental).
+    """
+    from models import IndexPrice
+    from datetime import datetime, timedelta
+    
+    OMXS30_AVANZA_ID = "19002"
+    INDEX_ID = "OMXS30"
+    
+    # Check last stored date
+    last_date = db.query(IndexPrice.date).filter(
+        IndexPrice.index_id == INDEX_ID
+    ).order_by(IndexPrice.date.desc()).first()
+    
+    if last_date:
+        last_date = last_date[0]
+        days_since = (datetime.now().date() - last_date).days
+        if days_since <= 1:  # Already have yesterday or today
+            return {"status": "UP_TO_DATE", "records": 0}
+        days_to_fetch = days_since + 5  # Small overlap for safety
+    else:
+        days_to_fetch = 365 * 40  # Fetch all available history (~40 years)
+    
+    fetcher = AvanzaDirectFetcher()
+    
+    # Fetch index prices
+    try:
+        all_data = []
+        chunk_days = min(1800, days_to_fetch)  # Don't fetch more than needed
+        end_date = datetime.now()
+        
+        for i in range(0, days_to_fetch, chunk_days):
+            chunk_end = end_date - timedelta(days=i)
+            chunk_start = chunk_end - timedelta(days=chunk_days)
+            
+            url = f"https://www.avanza.se/_api/price-chart/stock/{OMXS30_AVANZA_ID}"
+            params = {
+                'from': chunk_start.strftime('%Y-%m-%d'),
+                'to': chunk_end.strftime('%Y-%m-%d'),
+                'resolution': 'day'
+            }
+            
+            response = fetcher.session.get(url, params=params, timeout=15)
+            if response.status_code == 200:
+                data = response.json()
+                ohlc = data.get('ohlc', [])
+                if ohlc:
+                    all_data.extend(ohlc)
+                else:
+                    break
+            else:
+                break
+            time.sleep(0.1)
+        
+        if not all_data:
+            return {"status": "NO_DATA", "records": 0}
+        
+        # Deduplicate by date and store
+        seen_dates = set()
+        new_records = 0
+        for row in all_data:
+            price_date = datetime.fromtimestamp(row['timestamp'] / 1000).date()
+            
+            if price_date in seen_dates:
+                continue
+            seen_dates.add(price_date)
+            
+            # Use merge to handle duplicates
+            db.merge(IndexPrice(
+                index_id=INDEX_ID,
+                date=price_date,
+                close=row.get('close'),
+                open=row.get('open'),
+                high=row.get('high'),
+                low=row.get('low')
+            ))
+            new_records += 1
+        
+        db.commit()
+        
+        total = db.query(IndexPrice).filter(IndexPrice.index_id == INDEX_ID).count()
+        return {"status": "SUCCESS", "new_records": new_records, "total_records": total}
+        
+    except Exception as e:
+        logger.error(f"OMXS30 sync failed: {e}")
+        return {"status": "FAILED", "error": str(e)}

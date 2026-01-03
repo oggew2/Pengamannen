@@ -158,6 +158,11 @@ class SmartCache:
                 
                 # Parse data and add metadata
                 data = json.loads(data_json)
+                if data is None:
+                    conn.close()
+                    return None
+                if not isinstance(data, dict):
+                    data = {'_value': data}
                 data['_cache_metadata'] = {
                     'created_at': created_str,
                     'expires_at': expires_str,

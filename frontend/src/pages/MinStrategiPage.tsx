@@ -12,12 +12,21 @@ const STRATEGIES = [
 
 type Holding = { ticker: string; shares: number; avgPrice: number };
 type Action = { type: 'SELL' | 'BUY' | 'HOLD'; ticker: string; name: string; strategy: string; strategyColor: string; value: number; reason: string; rank?: number; targetValue?: number };
+type BandingResult = {
+  keeps: { ticker: string; rank: number; name: string }[];
+  sells: { ticker: string; rank: number | null; name: string | null; reason: string }[];
+  watch: { ticker: string; rank: number; name: string }[];
+  suggested_buys: { ticker: string; rank: number; name: string }[];
+  thresholds: { buy_rank: number; sell_rank: number; universe_size: number };
+  summary: { total_holdings: number; to_keep: number; to_sell: number; in_danger_zone: number };
+};
 
-// Storage keys - will be migrated to backend for multi-user
+// Storage keys
 const STORAGE_KEYS = {
   strategies: 'selectedStrategies',
   holdings: 'myHoldings',
   settings: 'rebalanceSettings',
+  momentumHoldings: 'momentumHoldings',
 };
 
 export default function MinStrategiPage() {
@@ -39,13 +48,41 @@ export default function MinStrategiPage() {
   const [newPrice, setNewPrice] = useState('');
   
   // Rebalancing state
-  const [settings, setSettings] = useState<{ bandingPercent: number; reminders: { weekBefore: boolean; dayBefore: boolean } }>(() => {
+  const [settings, setSettings] = useState<{ bandingPercent: number; reminders: { weekBefore: boolean; dayBefore: boolean }; bandingMode: boolean }>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.settings);
-    return saved ? JSON.parse(saved) : { bandingPercent: 20, reminders: { weekBefore: true, dayBefore: true } };
+    return saved ? JSON.parse(saved) : { bandingPercent: 20, reminders: { weekBefore: true, dayBefore: true }, bandingMode: false };
   });
   const [_trades, setTrades] = useState<{ ticker: string; action: string; shares: number }[]>([]);
   const [costs, setCosts] = useState<{ courtage: number; spread_estimate: number; total: number; percentage: number } | null>(null);
   const [loadingTrades, setLoadingTrades] = useState(false);
+
+  // Investment suggestion state
+  const [investAmount, setInvestAmount] = useState(() => {
+    const saved = localStorage.getItem('investAmount');
+    return saved || '';
+  });
+  const [suggestion, setSuggestion] = useState<{
+    current: { holdings: any[]; value: number; new_investment: number; total: number };
+    sells: { ticker: string; name: string; shares: number; value: number; reason: string }[];
+    buys: { ticker: string; name: string; amount: number; strategies: string[]; current_value: number; target_value: number; price?: number; shares?: number; avanza_id?: string }[];
+    target_portfolio: { ticker: string; name: string; value: number; weight: number; strategies: string[] }[];
+    costs: { courtage: number; spread: number; total: number };
+    summary: { sell_count: number; buy_count: number; sell_value: number; buy_value: number };
+  } | null>(null);
+  const [loadingSuggestion, setLoadingSuggestion] = useState(false);
+  const [executedTrades, setExecutedTrades] = useState<{ sells: string[]; buys: string[] }>(() => {
+    const saved = localStorage.getItem('executedTrades');
+    return saved ? JSON.parse(saved) : { sells: [], buys: [] };
+  });
+  const [rebalanceDates, setRebalanceDates] = useState<Record<string, string>>({});
+
+  // Momentum banding state
+  const [momentumHoldings, setMomentumHoldings] = useState<string[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.momentumHoldings);
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [bandingResult, setBandingResult] = useState<BandingResult | null>(null);
+  const [loadingBanding, setLoadingBanding] = useState(false);
 
   // Load holdings
   useEffect(() => {
@@ -53,9 +90,20 @@ export default function MinStrategiPage() {
     if (saved) setHoldings(JSON.parse(saved));
   }, []);
 
+  // Load rebalance dates
+  useEffect(() => {
+    api.getRebalanceDates().then(dates => {
+      const map: Record<string, string> = {};
+      dates.forEach(d => { map[d.strategy_name] = d.next_date; });
+      setRebalanceDates(map);
+    }).catch(() => {});
+  }, []);
+
   // Persist selections
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.strategies, JSON.stringify(selected)); }, [selected]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings)); }, [settings]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.momentumHoldings, JSON.stringify(momentumHoldings)); }, [momentumHoldings]);
+  useEffect(() => { if (investAmount) localStorage.setItem('investAmount', investAmount); }, [investAmount]);
 
   // Fetch strategy data
   useEffect(() => {
@@ -64,7 +112,11 @@ export default function MinStrategiPage() {
         api.getStrategyRankings(key).then(data => setStrategyData(prev => ({ ...prev, [key]: data })));
       }
     });
-  }, [selected, strategyData]);
+    // Also fetch momentum data if banding mode is enabled
+    if (settings.bandingMode && !strategyData['sammansatt_momentum']) {
+      api.getStrategyRankings('sammansatt_momentum').then(data => setStrategyData(prev => ({ ...prev, sammansatt_momentum: data })));
+    }
+  }, [selected, strategyData, settings.bandingMode]);
 
   // Fetch prices
   useEffect(() => {
@@ -76,6 +128,43 @@ export default function MinStrategiPage() {
       }
     });
   }, [holdings, prices]);
+
+  // Check momentum banding
+  const checkMomentumBanding = async (holdingsToCheck?: string[]) => {
+    const tickers = holdingsToCheck || momentumHoldings;
+    if (tickers.length === 0) return;
+    setLoadingBanding(true);
+    try {
+      const res = await fetch('/v1/strategies/sammansatt_momentum/banding-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(tickers)
+      });
+      if (res.ok) setBandingResult(await res.json());
+    } catch { setBandingResult(null); }
+    setLoadingBanding(false);
+  };
+
+  // Initialize momentum portfolio with top 10
+  const initMomentumPortfolio = async () => {
+    const top10 = (strategyData['sammansatt_momentum'] || []).slice(0, 10).map(s => s.ticker);
+    if (top10.length > 0) {
+      setMomentumHoldings(top10);
+      await checkMomentumBanding(top10);
+    }
+  };
+
+  // Apply banding trades
+  const applyBandingTrades = () => {
+    if (!bandingResult) return;
+    const newHoldings = [
+      ...bandingResult.keeps.map(k => k.ticker),
+      ...bandingResult.suggested_buys.map(b => b.ticker)
+    ];
+    setMomentumHoldings(newHoldings);
+    setBandingResult(null);
+  };
 
   const toggleStrategy = (key: string) => {
     setSelected(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
@@ -153,6 +242,10 @@ export default function MinStrategiPage() {
     const newHoldings = importResult.holdings.map(h => ({ ticker: h.ticker, shares: h.shares, avgPrice: 0 }));
     setHoldings(newHoldings);
     localStorage.setItem(STORAGE_KEYS.holdings, JSON.stringify(newHoldings));
+    // Clear any pending suggestions/trades when importing
+    setSuggestion(null);
+    setExecutedTrades({ sells: [], buys: [] });
+    localStorage.removeItem('executedTrades');
     setImportResult(null);
   };
 
@@ -168,6 +261,71 @@ export default function MinStrategiPage() {
     const updated = holdings.filter(h => h.ticker !== ticker);
     setHoldings(updated);
     localStorage.setItem(STORAGE_KEYS.holdings, JSON.stringify(updated));
+  };
+
+  // Get investment suggestion
+  const getInvestmentSuggestion = async () => {
+    const amount = parseFloat(investAmount) || 0;
+    if (amount <= 0 && holdings.length === 0) return;
+    setLoadingSuggestion(true);
+    try {
+      const holdingsWithValues = holdings.map(h => ({
+        ticker: h.ticker,
+        shares: h.shares,
+        value: h.shares * (prices[h.ticker] || h.avgPrice || 0)
+      }));
+      const res = await fetch('/v1/portfolio/investment-suggestion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          amount,
+          strategies: selected,
+          holdings: holdingsWithValues,
+          mode: settings.bandingMode ? 'banding' : 'classic'
+        })
+      });
+      if (res.ok) {
+        setSuggestion(await res.json());
+        setExecutedTrades({ sells: [], buys: [] });
+      }
+    } catch { setSuggestion(null); }
+    setLoadingSuggestion(false);
+  };
+
+  // Mark trade as executed
+  const toggleTradeExecuted = (type: 'sells' | 'buys', ticker: string) => {
+    setExecutedTrades(prev => {
+      const updated = {
+        ...prev,
+        [type]: prev[type].includes(ticker) 
+          ? prev[type].filter(t => t !== ticker)
+          : [...prev[type], ticker]
+      };
+      localStorage.setItem('executedTrades', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  // Apply executed trades to holdings
+  const applyExecutedTrades = () => {
+    if (!suggestion) return;
+    let updated = holdings.filter(h => !executedTrades.sells.includes(h.ticker));
+    for (const buy of suggestion.buys) {
+      if (executedTrades.buys.includes(buy.ticker)) {
+        const existing = updated.find(h => h.ticker === buy.ticker);
+        if (existing) {
+          existing.shares += Math.round(buy.amount / (prices[buy.ticker] || 100));
+        } else {
+          updated.push({ ticker: buy.ticker, shares: Math.round(buy.amount / (prices[buy.ticker] || 100)), avgPrice: prices[buy.ticker] || 0 });
+        }
+      }
+    }
+    setHoldings(updated);
+    localStorage.setItem(STORAGE_KEYS.holdings, JSON.stringify(updated));
+    setSuggestion(null);
+    setExecutedTrades({ sells: [], buys: [] });
+    localStorage.removeItem('executedTrades');
   };
 
   const generateTrades = async () => {
@@ -390,48 +548,375 @@ export default function MinStrategiPage() {
 
       {tab === 'rebalansering' && (
         <VStack gap="20px" align="stretch">
-          {/* Banding Settings */}
+          {/* Mode Toggle */}
           <Box bg="bg.subtle" borderRadius="8px" p="20px" borderColor="border" borderWidth="1px">
-            <Text fontWeight="semibold" color="fg" mb="12px">⚖️ Toleransband</Text>
-            <HStack gap="16px" align="center" mb="8px">
-              <Text fontSize="sm" color="fg.muted">Rebalansera vid avvikelse över:</Text>
-              <HStack gap="8px">
+            <Text fontWeight="semibold" color="fg" mb="12px">📊 Rebalanseringsmetod</Text>
+            <HStack gap="12px">
+              <Box
+                as="button"
+                flex="1"
+                p="12px"
+                borderRadius="6px"
+                bg={!settings.bandingMode ? 'brand.subtle' : 'bg.muted'}
+                border="2px solid"
+                borderColor={!settings.bandingMode ? 'brand.solid' : 'border'}
+                onClick={() => setSettings(s => ({ ...s, bandingMode: false }))}
+                textAlign="left"
+              >
+                <Text fontWeight="semibold" color="fg" fontSize="sm">Klassisk</Text>
+                <Text fontSize="xs" color="fg.muted">Kvartalsvis, byt till exakt topp 10</Text>
+              </Box>
+              <Box
+                as="button"
+                flex="1"
+                p="12px"
+                borderRadius="6px"
+                bg={settings.bandingMode ? 'brand.subtle' : 'bg.muted'}
+                border="2px solid"
+                borderColor={settings.bandingMode ? 'brand.solid' : 'border'}
+                onClick={() => setSettings(s => ({ ...s, bandingMode: true }))}
+                textAlign="left"
+              >
+                <Text fontWeight="semibold" color="fg" fontSize="sm">Banding (Momentum)</Text>
+                <Text fontSize="xs" color="fg.muted">Månadsvis, sälj endast under topp 20%</Text>
+              </Box>
+            </HStack>
+          </Box>
+
+          {/* Investment Suggestion */}
+          <Box bg="bg.subtle" borderRadius="8px" p="20px" borderColor="border" borderWidth="1px">
+            <Text fontWeight="semibold" color="fg" mb="12px">💰 Investeringsförslag</Text>
+            <HStack gap="12px" mb="16px" flexWrap="wrap">
+              <Box flex="1" minW="150px">
+                <Text fontSize="xs" color="fg.muted" mb="4px">Belopp att investera</Text>
                 <Input
                   type="number"
-                  size="sm"
-                  w="70px"
-                  value={settings.bandingPercent}
-                  onChange={e => setSettings(s => ({ ...s, bandingPercent: +e.target.value }))}
+                  placeholder="100000"
+                  value={investAmount}
+                  onChange={e => setInvestAmount(e.target.value)}
                   bg="bg.muted"
                   borderColor="border"
+                  size="sm"
                 />
-                <Text color="fg">%</Text>
-              </HStack>
+              </Box>
+              <Box>
+                <Text fontSize="xs" color="fg.muted" mb="4px">&nbsp;</Text>
+                <Button
+                  size="sm"
+                  colorPalette="blue"
+                  onClick={getInvestmentSuggestion}
+                  loading={loadingSuggestion}
+                  disabled={selected.length === 0}
+                >
+                  Beräkna
+                </Button>
+              </Box>
             </HStack>
-            <Text fontSize="xs" color="fg.muted">
-              💡 Med {settings.bandingPercent}% tolerans och 10% målvikt per aktie: sälj om &gt;{10 + settings.bandingPercent * 0.1}%, köp om &lt;{10 - settings.bandingPercent * 0.1}%
-            </Text>
-          </Box>
 
-          {/* Timing Recommendations */}
-          <Box bg="bg.subtle" borderRadius="8px" p="20px" borderColor="border" borderWidth="1px">
-            <Text fontWeight="semibold" color="fg" mb="12px">📅 Rekommenderad timing</Text>
-            <VStack gap="8px" align="stretch">
-              {STRATEGIES.filter(s => selected.includes(s.key)).map(s => (
-                <Flex key={s.key} justify="space-between" align="center" p="8px" bg="bg.muted" borderRadius="6px">
-                  <HStack gap="8px">
-                    <Box w="8px" h="8px" borderRadius="full" bg={s.color} />
-                    <Text fontSize="sm" color="fg">{s.label}</Text>
-                  </HStack>
-                  <Text fontSize="sm" color="fg.muted">{s.desc} (mars, juni, sep, dec)</Text>
+            {suggestion && (
+              <VStack gap="16px" align="stretch">
+                {/* Three Column View */}
+                <SimpleGrid columns={{ base: 1, md: 3 }} gap="12px">
+                  {/* TODAY - Current Holdings */}
+                  <Box bg="bg.muted" borderRadius="6px" p="12px">
+                    <Text fontSize="sm" fontWeight="semibold" color="fg" mb="8px">📊 IDAG</Text>
+                    <VStack gap="4px" align="stretch" mb="8px">
+                      {suggestion.current.holdings.length > 0 ? (
+                        suggestion.current.holdings.map(h => (
+                          <Flex key={h.ticker} justify="space-between" fontSize="xs">
+                            <Text color="fg" fontFamily="mono">{h.ticker}</Text>
+                            <Text color="fg.muted">{formatSEK(h.value)}</Text>
+                          </Flex>
+                        ))
+                      ) : (
+                        <Text fontSize="xs" color="fg.muted">Inga innehav</Text>
+                      )}
+                    </VStack>
+                    <Box borderTop="1px solid" borderColor="border" pt="8px">
+                      <Flex justify="space-between" fontSize="xs">
+                        <Text color="fg.muted">Nuvarande</Text>
+                        <Text color="fg">{formatSEK(suggestion.current.value)}</Text>
+                      </Flex>
+                      <Flex justify="space-between" fontSize="xs">
+                        <Text color="fg.muted">+ Nytt</Text>
+                        <Text color="success.fg">+{formatSEK(suggestion.current.new_investment)}</Text>
+                      </Flex>
+                      <Flex justify="space-between" fontSize="sm" fontWeight="semibold" mt="4px">
+                        <Text color="fg">Totalt</Text>
+                        <Text color="fg">{formatSEK(suggestion.current.total)}</Text>
+                      </Flex>
+                    </Box>
+                  </Box>
+
+                  {/* REBALANCE - Actions */}
+                  <Box bg="bg.muted" borderRadius="6px" p="12px">
+                    <Text fontSize="sm" fontWeight="semibold" color="fg" mb="8px">⚖️ ÅTGÄRDER</Text>
+                    {suggestion.sells.length > 0 && (
+                      <Box mb="8px">
+                        <Text fontSize="xs" color="error.fg" fontWeight="semibold" mb="4px">SÄLJ</Text>
+                        <VStack gap="2px" align="stretch">
+                          {suggestion.sells.map(s => (
+                            <Flex
+                              key={s.ticker}
+                              justify="space-between"
+                              fontSize="xs"
+                              p="4px"
+                              borderRadius="4px"
+                              bg={executedTrades.sells.includes(s.ticker) ? 'success.subtle' : 'error.subtle'}
+                              cursor="pointer"
+                              onClick={() => toggleTradeExecuted('sells', s.ticker)}
+                            >
+                              <HStack gap="4px">
+                                <Text>{executedTrades.sells.includes(s.ticker) ? '✅' : '🔴'}</Text>
+                                <Text color="fg" fontFamily="mono">{s.ticker}</Text>
+                              </HStack>
+                              <Text color="fg.muted">-{formatSEK(s.value)}</Text>
+                            </Flex>
+                          ))}
+                        </VStack>
+                      </Box>
+                    )}
+                    {suggestion.buys.length > 0 && (
+                      <Box>
+                        <Text fontSize="xs" color="success.fg" fontWeight="semibold" mb="4px">KÖP</Text>
+                        <VStack gap="2px" align="stretch">
+                          {suggestion.buys.map(b => (
+                            <Flex
+                              key={b.ticker}
+                              direction="column"
+                              fontSize="xs"
+                              p="4px"
+                              borderRadius="4px"
+                              bg={executedTrades.buys.includes(b.ticker) ? 'success.subtle' : 'brand.subtle'}
+                              cursor="pointer"
+                              onClick={() => toggleTradeExecuted('buys', b.ticker)}
+                            >
+                              <Flex justify="space-between">
+                                <HStack gap="4px">
+                                  <Text>{executedTrades.buys.includes(b.ticker) ? '✅' : '🟢'}</Text>
+                                  {b.strategies.length > 1 && <Text>⭐</Text>}
+                                  {b.avanza_id ? (
+                                    <a href={`https://www.avanza.se/aktier/om-aktien.html/${b.avanza_id}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+                                      <Text color="brand.fg" fontFamily="mono" textDecoration="underline">{b.ticker}</Text>
+                                    </a>
+                                  ) : (
+                                    <Text color="fg" fontFamily="mono">{b.ticker}</Text>
+                                  )}
+                                </HStack>
+                                <Text color="fg.muted">+{formatSEK(b.amount)}</Text>
+                              </Flex>
+                              {b.price && b.shares && (
+                                <Text color="fg.muted" fontSize="10px" ml="24px">~{b.shares} st à {Math.round(b.price)} SEK</Text>
+                              )}
+                            </Flex>
+                          ))}
+                        </VStack>
+                      </Box>
+                    )}
+                    {suggestion.sells.length === 0 && suggestion.buys.length === 0 && (
+                      <Text fontSize="xs" color="fg.muted">Inga åtgärder behövs</Text>
+                    )}
+                    <Text fontSize="xs" color="fg.muted" mt="8px">Klicka för att markera som genomförd</Text>
+                  </Box>
+
+                  {/* AFTER - Target Portfolio */}
+                  <Box bg="bg.muted" borderRadius="6px" p="12px">
+                    <Text fontSize="sm" fontWeight="semibold" color="fg" mb="8px">✅ EFTER</Text>
+                    <VStack gap="4px" align="stretch" mb="8px">
+                      {suggestion.target_portfolio.map(t => (
+                        <Flex key={t.ticker} justify="space-between" fontSize="xs">
+                          <HStack gap="4px">
+                            {t.strategies.length > 1 && <Text>⭐</Text>}
+                            <Text color="fg" fontFamily="mono">{t.ticker}</Text>
+                            <Text color="fg.muted">({t.weight}%)</Text>
+                          </HStack>
+                          <Text color="fg.muted">{formatSEK(t.value)}</Text>
+                        </Flex>
+                      ))}
+                    </VStack>
+                    <Box borderTop="1px solid" borderColor="border" pt="8px">
+                      <Flex justify="space-between" fontSize="sm" fontWeight="semibold">
+                        <Text color="fg">{suggestion.target_portfolio.length} aktier</Text>
+                        <Text color="fg">{formatSEK(suggestion.current.total)}</Text>
+                      </Flex>
+                    </Box>
+                  </Box>
+                </SimpleGrid>
+
+                {/* Cost and Apply */}
+                <Flex justify="space-between" align="center" p="12px" bg="bg.muted" borderRadius="6px">
+                  <Text fontSize="xs" color="fg.muted">
+                    💰 Kostnad: {formatSEK(suggestion.costs.total)} (courtage {formatSEK(suggestion.costs.courtage)} + spread {formatSEK(suggestion.costs.spread)})
+                  </Text>
+                  {(executedTrades.sells.length > 0 || executedTrades.buys.length > 0) && (
+                    <Button size="sm" colorPalette="green" onClick={applyExecutedTrades}>
+                      Spara {executedTrades.sells.length + executedTrades.buys.length} genomförda
+                    </Button>
+                  )}
                 </Flex>
-              ))}
-            </VStack>
-            {selected.length === 0 && <Text fontSize="sm" color="fg.muted">Välj strategier i första fliken</Text>}
+              </VStack>
+            )}
+
+            {!suggestion && selected.length > 0 && (
+              <Text fontSize="sm" color="fg.muted">
+                Ange belopp och klicka Beräkna för att se förslag. Dina valda strategier: {selected.map(s => STRATEGIES.find(st => st.key === s)?.label).join(', ')}
+              </Text>
+            )}
+            {selected.length === 0 && (
+              <Text fontSize="sm" color="fg.muted">Välj strategier i första fliken först</Text>
+            )}
           </Box>
 
-          {/* Actions Summary */}
-          {holdings.length > 0 && selected.length > 0 && (
+          {/* Banding Mode UI */}
+          {settings.bandingMode && (
+            <Box bg="bg.subtle" borderRadius="8px" p="20px" borderColor="border" borderWidth="1px">
+              <Flex justify="space-between" align="center" mb="16px">
+                <Box>
+                  <Text fontWeight="semibold" color="fg">🎯 Momentumportföljen</Text>
+                  <Text fontSize="xs" color="fg.muted">Köp topp 10%, sälj under topp 20%, kontrollera månadsvis</Text>
+                </Box>
+                {momentumHoldings.length === 0 ? (
+                  <Button size="sm" colorPalette="blue" onClick={initMomentumPortfolio} disabled={!strategyData['sammansatt_momentum']}>
+                    Starta med topp 10
+                  </Button>
+                ) : (
+                  <Button size="sm" colorPalette="blue" onClick={() => checkMomentumBanding()} loading={loadingBanding}>
+                    Kontrollera
+                  </Button>
+                )}
+              </Flex>
+
+              {momentumHoldings.length === 0 ? (
+                <Box p="24px" bg="bg.muted" borderRadius="6px" textAlign="center">
+                  <Text color="fg.muted" fontSize="sm">Klicka "Starta med topp 10" för att initiera momentumportföljen</Text>
+                </Box>
+              ) : bandingResult ? (
+                <VStack gap="12px" align="stretch">
+                  {/* Summary */}
+                  <SimpleGrid columns={4} gap="8px">
+                    <Box p="8px" bg="bg.muted" borderRadius="4px" textAlign="center">
+                      <Text fontSize="lg" fontWeight="bold" color="fg">{bandingResult.summary.to_keep}</Text>
+                      <Text fontSize="xs" color="fg.muted">Behåll</Text>
+                    </Box>
+                    <Box p="8px" bg="warning.subtle" borderRadius="4px" textAlign="center">
+                      <Text fontSize="lg" fontWeight="bold" color="warning.fg">{bandingResult.summary.in_danger_zone}</Text>
+                      <Text fontSize="xs" color="fg.muted">Bevaka</Text>
+                    </Box>
+                    <Box p="8px" bg="error.subtle" borderRadius="4px" textAlign="center">
+                      <Text fontSize="lg" fontWeight="bold" color="error.fg">{bandingResult.summary.to_sell}</Text>
+                      <Text fontSize="xs" color="fg.muted">Sälj</Text>
+                    </Box>
+                    <Box p="8px" bg="success.subtle" borderRadius="4px" textAlign="center">
+                      <Text fontSize="lg" fontWeight="bold" color="success.fg">{bandingResult.suggested_buys.length}</Text>
+                      <Text fontSize="xs" color="fg.muted">Köp</Text>
+                    </Box>
+                  </SimpleGrid>
+
+                  {/* Thresholds info */}
+                  <Text fontSize="xs" color="fg.muted" textAlign="center">
+                    Universum: {bandingResult.thresholds.universe_size} aktier • Köp: topp {bandingResult.thresholds.buy_rank} • Sälj: under topp {bandingResult.thresholds.sell_rank}
+                  </Text>
+
+                  {/* Holdings list */}
+                  <VStack gap="4px" align="stretch">
+                    {bandingResult.keeps.map(k => (
+                      <Flex key={k.ticker} p="8px" bg={k.rank <= bandingResult.thresholds.buy_rank ? 'success.subtle' : 'warning.subtle'} borderRadius="4px" justify="space-between">
+                        <HStack gap="8px">
+                          <Text fontSize="sm" color={k.rank <= bandingResult.thresholds.buy_rank ? 'success.fg' : 'warning.fg'}>
+                            {k.rank <= bandingResult.thresholds.buy_rank ? '✅' : '⚠️'}
+                          </Text>
+                          <Text fontSize="sm" color="fg" fontFamily="mono">{k.ticker}</Text>
+                          <Text fontSize="xs" color="fg.muted">{k.name}</Text>
+                        </HStack>
+                        <Text fontSize="sm" color="fg.muted">#{k.rank}</Text>
+                      </Flex>
+                    ))}
+                    {bandingResult.sells.map(s => (
+                      <Flex key={s.ticker} p="8px" bg="error.subtle" borderRadius="4px" justify="space-between">
+                        <HStack gap="8px">
+                          <Text fontSize="sm" color="error.fg">❌</Text>
+                          <Text fontSize="sm" color="fg" fontFamily="mono">{s.ticker}</Text>
+                          <Text fontSize="xs" color="fg.muted">{s.reason}</Text>
+                        </HStack>
+                        <Text fontSize="sm" color="error.fg">SÄLJ</Text>
+                      </Flex>
+                    ))}
+                  </VStack>
+
+                  {/* Suggested buys */}
+                  {bandingResult.suggested_buys.length > 0 && (
+                    <Box>
+                      <Text fontSize="sm" fontWeight="semibold" color="success.fg" mb="8px">🟢 Köp istället</Text>
+                      <VStack gap="4px" align="stretch">
+                        {bandingResult.suggested_buys.map(b => (
+                          <Flex key={b.ticker} p="8px" bg="success.subtle" borderRadius="4px" justify="space-between">
+                            <HStack gap="8px">
+                              <Text fontSize="sm" color="fg" fontFamily="mono">{b.ticker}</Text>
+                              <Text fontSize="xs" color="fg.muted">{b.name}</Text>
+                            </HStack>
+                            <Text fontSize="sm" color="success.fg">#{b.rank}</Text>
+                          </Flex>
+                        ))}
+                      </VStack>
+                    </Box>
+                  )}
+
+                  {/* Apply button */}
+                  {bandingResult.sells.length > 0 && (
+                    <Button colorPalette="blue" onClick={applyBandingTrades}>
+                      Markera byten som genomförda
+                    </Button>
+                  )}
+
+                  {bandingResult.sells.length === 0 && (
+                    <Box p="12px" bg="success.subtle" borderRadius="6px" textAlign="center">
+                      <Text color="success.fg" fontSize="sm">✅ Inga byten behövs - alla aktier inom topp 20%</Text>
+                    </Box>
+                  )}
+                </VStack>
+              ) : (
+                <VStack gap="8px" align="stretch">
+                  <Text fontSize="sm" color="fg.muted" mb="8px">Dina {momentumHoldings.length} momentumaktier:</Text>
+                  <Flex gap="8px" flexWrap="wrap">
+                    {momentumHoldings.map(t => (
+                      <Box key={t} px="8px" py="4px" bg="bg.muted" borderRadius="4px">
+                        <Text fontSize="sm" color="fg" fontFamily="mono">{t}</Text>
+                      </Box>
+                    ))}
+                  </Flex>
+                  <Text fontSize="xs" color="fg.muted">Klicka "Kontrollera" för att se om några byten behövs</Text>
+                </VStack>
+              )}
+            </Box>
+          )}
+
+          {/* Classic Mode - Timing Recommendations */}
+          {!settings.bandingMode && (
+            <Box bg="bg.subtle" borderRadius="8px" p="20px" borderColor="border" borderWidth="1px">
+              <Text fontWeight="semibold" color="fg" mb="12px">📅 Nästa rebalansering</Text>
+              <VStack gap="8px" align="stretch">
+                {STRATEGIES.filter(s => selected.includes(s.key)).map(s => {
+                  const nextDate = rebalanceDates[s.key];
+                  const formatted = nextDate ? new Date(nextDate).toLocaleDateString('sv-SE', { day: 'numeric', month: 'long', year: 'numeric' }) : s.desc;
+                  return (
+                    <Flex key={s.key} justify="space-between" align="center" p="8px" bg="bg.muted" borderRadius="6px">
+                      <HStack gap="8px">
+                        <Box w="8px" h="8px" borderRadius="full" bg={s.color} />
+                        <Text fontSize="sm" color="fg">{s.label}</Text>
+                      </HStack>
+                      <Text fontSize="sm" color={nextDate ? 'fg' : 'fg.muted'} fontWeight={nextDate ? 'semibold' : 'normal'}>
+                        {nextDate ? formatted : s.desc}
+                      </Text>
+                    </Flex>
+                  );
+                })}
+              </VStack>
+              {selected.length === 0 && <Text fontSize="sm" color="fg.muted">Välj strategier i första fliken</Text>}
+            </Box>
+          )}
+
+          {/* Classic Mode - Actions Summary */}
+          {!settings.bandingMode && holdings.length > 0 && selected.length > 0 && (
             <Box bg="bg.subtle" borderRadius="8px" p="20px" borderColor="border" borderWidth="1px">
               <Flex justify="space-between" align="center" mb="16px">
                 <Text fontWeight="semibold" color="fg">Rekommenderade åtgärder</Text>
@@ -500,7 +985,8 @@ export default function MinStrategiPage() {
             </Box>
           )}
 
-          {(holdings.length === 0 || selected.length === 0) && (
+          {/* Empty state for classic mode */}
+          {!settings.bandingMode && (holdings.length === 0 || selected.length === 0) && (
             <Box bg="bg.subtle" borderRadius="8px" p="48px" textAlign="center">
               <Text fontSize="3xl" mb="12px">⚖️</Text>
               <Text color="fg.muted">

@@ -69,6 +69,16 @@ class DailyPrice(Base):
     low = Column(Float)
     volume = Column(Float)
 
+class IndexPrice(Base):
+    """Historical index prices (OMXS30, etc). Stored separately since indices aren't stocks."""
+    __tablename__ = "index_prices"
+    index_id = Column(String, primary_key=True)  # e.g., "OMXS30"
+    date = Column(Date, primary_key=True)
+    close = Column(Float)
+    open = Column(Float)
+    high = Column(Float)
+    low = Column(Float)
+
 class Fundamentals(Base):
     __tablename__ = "fundamentals"
     id = Column(Integer, primary_key=True, autoincrement=True)

@@ -7,8 +7,13 @@ from db import SessionLocal
 from services.auth import create_admin_user
 
 def main():
-    email = sys.argv[1] if len(sys.argv) > 1 else "admin@borslabbet.local"
-    password = sys.argv[2] if len(sys.argv) > 2 else "admin123"
+    if len(sys.argv) < 3:
+        print("Usage: python create_admin.py <email> <password> [name]")
+        print("Example: python create_admin.py admin@example.com MySecurePass123 Admin")
+        sys.exit(1)
+    
+    email = sys.argv[1]
+    password = sys.argv[2]
     name = sys.argv[3] if len(sys.argv) > 3 else "Admin"
     
     db = SessionLocal()

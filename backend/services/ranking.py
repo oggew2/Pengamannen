@@ -283,7 +283,8 @@ def calculate_momentum_with_quality_filter(
     prices_df: pd.DataFrame, 
     fund_df: pd.DataFrame,
     prev_fund_df: pd.DataFrame = None,
-    current_holdings: list = None
+    current_holdings: list = None,
+    full_universe: bool = False
 ) -> pd.DataFrame:
     """
     Sammansatt Momentum strategy with Piotroski F-Score filter.
@@ -330,7 +331,7 @@ def calculate_momentum_with_quality_filter(
     # Apply banding if current holdings provided
     if current_holdings:
         rankings = apply_banding(current_holdings, rankings)
-    else:
+    elif not full_universe:
         rankings = rankings.head(10)
     
     return rankings

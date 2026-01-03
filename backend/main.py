@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, Header, UploadFile, File, Request, Response
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import date, datetime, timedelta
 from contextlib import asynccontextmanager
@@ -106,7 +107,7 @@ class ConnectionManager:
         for connection in self.active_connections:
             try:
                 await connection.send_text(json.dumps(log_data))
-            except:
+            except Exception:
                 disconnected.append(connection)
         
         # Remove disconnected clients
@@ -289,6 +290,23 @@ def update_market_filter(request: Request, market_filter: str, db: Session = Dep
     db.commit()
     return {"market_filter": user.market_filter}
 
+@v1_router.post("/admin/bootstrap")
+def bootstrap_admin(email: str, secret: str, db: Session = Depends(get_db)):
+    """Bootstrap first admin user. Requires ADMIN_SECRET env var."""
+    import os
+    from models import User
+    admin_secret = os.environ.get("ADMIN_SECRET", "borslabbet-admin-2024")
+    if secret != admin_secret:
+        raise HTTPException(status_code=403, detail="Invalid secret")
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found - register first")
+    user.is_admin = True
+    if not user.invite_code:
+        user.invite_code = User.generate_invite_code()
+    db.commit()
+    return {"status": "promoted", "email": email, "invite_code": user.invite_code}
+
 @v1_router.get("/admin/users")
 def get_all_users(request: Request, db: Session = Depends(get_db)):
     """Get all users (admin only)."""
@@ -427,14 +445,6 @@ def cleanup_memory_endpoint():
     return {"message": "Memory cleanup completed", "result": result}
 
 
-# Alerts endpoint
-@v1_router.get("/alerts")
-def get_alerts(db: Session = Depends(get_db)):
-    """Get current system alerts."""
-    from services.alerts import get_all_alerts
-    return {"alerts": get_all_alerts(db)}
-
-
 # Data integrity check - CRITICAL for trading
 @v1_router.get("/data/integrity")
 def check_data_integrity_endpoint(db: Session = Depends(get_db)):
@@ -518,7 +528,7 @@ def compare_all_strategies(db: Session = Depends(get_db)):
         try:
             rankings = _compute_strategy_rankings(name, config, db)[:10]
             result[name] = [{"rank": i+1, "ticker": r.ticker, "name": r.name, "score": r.score} for i, r in enumerate(rankings)]
-        except:
+        except Exception:
             result[name] = []
     return result
 
@@ -686,6 +696,132 @@ def get_strategy_rankings_enhanced(
         raise HTTPException(status_code=500, detail=f"Rankings failed: {str(e)}")
 
 
+@v1_router.post("/strategies/sammansatt_momentum/banding-check")
+def check_momentum_banding(
+    holdings: List[str],
+    db: Session = Depends(get_db)
+):
+    """
+    Check momentum holdings against banding thresholds.
+    
+    Börslabbet banding rules:
+    - Buy: Top 10% of universe
+    - Sell: When stock falls below top 20%
+    - Check monthly
+    
+    Returns which stocks to keep, sell, and suggested buys.
+    """
+    logger.info(f"POST /strategies/sammansatt_momentum/banding-check with {len(holdings)} holdings")
+    
+    from models import StrategySignal
+    
+    # Check for cached full universe rankings (same day)
+    cache_key = "sammansatt_momentum_full"
+    cached = db.query(StrategySignal).filter(
+        StrategySignal.strategy_name == cache_key,
+        StrategySignal.calculated_date == date.today()
+    ).order_by(StrategySignal.rank).all()
+    
+    if cached:
+        logger.info(f"Using cached full universe rankings ({len(cached)} stocks)")
+        ranked_data = [{"ticker": s.ticker, "rank": s.rank, "score": s.score} for s in cached]
+    else:
+        # Compute full universe rankings
+        logger.info("Computing fresh full universe rankings for banding")
+        from services.ranking import calculate_momentum_with_quality_filter, filter_by_min_market_cap, filter_real_stocks
+        
+        cutoff_date = date.today() - timedelta(days=400)
+        prices = db.query(DailyPrice).filter(DailyPrice.date >= cutoff_date).all()
+        fundamentals = db.query(Fundamentals).all()
+        stocks = db.query(Stock).all()
+        
+        market_caps = {s.ticker: s.market_cap_msek or 0 for s in stocks}
+        stock_types = {s.ticker: getattr(s, 'stock_type', 'stock') for s in stocks}
+        
+        prices_df = pd.DataFrame([{"ticker": p.ticker, "date": p.date, "close": p.close} for p in prices]) if prices else pd.DataFrame()
+        fund_df = pd.DataFrame([{
+            "ticker": f.ticker, "pe": f.pe, "pb": f.pb, "ps": f.ps, "p_fcf": f.p_fcf, "ev_ebitda": f.ev_ebitda,
+            "dividend_yield": f.dividend_yield, "roe": f.roe, "roa": f.roa, "roic": f.roic, "fcfroe": f.fcfroe,
+            "payout_ratio": f.payout_ratio, "market_cap": market_caps.get(f.ticker, 0),
+            "stock_type": stock_types.get(f.ticker, 'stock')
+        } for f in fundamentals]) if fundamentals else pd.DataFrame()
+        
+        if fund_df.empty or prices_df.empty:
+            raise HTTPException(status_code=500, detail="No data available")
+        
+        fund_df = filter_real_stocks(fund_df)
+        fund_df = filter_by_min_market_cap(fund_df)
+        prices_df = prices_df[prices_df['ticker'].isin(set(fund_df['ticker']))]
+        
+        ranked_df = calculate_momentum_with_quality_filter(prices_df, fund_df, full_universe=True)
+        
+        if ranked_df.empty:
+            raise HTTPException(status_code=500, detail="No rankings available")
+        
+        # Cache full universe rankings
+        db.query(StrategySignal).filter(StrategySignal.strategy_name == cache_key).delete()
+        for _, row in ranked_df.iterrows():
+            db.add(StrategySignal(
+                strategy_name=cache_key,
+                ticker=row['ticker'],
+                rank=int(row['rank']),
+                score=float(row['score']),
+                calculated_date=date.today()
+            ))
+        db.commit()
+        logger.info(f"Cached {len(ranked_df)} full universe rankings")
+        
+        ranked_data = [{"ticker": row['ticker'], "rank": int(row['rank']), "score": float(row['score'])} for _, row in ranked_df.iterrows()]
+    
+    universe_size = len(ranked_data)
+    buy_threshold = max(1, int(universe_size * 0.10))
+    sell_threshold = max(2, int(universe_size * 0.20))
+    
+    # Build rank lookup
+    rank_map = {r["ticker"]: {"rank": r["rank"], "score": r["score"]} for r in ranked_data}
+    
+    keeps, sells, watch = [], [], []
+    
+    for ticker in holdings:
+        info = rank_map.get(ticker)
+        if info is None:
+            sells.append({"ticker": ticker, "rank": None, "name": None, "reason": "Not in universe"})
+        elif info["rank"] > sell_threshold:
+            sells.append({"ticker": ticker, "rank": info["rank"], "name": _get_stock_name(ticker, db), "reason": f"Below top 20% (rank {info['rank']})"})
+        else:
+            name = _get_stock_name(ticker, db)
+            entry = {"ticker": ticker, "rank": info["rank"], "name": name}
+            keeps.append(entry)
+            if info["rank"] > buy_threshold:
+                watch.append(entry)
+    
+    # Find suggested buys from top 10% not already owned
+    owned_tickers = set(holdings)
+    buys = []
+    slots_needed = max(0, 10 - len(keeps))
+    for r in ranked_data[:buy_threshold]:
+        if r['ticker'] not in owned_tickers and len(buys) < slots_needed:
+            buys.append({"ticker": r['ticker'], "rank": r['rank'], "name": _get_stock_name(r['ticker'], db)})
+    
+    return {
+        "keeps": sorted(keeps, key=lambda x: x["rank"]),
+        "sells": sells,
+        "watch": sorted(watch, key=lambda x: x["rank"]),
+        "suggested_buys": buys,
+        "thresholds": {
+            "buy_rank": buy_threshold,
+            "sell_rank": sell_threshold,
+            "universe_size": universe_size
+        },
+        "summary": {
+            "total_holdings": len(holdings),
+            "to_keep": len(keeps),
+            "to_sell": len(sells),
+            "in_danger_zone": len(watch)
+        }
+    }
+
+
 @v1_router.post("/portfolio/analyze-rebalancing")
 def analyze_portfolio_rebalancing(
     strategy_name: str,
@@ -723,6 +859,152 @@ def analyze_portfolio_rebalancing(
     except Exception as e:
         logger.error(f"Rebalancing analysis error: {e}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+class InvestmentRequest(BaseModel):
+    amount: float
+    strategies: List[str]
+    holdings: List[dict] = []  # [{ticker, shares, value}]
+    mode: str = "classic"  # classic or banding
+
+
+@v1_router.post("/portfolio/investment-suggestion")
+def get_investment_suggestion(req: InvestmentRequest, db: Session = Depends(get_db)):
+    """
+    Generate investment suggestion based on amount, strategies, and current holdings.
+    
+    Returns sells, buys, and target portfolio with exact amounts.
+    """
+    logger.info(f"POST /portfolio/investment-suggestion: {req.amount} SEK, {req.strategies}, mode={req.mode}")
+    
+    strategies_config = STRATEGIES_CONFIG.get("strategies", {})
+    
+    # Get rankings for each selected strategy
+    all_picks = []
+    for strat in req.strategies:
+        if strat not in strategies_config:
+            continue
+        rankings = _compute_strategy_rankings(strat, strategies_config[strat], db)[:10]
+        for r in rankings:
+            all_picks.append({"ticker": r.ticker, "name": r.name, "rank": r.rank, "strategy": strat})
+    
+    # Dedupe and combine (stocks in multiple strategies get priority)
+    ticker_info = {}
+    for p in all_picks:
+        if p["ticker"] not in ticker_info:
+            ticker_info[p["ticker"]] = {"name": p["name"], "strategies": [], "best_rank": p["rank"]}
+        ticker_info[p["ticker"]]["strategies"].append(p["strategy"])
+        ticker_info[p["ticker"]]["best_rank"] = min(ticker_info[p["ticker"]]["best_rank"], p["rank"])
+    
+    # Sort by number of strategies (overlap first), then by rank
+    sorted_picks = sorted(ticker_info.items(), key=lambda x: (-len(x[1]["strategies"]), x[1]["best_rank"]))
+    target_tickers = [t[0] for t in sorted_picks[:10]]
+    
+    # Calculate current portfolio value
+    current_value = sum(h.get("value", 0) for h in req.holdings)
+    total_value = current_value + req.amount
+    target_per_stock = total_value / 10 if len(target_tickers) >= 10 else total_value / max(1, len(target_tickers))
+    
+    # Build holdings map
+    holdings_map = {h["ticker"]: h for h in req.holdings}
+    
+    # Generate sells (holdings not in target)
+    sells = []
+    sell_value = 0
+    for h in req.holdings:
+        if h["ticker"] not in target_tickers:
+            sells.append({
+                "ticker": h["ticker"],
+                "name": h.get("name", h["ticker"]),
+                "shares": h.get("shares", 0),
+                "value": h.get("value", 0),
+                "reason": "Inte i vald strategi"
+            })
+            sell_value += h.get("value", 0)
+    
+    # Get prices and avanza_ids for buy suggestions
+    price_map = {}
+    avanza_map = {}
+    for ticker in target_tickers:
+        stock = db.query(Stock).filter(Stock.ticker == ticker).first()
+        if stock:
+            avanza_map[ticker] = stock.avanza_id
+        # Get latest price
+        latest = db.query(DailyPrice).filter(DailyPrice.ticker == ticker).order_by(DailyPrice.date.desc()).first()
+        if latest:
+            price_map[ticker] = latest.close
+    
+    # Generate buys
+    buys = []
+    available_cash = req.amount + sell_value
+    
+    for ticker in target_tickers:
+        info = ticker_info[ticker]
+        current = holdings_map.get(ticker, {})
+        current_val = current.get("value", 0)
+        target_val = target_per_stock
+        diff = target_val - current_val
+        
+        if diff > 0:
+            buy_amount = min(diff, available_cash)
+            if buy_amount > 100:  # Min 100 SEK
+                price = price_map.get(ticker)
+                buys.append({
+                    "ticker": ticker,
+                    "name": info["name"],
+                    "amount": round(buy_amount),
+                    "strategies": info["strategies"],
+                    "current_value": round(current_val),
+                    "target_value": round(target_val),
+                    "price": price,
+                    "shares": round(buy_amount / price) if price else None,
+                    "avanza_id": avanza_map.get(ticker)
+                })
+                available_cash -= buy_amount
+    
+    # Build target portfolio
+    target_portfolio = []
+    for ticker in target_tickers:
+        info = ticker_info[ticker]
+        current = holdings_map.get(ticker, {})
+        current_val = current.get("value", 0)
+        buy_entry = next((b for b in buys if b["ticker"] == ticker), None)
+        buy_amount = buy_entry["amount"] if buy_entry else 0
+        
+        target_portfolio.append({
+            "ticker": ticker,
+            "name": info["name"],
+            "value": round(current_val + buy_amount),
+            "weight": round((current_val + buy_amount) / total_value * 100, 1),
+            "strategies": info["strategies"]
+        })
+    
+    # Estimate costs (0.069% courtage + 0.1% spread)
+    trade_volume = sum(s["value"] for s in sells) + sum(b["amount"] for b in buys)
+    costs = {
+        "courtage": round(trade_volume * 0.00069),
+        "spread": round(trade_volume * 0.001),
+        "total": round(trade_volume * 0.00169)
+    }
+    
+    return {
+        "current": {
+            "holdings": req.holdings,
+            "value": round(current_value),
+            "new_investment": round(req.amount),
+            "total": round(total_value)
+        },
+        "sells": sells,
+        "buys": buys,
+        "target_portfolio": target_portfolio,
+        "costs": costs,
+        "summary": {
+            "sell_count": len(sells),
+            "buy_count": len(buys),
+            "sell_value": round(sell_value),
+            "buy_value": round(sum(b["amount"] for b in buys))
+        }
+    }
 
 
 @v1_router.post("/portfolio/compare-all-strategies")
@@ -1676,6 +1958,26 @@ def get_stock_config():
         "total_mapped": len(fetcher.known_stocks)
     }
 
+@v1_router.post("/data/sync-omxs30")
+async def sync_omxs30(db: Session = Depends(get_db)):
+    """Sync OMXS30 index historical prices. Only fetches new data incrementally."""
+    from services.avanza_fetcher_v2 import sync_omxs30_index
+    result = sync_omxs30_index(db)
+    return result
+
+@v1_router.get("/data/omxs30")
+def get_omxs30_data(db: Session = Depends(get_db), limit: int = 100):
+    """Get OMXS30 index historical prices."""
+    from models import IndexPrice
+    prices = db.query(IndexPrice).filter(
+        IndexPrice.index_id == "OMXS30"
+    ).order_by(IndexPrice.date.desc()).limit(limit).all()
+    return {
+        "index": "OMXS30",
+        "count": len(prices),
+        "data": [{"date": p.date.isoformat(), "close": p.close, "open": p.open, "high": p.high, "low": p.low} for p in prices]
+    }
+
 @v1_router.post("/data/stock-config")
 def update_stock_config(config: dict, db: Session = Depends(get_db)):
     """Update stock ID mappings."""
@@ -1832,7 +2134,7 @@ async def sync_historical_prices(
                             low=row.get('low'),
                             volume=row.get('volume')
                         ))
-                    except:
+                    except Exception:
                         pass
                 successful += 1
             
@@ -1900,7 +2202,7 @@ async def sync_historical_prices_extended(
                             high=row.get('high'), low=row.get('low'),
                             volume=row.get('volume')
                         ))
-                    except:
+                    except Exception:
                         pass
                 successful += 1
             
@@ -2306,7 +2608,7 @@ def export_analytics(strategy_name: str, db: Session = Depends(get_db)):
 
 
 # Alerts
-@v1_router.get("/alerts")
+@v1_router.get("/alerts", operation_id="get_all_alerts")
 def get_alerts(db: Session = Depends(get_db)):
     """Get all active alerts - rebalancing, volatility, milestones."""
     from services.alerts import get_all_alerts
@@ -3377,7 +3679,7 @@ async def import_avanza_csv(file: UploadFile = File(...)):
     content = await file.read()
     try:
         text = content.decode('utf-8')
-    except:
+    except Exception:
         text = content.decode('latin-1')
     
     transactions = parse_broker_csv(text)

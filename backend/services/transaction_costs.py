@@ -30,6 +30,9 @@ SPREAD_ESTIMATES = {
 
 def calculate_broker_fee(trade_value: float, broker: str = "avanza") -> float:
     """Calculate broker commission for a trade."""
+    if trade_value <= 0:
+        return 0.0
+    
     if broker not in BROKERS:
         broker = "avanza"
     

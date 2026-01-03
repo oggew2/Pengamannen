@@ -1,5 +1,7 @@
 import { Box, Text, VStack, HStack, Flex, SimpleGrid } from '@chakra-ui/react';
 import { Link } from 'react-router-dom';
+import { StrategyQuiz } from '../components/StrategyQuiz';
+import { CostCalculator } from '../components/CostCalculator';
 
 const steps = [
   {
@@ -56,11 +58,19 @@ export default function GettingStartedPage() {
     <VStack gap="32px" align="stretch">
       <Box>
         <Text fontSize="2xl" fontWeight="bold" color="gray.50">Kom igång</Text>
-        <Text color="gray.400" mt="4px">5 steg för att börja investera systematiskt</Text>
+        <Text color="gray.400" mt="4px">Hitta rätt strategi och förstå kostnaderna</Text>
       </Box>
 
+      {/* Strategy Quiz */}
+      <StrategyQuiz />
+
+      {/* Cost Calculator */}
+      <CostCalculator />
+
       {/* Steps */}
-      <VStack gap="16px" align="stretch">
+      <Box>
+        <Text fontSize="xl" fontWeight="semibold" color="gray.50" mb="16px">5 steg för att börja</Text>
+        <VStack gap="16px" align="stretch">
         {steps.map((step) => (
           <Box key={step.number} bg="gray.700" borderRadius="8px" p="20px" border="1px solid" borderColor="gray.600">
             <Flex gap="16px" align="flex-start">
@@ -92,7 +102,8 @@ export default function GettingStartedPage() {
             </Flex>
           </Box>
         ))}
-      </VStack>
+        </VStack>
+      </Box>
 
       {/* Strategy Overview */}
       <Box>
