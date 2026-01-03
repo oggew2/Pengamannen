@@ -2,11 +2,6 @@ import type { StrategyMeta, RankedStock, PortfolioResponse, RebalanceDate, Stock
 
 const BASE_URL = '/v1';
 
-function getAuthHeaders(): HeadersInit {
-  const token = localStorage.getItem('authToken');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -16,7 +11,8 @@ class ApiError extends Error {
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${url}`, {
     ...options,
-    headers: { ...getAuthHeaders(), ...options?.headers }
+    credentials: 'include',  // Include httpOnly cookies
+    headers: { ...options?.headers }
   });
   if (!res.ok) {
     throw new ApiError(res.status, `API error: ${res.status} ${res.statusText}`);

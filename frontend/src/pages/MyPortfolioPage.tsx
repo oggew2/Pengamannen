@@ -56,7 +56,7 @@ export default function MyPortfolioPage() {
     const formData = new FormData();
     formData.append('file', file);
     try {
-      const res = await fetch('/v1/import/avanza-csv', { method: 'POST', body: formData });
+      const res = await fetch('/v1/import/avanza-csv', { method: 'POST', body: formData, credentials: 'include' });
       setImportResult(await res.json());
     } catch { setImportResult(null); }
   };

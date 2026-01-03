@@ -134,7 +134,7 @@ async def lifespan(app: FastAPI):
     stop_scheduler()
     logger.info("Application shutdown with cleanup")
 
-app = FastAPI(title="Börslabbet Strategy API", lifespan=lifespan)
+app = FastAPI(title="Börslabbet Strategy API", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 # Create v1 API router
 from fastapi import APIRouter
@@ -153,7 +153,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for tunnel access
+    allow_origins=["http://localhost:5173", "http://localhost:8000", "http://192.168.0.150:8000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -173,6 +173,44 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 
+# Auth middleware - protect all API routes except auth endpoints and health
+class AuthMiddleware(BaseHTTPMiddleware):
+    OPEN_PATHS = {"/v1/auth/login", "/v1/auth/register", "/v1/auth/logout", "/v1/auth/me", "/v1/health", "/health", "/", "/favicon.ico"}
+    
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        
+        # Allow open paths and static assets
+        if path in self.OPEN_PATHS or path.startswith("/assets") or not path.startswith("/v1"):
+            return await call_next(request)
+        
+        # Check auth cookie
+        from services.auth import COOKIE_NAME
+        token = request.cookies.get(COOKIE_NAME)
+        if not token:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=401, content={"detail": "Authentication required"})
+        
+        # Validate session
+        from db import SessionLocal
+        from models import UserSession
+        from datetime import datetime
+        db = SessionLocal()
+        try:
+            session = db.query(UserSession).filter(
+                UserSession.token == token,
+                UserSession.expires_at > datetime.now()
+            ).first()
+            if not session:
+                from fastapi.responses import JSONResponse
+                return JSONResponse(status_code=401, content={"detail": "Session expired"})
+        finally:
+            db.close()
+        
+        return await call_next(request)
+
+app.add_middleware(AuthMiddleware)
+
 # GZip compression for responses > 1KB
 from starlette.middleware.gzip import GZipMiddleware
 app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -184,54 +222,93 @@ portfolio_comparison_service = PortfolioComparisonService()
 # Auth endpoints
 @v1_router.post("/auth/register")
 @limiter.limit("5/minute")
-def register(request: Request, email: str, password: str, name: str = None, db: Session = Depends(get_db)):
-    """Register a new user."""
-    from services.auth import register_user
+def register(request: Request, response: Response, email: str, password: str, invite_code: str, name: str = None, db: Session = Depends(get_db)):
+    """Register a new user with invite code."""
+    from services.auth import register_user, login_user, set_auth_cookie
     from services.audit import log_auth
     try:
-        user = register_user(db, email, password, name)
+        user = register_user(db, email, password, invite_code, name)
+        user_info, token = login_user(db, email, password)
+        set_auth_cookie(response, token)
         log_auth("REGISTER", user.id, email, True, request.client.host if request.client else None)
-        return {"user_id": user.id, "email": user.email, "name": user.name}
+        return user_info
     except Exception as e:
         log_auth("REGISTER", None, email, False, request.client.host if request.client else None)
         raise
 
 @v1_router.post("/auth/login")
 @limiter.limit("5/minute")
-def login(request: Request, email: str, password: str, db: Session = Depends(get_db)):
-    """Login and get session token."""
-    from services.auth import login_user
+def login(request: Request, response: Response, email: str, password: str, db: Session = Depends(get_db)):
+    """Login and set session cookie."""
+    from services.auth import login_user, set_auth_cookie
     from services.audit import log_auth
     try:
-        result = login_user(db, email, password)
-        log_auth("LOGIN", result.get("user_id"), email, True, request.client.host if request.client else None)
-        return result
+        user_info, token = login_user(db, email, password)
+        set_auth_cookie(response, token)
+        log_auth("LOGIN", user_info.get("user_id"), email, True, request.client.host if request.client else None)
+        return user_info
     except Exception as e:
         log_auth("LOGIN", None, email, False, request.client.host if request.client else None)
         raise
 
 @v1_router.post("/auth/logout")
-def logout(token: str, db: Session = Depends(get_db)):
-    """Logout and invalidate token."""
-    from services.auth import logout_user
-    logout_user(db, token)
+def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+    """Logout and clear cookie."""
+    from services.auth import logout_user, clear_auth_cookie, COOKIE_NAME
+    token = request.cookies.get(COOKIE_NAME)
+    if token:
+        logout_user(db, token)
+    clear_auth_cookie(response)
     return {"status": "logged out"}
 
 @v1_router.get("/auth/me")
-def get_me(db: Session = Depends(get_db), authorization: str = Header(None)):
-    """Get current user info."""
-    from services.auth import get_current_user
-    user = get_current_user(db, authorization)
+def get_me(request: Request, db: Session = Depends(get_db)):
+    """Get current user info from cookie."""
+    from services.auth import get_user_from_cookie
+    user = get_user_from_cookie(request, db)
     if not user:
         return {"authenticated": False}
-    return {"authenticated": True, "user_id": user.id, "email": user.email, "name": user.name, "market_filter": user.market_filter}
+    return {
+        "authenticated": True,
+        "user_id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "is_admin": user.is_admin,
+        "invite_code": user.invite_code,
+        "market_filter": user.market_filter
+    }
 
 @v1_router.put("/auth/market-filter")
-def update_market_filter(market_filter: str, db: Session = Depends(get_db), authorization: str = Header(...)):
+def update_market_filter(request: Request, market_filter: str, db: Session = Depends(get_db)):
     """Update user's market filter preference."""
-    from services.auth import require_auth, update_user_market_filter
-    user = require_auth(db, authorization)
-    user = update_user_market_filter(db, user, market_filter)
+    from services.auth import require_auth
+    user = require_auth(request, db)
+    if market_filter not in ["stockholmsborsen", "first_north", "both"]:
+        raise HTTPException(status_code=400, detail="Invalid market filter")
+    user.market_filter = market_filter
+    db.commit()
+    return {"market_filter": user.market_filter}
+
+@v1_router.get("/admin/users")
+def get_all_users(request: Request, db: Session = Depends(get_db)):
+    """Get all users (admin only)."""
+    from services.auth import require_admin
+    from models import User
+    require_admin(request, db)
+    users = db.query(User).all()
+    return {
+        "total": len(users),
+        "users": [{
+            "id": u.id,
+            "email": u.email,
+            "name": u.name,
+            "is_admin": u.is_admin,
+            "is_active": u.is_active,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+            "invited_by": u.invited_by
+        } for u in users]
+    }
+    db.commit()
     return {"market_filter": user.market_filter}
 
 
@@ -770,48 +847,46 @@ def preview_combination(request: CombinerPreviewRequest, db: Session = Depends(g
 
 
 @v1_router.post("/portfolio/combiner/save", response_model=SavedCombination)
-def save_combination(request: CombinerSaveRequest, db: Session = Depends(get_db), authorization: str = Header(None)):
-    logger.info(f"POST /portfolio/combiner/save: {request.name}")
-    from services.auth import get_current_user
-    user = get_current_user(db, authorization)
-    user_id = user.id if user else None
+def save_combination(request: Request, body: CombinerSaveRequest, db: Session = Depends(get_db)):
+    logger.info(f"POST /portfolio/combiner/save: {body.name}")
+    from services.auth import get_user_from_cookie
+    user = get_user_from_cookie(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
     
     # Check for duplicate name within user's combinations
-    query = db.query(SavedCombinationModel).filter(SavedCombinationModel.name == request.name)
-    if user_id:
-        query = query.filter(SavedCombinationModel.user_id == user_id)
-    else:
-        query = query.filter(SavedCombinationModel.user_id == None)
-    
-    if query.first():
-        raise HTTPException(status_code=400, detail=f"Combination '{request.name}' already exists")
+    existing = db.query(SavedCombinationModel).filter(
+        SavedCombinationModel.name == body.name,
+        SavedCombinationModel.user_id == user.id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Combination '{body.name}' already exists")
     
     combo = SavedCombinationModel(
-        name=request.name,
-        user_id=user_id,
-        strategies_json=json.dumps([{"name": s.name, "weight": s.weight} for s in request.strategies])
+        name=body.name,
+        user_id=user.id,
+        strategies_json=json.dumps([{"name": s.name, "weight": s.weight} for s in body.strategies])
     )
     db.add(combo)
     db.commit()
     db.refresh(combo)
     
-    return SavedCombination(id=combo.id, name=combo.name, strategies=request.strategies,
+    return SavedCombination(id=combo.id, name=combo.name, strategies=body.strategies,
                            created_at=combo.created_at.isoformat())
 
 
 @v1_router.get("/portfolio/combiner/list", response_model=list[SavedCombination])
-def list_combinations(db: Session = Depends(get_db), authorization: str = Header(None)):
+def list_combinations(request: Request, db: Session = Depends(get_db)):
     logger.info("GET /portfolio/combiner/list")
-    from services.auth import get_current_user
-    user = get_current_user(db, authorization)
-    user_id = user.id if user else None
+    from services.auth import get_user_from_cookie
+    user = get_user_from_cookie(request, db)
     
-    # Filter by user_id - show only user's combinations (or anonymous if no user)
+    # Filter by user_id - show only user's combinations
     query = db.query(SavedCombinationModel)
-    if user_id:
-        query = query.filter(SavedCombinationModel.user_id == user_id)
+    if user:
+        query = query.filter(SavedCombinationModel.user_id == user.id)
     else:
-        query = query.filter(SavedCombinationModel.user_id == None)
+        return []  # No anonymous access
     
     combos = query.all()
     from schemas import StrategyWeight
@@ -826,20 +901,18 @@ def list_combinations(db: Session = Depends(get_db), authorization: str = Header
 
 
 @v1_router.delete("/portfolio/combiner/{combo_id}")
-def delete_combination(combo_id: int, db: Session = Depends(get_db), authorization: str = Header(None)):
+def delete_combination(request: Request, combo_id: int, db: Session = Depends(get_db)):
     logger.info(f"DELETE /portfolio/combiner/{combo_id}")
-    from services.auth import get_current_user
-    user = get_current_user(db, authorization)
-    user_id = user.id if user else None
+    from services.auth import get_user_from_cookie
+    user = get_user_from_cookie(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
     
     # Only allow deleting own combinations
-    query = db.query(SavedCombinationModel).filter(SavedCombinationModel.id == combo_id)
-    if user_id:
-        query = query.filter(SavedCombinationModel.user_id == user_id)
-    else:
-        query = query.filter(SavedCombinationModel.user_id == None)
-    
-    combo = query.first()
+    combo = db.query(SavedCombinationModel).filter(
+        SavedCombinationModel.id == combo_id,
+        SavedCombinationModel.user_id == user.id
+    ).first()
     if not combo:
         raise HTTPException(status_code=404, detail=f"Combination {combo_id} not found")
     db.delete(combo)
@@ -849,18 +922,18 @@ def delete_combination(combo_id: int, db: Session = Depends(get_db), authorizati
 
 # User Portfolio Management (Multi-user)
 @v1_router.post("/user/portfolio/import-avanza")
-async def import_avanza_csv(
+async def import_avanza_csv_user(
+    request: Request,
     file_content: str,
     portfolio_name: str = "Avanza Import",
-    db: Session = Depends(get_db),
-    authorization: str = Header(...)
+    db: Session = Depends(get_db)
 ):
     """Import Avanza CSV and create portfolio for authenticated user."""
     from services.auth import require_auth
     from services.csv_import import parse_avanza_csv
     from models import AvanzaImport, UserPortfolio, PortfolioTransaction
     
-    user = require_auth(db, authorization)
+    user = require_auth(request, db)
     
     # Parse CSV
     transactions = parse_avanza_csv(file_content)
@@ -905,12 +978,12 @@ async def import_avanza_csv(
 
 
 @v1_router.get("/user/portfolios")
-def get_user_portfolios(db: Session = Depends(get_db), authorization: str = Header(...)):
+def get_user_portfolios(request: Request, db: Session = Depends(get_db)):
     """Get all portfolios for authenticated user."""
     from services.auth import require_auth
     from models import UserPortfolio
     
-    user = require_auth(db, authorization)
+    user = require_auth(request, db)
     portfolios = db.query(UserPortfolio).filter(UserPortfolio.user_id == user.id).all()
     
     return [{
@@ -922,12 +995,12 @@ def get_user_portfolios(db: Session = Depends(get_db), authorization: str = Head
 
 
 @v1_router.get("/user/portfolio/{portfolio_id}")
-def get_user_portfolio(portfolio_id: int, db: Session = Depends(get_db), authorization: str = Header(...)):
+def get_user_portfolio(request: Request, portfolio_id: int, db: Session = Depends(get_db)):
     """Get portfolio details with transactions."""
     from services.auth import require_auth
     from models import UserPortfolio, PortfolioTransaction
     
-    user = require_auth(db, authorization)
+    user = require_auth(request, db)
     portfolio = db.query(UserPortfolio).filter(
         UserPortfolio.id == portfolio_id,
         UserPortfolio.user_id == user.id
@@ -956,12 +1029,12 @@ def get_user_portfolio(portfolio_id: int, db: Session = Depends(get_db), authori
 
 
 @v1_router.get("/user/watchlists")
-def get_user_watchlists(db: Session = Depends(get_db), authorization: str = Header(...)):
+def get_user_watchlists(request: Request, db: Session = Depends(get_db)):
     """Get all watchlists for authenticated user."""
     from services.auth import require_auth
     from models import Watchlist, WatchlistItem
     
-    user = require_auth(db, authorization)
+    user = require_auth(request, db)
     watchlists = db.query(Watchlist).filter(Watchlist.user_id == user.id).all()
     
     result = []
@@ -977,12 +1050,12 @@ def get_user_watchlists(db: Session = Depends(get_db), authorization: str = Head
 
 
 @v1_router.post("/user/watchlist")
-def create_user_watchlist(name: str, db: Session = Depends(get_db), authorization: str = Header(...)):
+def create_user_watchlist(request: Request, name: str, db: Session = Depends(get_db)):
     """Create a new watchlist."""
     from services.auth import require_auth
     from models import Watchlist
     
-    user = require_auth(db, authorization)
+    user = require_auth(request, db)
     watchlist = Watchlist(user_id=user.id, name=name)
     db.add(watchlist)
     db.commit()
@@ -991,12 +1064,12 @@ def create_user_watchlist(name: str, db: Session = Depends(get_db), authorizatio
 
 
 @v1_router.post("/user/watchlist/{watchlist_id}/add")
-def add_to_watchlist(watchlist_id: int, ticker: str, notes: str = None, db: Session = Depends(get_db), authorization: str = Header(...)):
+def add_to_watchlist(request: Request, watchlist_id: int, ticker: str, notes: str = None, db: Session = Depends(get_db)):
     """Add stock to watchlist."""
     from services.auth import require_auth
     from models import Watchlist, WatchlistItem
     
-    user = require_auth(db, authorization)
+    user = require_auth(request, db)
     watchlist = db.query(Watchlist).filter(Watchlist.id == watchlist_id, Watchlist.user_id == user.id).first()
     
     if not watchlist:
@@ -1157,6 +1230,22 @@ def run_strategy_backtest(request: Request, body: BacktestRequest, db: Session =
     strategies = STRATEGIES_CONFIG.get("strategies", {})
     if body.strategy_name not in strategies:
         raise HTTPException(status_code=404, detail=f"Strategy '{body.strategy_name}' not found")
+    
+    # Check cache - exact match on strategy + dates
+    from models import BacktestResult
+    cached = db.query(BacktestResult).filter(
+        BacktestResult.strategy_name == body.strategy_name,
+        BacktestResult.start_date == body.start_date,
+        BacktestResult.end_date == body.end_date
+    ).first()
+    
+    if cached:
+        logger.info(f"Serving cached backtest for {body.strategy_name}")
+        return BacktestResponse(
+            strategy_name=cached.strategy_name, start_date=body.start_date, end_date=body.end_date,
+            total_return_pct=cached.total_return_pct, sharpe=cached.sharpe, max_drawdown_pct=cached.max_drawdown_pct,
+            equity_curve=json.loads(cached.json_data).get("portfolio_values") if cached.json_data else None
+        )
     
     result = backtest_strategy(body.strategy_name, body.start_date, body.end_date, db, strategies[body.strategy_name])
     
@@ -1408,6 +1497,12 @@ async def trigger_data_sync(
     # Only use Avanza fetcher
     from services.avanza_fetcher_v2 import avanza_sync
     result = await avanza_sync(db, region, market_cap, manager)
+    
+    # Clear backtest cache - results are stale after new data
+    from models import BacktestResult
+    deleted = db.query(BacktestResult).delete()
+    db.commit()
+    logger.info(f"Cleared {deleted} cached backtest results after manual sync")
     
     # Add investment safeguards
     from services.investment_safeguards import add_investment_safeguards_to_response
@@ -2179,6 +2274,7 @@ def get_rebalancing_alerts(db: Session = Depends(get_db)):
 # Goals
 @v1_router.post("/goals")
 def create_goal(
+    request: Request,
     name: str,
     target_amount: float,
     target_date: str,
@@ -2190,6 +2286,9 @@ def create_goal(
     """Create a financial goal. Set save=true to persist."""
     from datetime import datetime
     from models import UserGoal
+    from services.auth import get_user_from_cookie
+    
+    user = get_user_from_cookie(request, db)
     
     target = datetime.strptime(target_date, "%Y-%m-%d").date()
     months_remaining = max(1, (target.year - date.today().year) * 12 + (target.month - date.today().month))
@@ -2209,8 +2308,9 @@ def create_goal(
     progress = (current_amount / target_amount * 100) if target_amount > 0 else 0
     
     goal_id = None
-    if save:
+    if save and user:
         goal = UserGoal(
+            user_id=user.id,
             name=name, target_amount=target_amount, current_amount=current_amount,
             monthly_contribution=monthly_contribution, target_date=target
         )
@@ -2234,20 +2334,28 @@ def create_goal(
 
 
 @v1_router.get("/goals")
-def list_goals(db: Session = Depends(get_db)):
-    """List all saved goals."""
+def list_goals(request: Request, db: Session = Depends(get_db)):
+    """List goals for current user."""
     from models import UserGoal
-    goals = db.query(UserGoal).all()
+    from services.auth import get_user_from_cookie
+    user = get_user_from_cookie(request, db)
+    if not user:
+        return []
+    goals = db.query(UserGoal).filter(UserGoal.user_id == user.id).all()
     return [{"id": g.id, "name": g.name, "target_amount": g.target_amount, 
              "current_amount": g.current_amount, "target_date": g.target_date.isoformat() if g.target_date else None,
              "monthly_contribution": g.monthly_contribution} for g in goals]
 
 
 @v1_router.put("/goals/{goal_id}")
-def update_goal(goal_id: int, current_amount: float, db: Session = Depends(get_db)):
-    """Update goal progress."""
+def update_goal(request: Request, goal_id: int, current_amount: float, db: Session = Depends(get_db)):
+    """Update goal progress (only own goals)."""
     from models import UserGoal
-    goal = db.query(UserGoal).filter(UserGoal.id == goal_id).first()
+    from services.auth import get_user_from_cookie
+    user = get_user_from_cookie(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    goal = db.query(UserGoal).filter(UserGoal.id == goal_id, UserGoal.user_id == user.id).first()
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
     goal.current_amount = current_amount
@@ -2256,10 +2364,14 @@ def update_goal(goal_id: int, current_amount: float, db: Session = Depends(get_d
 
 
 @v1_router.delete("/goals/{goal_id}")
-def delete_goal(goal_id: int, db: Session = Depends(get_db)):
-    """Delete a goal."""
+def delete_goal(request: Request, goal_id: int, db: Session = Depends(get_db)):
+    """Delete a goal (only own goals)."""
     from models import UserGoal
-    goal = db.query(UserGoal).filter(UserGoal.id == goal_id).first()
+    from services.auth import get_user_from_cookie
+    user = get_user_from_cookie(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    goal = db.query(UserGoal).filter(UserGoal.id == goal_id, UserGoal.user_id == user.id).first()
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
     db.delete(goal)

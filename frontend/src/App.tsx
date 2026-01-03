@@ -1,9 +1,11 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Box } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
 import { Suspense, lazy } from 'react';
 import { Navigation } from './components/Navigation';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Dashboard } from './pages/Dashboard';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { LoginPage } from './pages/LoginPage';
 
 // Lazy load pages
 const StrategyPage = lazy(() => import('./pages/StrategyPage').then(m => ({ default: m.StrategyPage })));
@@ -32,11 +34,21 @@ const PageLoader = () => (
   </Box>
 );
 
-export function App() {
+const AuthLoader = () => (
+  <Flex minH="100vh" align="center" justify="center" bg="bg">
+    <Text color="fg.muted">Loading...</Text>
+  </Flex>
+);
+
+function ProtectedApp() {
+  const { user, loading } = useAuth();
+
+  if (loading) return <AuthLoader />;
+  if (!user) return <LoginPage />;
+
   return (
-    <ErrorBoundary>
+    <>
       <Navigation />
-      {/* Main content area - offset for sidebar on desktop */}
       <Box
         as="main"
         ml={{ base: 0, lg: '240px' }}
@@ -71,6 +83,16 @@ export function App() {
           </Suspense>
         </Box>
       </Box>
+    </>
+  );
+}
+
+export function App() {
+  return (
+    <ErrorBoundary>
+      <AuthProvider>
+        <ProtectedApp />
+      </AuthProvider>
     </ErrorBoundary>
   );
 }

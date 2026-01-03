@@ -302,28 +302,43 @@ export function Dashboard() {
       {/* Portfolio Summary Card */}
       <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="24px">
         <VStack align="stretch" gap="16px">
-          <HStack justify="space-between" align="start" flexWrap="wrap" gap="16px">
-            <VStack align="start" gap="4px">
-              <Text fontSize="sm" color="fg.muted">Total Value</Text>
-              <Text fontSize="3xl" fontWeight="bold" color="fg" fontFamily={tokens.fonts.mono}>
-                {formatCurrency(portfolioValue)}
+          {holdings.length === 0 ? (
+            /* No portfolio - show backtest simulation label */
+            <VStack align="start" gap="8px">
+              <HStack gap="8px">
+                <Text fontSize="sm" color="fg.muted">📊 Strategy Backtest Simulation</Text>
+                <Text fontSize="xs" color="fg.subtle">(No portfolio imported)</Text>
+              </HStack>
+              <Text fontSize="xs" color="fg.subtle">
+                This shows how {strategies[0]?.name?.replace('_', ' ') || 'the strategy'} would have performed. 
+                <Link to="/portfolio" style={{ color: tokens.colors.brand.primary, marginLeft: '4px' }}>Import your portfolio →</Link>
               </Text>
             </VStack>
-            <HStack gap="24px">
-              <VStack align="end" gap="4px">
-                <Text fontSize="sm" color="fg.muted">YTD Return</Text>
-                <Text fontSize="xl" fontWeight="semibold" color={ytdReturn >= 0 ? 'success.fg' : 'error.fg'} fontFamily={tokens.fonts.mono}>
-                  {formatPercent(ytdReturn)}
+          ) : (
+            /* Has portfolio - show actual values */
+            <HStack justify="space-between" align="start" flexWrap="wrap" gap="16px">
+              <VStack align="start" gap="4px">
+                <Text fontSize="sm" color="fg.muted">Total Value</Text>
+                <Text fontSize="3xl" fontWeight="bold" color="fg" fontFamily={tokens.fonts.mono}>
+                  {formatCurrency(portfolioValue)}
                 </Text>
               </VStack>
-              <VStack align="end" gap="4px">
-                <Text fontSize="sm" color="fg.muted">YTD Gain</Text>
-                <Text fontSize="xl" fontWeight="semibold" color={ytdGain >= 0 ? 'success.fg' : 'error.fg'} fontFamily={tokens.fonts.mono}>
-                  {formatCurrency(ytdGain)}
-                </Text>
-              </VStack>
+              <HStack gap="24px">
+                <VStack align="end" gap="4px">
+                  <Text fontSize="sm" color="fg.muted">YTD Return</Text>
+                  <Text fontSize="xl" fontWeight="semibold" color={ytdReturn >= 0 ? 'success.fg' : 'error.fg'} fontFamily={tokens.fonts.mono}>
+                    {formatPercent(ytdReturn)}
+                  </Text>
+                </VStack>
+                <VStack align="end" gap="4px">
+                  <Text fontSize="sm" color="fg.muted">YTD Gain</Text>
+                  <Text fontSize="xl" fontWeight="semibold" color={ytdGain >= 0 ? 'success.fg' : 'error.fg'} fontFamily={tokens.fonts.mono}>
+                    {formatCurrency(ytdGain)}
+                  </Text>
+                </VStack>
+              </HStack>
             </HStack>
-          </HStack>
+          )}
           
           {/* Period Selectors */}
           <HStack gap="8px" flexWrap="wrap">

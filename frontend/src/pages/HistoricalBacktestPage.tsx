@@ -55,7 +55,8 @@ export function HistoricalBacktestPage() {
     setCompareResult(null);
     try {
       const res = await fetch(`/v1/backtesting/historical?strategy_name=${strategy}&start_year=${startYear}&end_year=${endYear}&use_synthetic=true`, {
-        method: 'POST'
+        method: 'POST',
+        credentials: 'include'
       });
       if (!res.ok) throw new Error('Backtest failed');
       const data = await res.json();
@@ -73,7 +74,8 @@ export function HistoricalBacktestPage() {
     setResult(null);
     try {
       const res = await fetch(`/v1/backtesting/historical/compare?start_year=${startYear}&end_year=${endYear}`, {
-        method: 'POST'
+        method: 'POST',
+        credentials: 'include'
       });
       if (!res.ok) throw new Error('Compare failed');
       const data = await res.json();

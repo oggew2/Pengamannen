@@ -1,35 +1,78 @@
-"""Authentication service for multi-user support."""
+"""Authentication service with httpOnly cookies and invite system."""
 from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, Depends, Header
+from fastapi import HTTPException, Depends, Request, Response
+from fastapi.responses import JSONResponse
 from models import User, UserSession
 from db import get_db
 
-def register_user(db: Session, email: str, password: str, name: str = None) -> User:
-    """Register a new user."""
-    # Validate inputs
+COOKIE_NAME = "session_token"
+COOKIE_MAX_AGE = 30 * 24 * 60 * 60  # 30 days
+
+
+def register_user(db: Session, email: str, password: str, invite_code: str, name: str = None) -> User:
+    """Register a new user with invite code."""
     if not email or not email.strip():
         raise HTTPException(status_code=400, detail="Email is required")
     if not password or len(password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if not invite_code:
+        raise HTTPException(status_code=400, detail="Invite code is required")
     
     email = email.strip().lower()
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
     
+    # Validate invite code
+    inviter = db.query(User).filter(User.invite_code == invite_code).first()
+    if not inviter:
+        raise HTTPException(status_code=400, detail="Invalid invite code")
+    
     user = User(
         email=email,
         password_hash=User.hash_password(password),
-        name=name or email.split('@')[0]
+        name=name or email.split('@')[0],
+        invited_by=inviter.id,
+        invite_code=User.generate_invite_code()  # New user gets their own invite code
     )
     db.add(user)
     db.commit()
     db.refresh(user)
     return user
 
-def login_user(db: Session, email: str, password: str) -> dict:
-    """Login and return session token."""
+
+def create_admin_user(db: Session, email: str, password: str, name: str = None) -> User:
+    """Create admin user (no invite required)."""
+    if not email or not email.strip():
+        raise HTTPException(status_code=400, detail="Email is required")
+    if not password or len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    
+    email = email.strip().lower()
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        # Update to admin if exists
+        existing.is_admin = True
+        existing.password_hash = User.hash_password(password)
+        db.commit()
+        return existing
+    
+    user = User(
+        email=email,
+        password_hash=User.hash_password(password),
+        name=name or email.split('@')[0],
+        is_admin=True,
+        invite_code=User.generate_invite_code()
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def login_user(db: Session, email: str, password: str) -> tuple[dict, str]:
+    """Login and return user info + session token."""
     if not email or not password:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
@@ -50,19 +93,28 @@ def login_user(db: Session, email: str, password: str) -> dict:
     db.add(session)
     db.commit()
     
-    return {"token": session.token, "user_id": user.id, "email": user.email, "name": user.name}
+    user_info = {
+        "user_id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "is_admin": user.is_admin,
+        "invite_code": user.invite_code
+    }
+    return user_info, session.token
+
 
 def logout_user(db: Session, token: str):
     """Invalidate session token."""
     db.query(UserSession).filter(UserSession.token == token).delete()
     db.commit()
 
-def get_current_user(db: Session = Depends(get_db), authorization: str = Header(None)) -> Optional[User]:
-    """Get current user from token. Returns None if no auth (allows anonymous access)."""
-    if not authorization:
+
+def get_user_from_cookie(request: Request, db: Session) -> Optional[User]:
+    """Get user from httpOnly cookie."""
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
         return None
     
-    token = authorization.replace("Bearer ", "") if authorization.startswith("Bearer ") else authorization
     session = db.query(UserSession).filter(
         UserSession.token == token,
         UserSession.expires_at > datetime.now()
@@ -73,17 +125,35 @@ def get_current_user(db: Session = Depends(get_db), authorization: str = Header(
     
     return db.query(User).filter(User.id == session.user_id).first()
 
-def require_auth(db: Session = Depends(get_db), authorization: str = Header(...)) -> User:
+
+def require_auth(request: Request, db: Session = Depends(get_db)) -> User:
     """Require authentication - raises 401 if not authenticated."""
-    user = get_current_user(db, authorization)
+    user = get_user_from_cookie(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required")
     return user
 
-def update_user_market_filter(db: Session, user: User, market_filter: str) -> User:
-    """Update user's market filter preference."""
-    if market_filter not in ["stockholmsborsen", "first_north", "both"]:
-        raise HTTPException(status_code=400, detail="Invalid market filter")
-    user.market_filter = market_filter
-    db.commit()
+
+def require_admin(request: Request, db: Session = Depends(get_db)) -> User:
+    """Require admin authentication."""
+    user = require_auth(request, db)
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
     return user
+
+
+def set_auth_cookie(response: Response, token: str):
+    """Set httpOnly session cookie."""
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        max_age=COOKIE_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+        secure=False  # Set True in production with HTTPS
+    )
+
+
+def clear_auth_cookie(response: Response):
+    """Clear session cookie."""
+    response.delete_cookie(key=COOKIE_NAME)

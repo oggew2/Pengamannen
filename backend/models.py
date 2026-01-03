@@ -14,6 +14,9 @@ class User(Base):
     name = Column(String)
     created_at = Column(DateTime, default=func.now())
     is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
+    invited_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    invite_code = Column(String, unique=True, nullable=True)  # Code others use to register
     market_filter = Column(String, default="stockholmsborsen")  # stockholmsborsen, first_north, both
     
     @staticmethod
@@ -22,6 +25,10 @@ class User(Base):
     
     def verify_password(self, password: str) -> bool:
         return self.password_hash == self.hash_password(password)
+    
+    @staticmethod
+    def generate_invite_code() -> str:
+        return secrets.token_urlsafe(8)
 
 
 class UserSession(Base):

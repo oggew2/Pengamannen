@@ -30,6 +30,12 @@ def sync_job():
         result = asyncio.run(avanza_sync(db, region="sweden", market_cap="large"))
         logger.info(f"Sync complete: {result}")
         
+        # Clear backtest cache - results are stale after new data
+        from models import BacktestResult
+        deleted = db.query(BacktestResult).delete()
+        db.commit()
+        logger.info(f"Cleared {deleted} cached backtest results")
+        
         # Update is_active flag based on which stocks have fundamentals
         active_result = mark_stocks_with_fundamentals_active(db)
         if active_result.get('success'):

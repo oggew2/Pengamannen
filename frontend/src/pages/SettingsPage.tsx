@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Box, Flex, Text, VStack, HStack, Button, Input } from '@chakra-ui/react';
+import { Box, Flex, Text, VStack, HStack, Button, Grid } from '@chakra-ui/react';
 import { api } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Settings {
   displayCurrency: string;
@@ -10,13 +11,17 @@ interface Settings {
   portfolioValue: number;
 }
 
-interface AuthState {
-  authenticated: boolean;
-  email?: string;
-  name?: string;
+interface UserInfo {
+  id: number;
+  email: string;
+  name: string;
+  is_admin: boolean;
+  is_active: boolean;
+  created_at: string;
 }
 
 export default function SettingsPage() {
+  const { user, logout } = useAuth();
   const [settings, setSettings] = useState<Settings>(() => {
     const saved = localStorage.getItem('appSettings');
     return saved ? JSON.parse(saved) : {
@@ -25,72 +30,25 @@ export default function SettingsPage() {
     };
   });
   const [exportStatus, setExportStatus] = useState('');
-  const [auth, setAuth] = useState<AuthState>({ authenticated: false });
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [authError, setAuthError] = useState('');
-  const [authLoading, setAuthLoading] = useState(false);
+  const [users, setUsers] = useState<UserInfo[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
 
   useEffect(() => {
-    checkAuth();
-  }, []);
+    if (user?.is_admin) {
+      loadUsers();
+    }
+  }, [user]);
 
-  const checkAuth = async () => {
-    const token = localStorage.getItem('authToken');
-    if (!token) return;
+  const loadUsers = async () => {
+    setUsersLoading(true);
     try {
-      const resp = await fetch('/v1/auth/me', { headers: { Authorization: `Bearer ${token}` } });
-      const data = await resp.json();
-      if (data.authenticated) {
-        setAuth({ authenticated: true, email: data.email, name: data.name });
+      const resp = await fetch('/v1/admin/users', { credentials: 'include' });
+      if (resp.ok) {
+        const data = await resp.json();
+        setUsers(data.users);
       }
     } catch { /* ignore */ }
-  };
-
-  const handleLogin = async () => {
-    setAuthError('');
-    setAuthLoading(true);
-    try {
-      const resp = await fetch(`/v1/auth/login?email=${encodeURIComponent(loginEmail)}&password=${encodeURIComponent(loginPassword)}`, { method: 'POST' });
-      if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.detail || 'Login failed');
-      }
-      const data = await resp.json();
-      localStorage.setItem('authToken', data.token);
-      setAuth({ authenticated: true, email: data.email, name: data.name });
-      setLoginEmail('');
-      setLoginPassword('');
-    } catch (e: any) {
-      setAuthError(e.message);
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  const handleRegister = async () => {
-    setAuthError('');
-    setAuthLoading(true);
-    try {
-      const resp = await fetch(`/v1/auth/register?email=${encodeURIComponent(loginEmail)}&password=${encodeURIComponent(loginPassword)}`, { method: 'POST' });
-      if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.detail || 'Registration failed');
-      }
-      await handleLogin();
-    } catch (e: any) {
-      setAuthError(e.message);
-      setAuthLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      await fetch(`/v1/auth/logout?token=${token}`, { method: 'POST' }).catch(() => {});
-    }
-    localStorage.removeItem('authToken');
-    setAuth({ authenticated: false });
+    setUsersLoading(false);
   };
 
   const saveSettings = (newSettings: Settings) => {
@@ -110,13 +68,6 @@ export default function SettingsPage() {
     } catch { setExportStatus('Export failed'); }
   };
 
-  const clearCache = async () => {
-    try {
-      await fetch('/v1/cache/clear', { method: 'POST' });
-      setExportStatus('Cache cleared!');
-    } catch { setExportStatus('Clear failed'); }
-  };
-
   const SelectBox = ({ value, options, onChange }: { value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) => (
     <select value={value} onChange={(e) => onChange(e.target.value)} style={{ background: '#374151', color: '#f3f4f6', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '14px' }}>
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -127,112 +78,90 @@ export default function SettingsPage() {
     <VStack gap="24px" align="stretch">
       <Text fontSize="2xl" fontWeight="bold" color="fg">Settings & Preferences</Text>
 
-      {/* Account & Security */}
+      {/* Account */}
       <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="24px">
-        <Text fontSize="lg" fontWeight="semibold" color="fg" mb="16px">Account & Security</Text>
-        {auth.authenticated ? (
-          <VStack align="stretch" gap="16px">
-            <Flex justify="space-between" align="center">
-              <VStack align="start" gap="0">
-                <Text fontSize="sm" color="fg">Email</Text>
-                <Text fontSize="xs" color="fg.muted">{auth.email}</Text>
-              </VStack>
-              <Button size="sm" variant="outline" borderColor="error.fg" color="error.fg" onClick={handleLogout}>Logout</Button>
-            </Flex>
-            {auth.name && (
-              <Flex justify="space-between" align="center">
-                <Text fontSize="sm" color="fg.muted">Logged in as {auth.name}</Text>
-              </Flex>
-            )}
-          </VStack>
-        ) : (
-          <VStack align="stretch" gap="12px">
-            <Input placeholder="Email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} size="sm" bg="bg.muted" borderColor="border" />
-            <Input placeholder="Password" type="password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} size="sm" bg="bg.muted" borderColor="border" />
-            {authError && <Text fontSize="xs" color="error.fg">{authError}</Text>}
-            <HStack gap="8px">
-              <Button size="sm" bg="brand.solid" color="white" onClick={handleLogin} disabled={authLoading}>Login</Button>
-              <Button size="sm" variant="outline" borderColor="brand.fg" color="brand.fg" onClick={handleRegister} disabled={authLoading}>Register</Button>
-            </HStack>
-          </VStack>
-        )}
+        <Text fontSize="lg" fontWeight="semibold" color="fg" mb="16px">Account</Text>
+        <VStack align="stretch" gap="16px">
+          <Flex justify="space-between" align="center">
+            <VStack align="start" gap="0">
+              <Text fontSize="sm" color="fg">{user?.name}</Text>
+              <Text fontSize="xs" color="fg.muted">{user?.email}</Text>
+            </VStack>
+            <Button size="sm" variant="outline" borderColor="error.fg" color="error.fg" onClick={logout}>Logout</Button>
+          </Flex>
+          <Flex justify="space-between" align="center">
+            <VStack align="start" gap="0">
+              <Text fontSize="sm" color="fg">Your Invite Code</Text>
+              <Text fontSize="xs" color="fg.muted">Share this to let others register</Text>
+            </VStack>
+            <Text fontSize="sm" color="brand.fg" fontFamily="mono" fontWeight="bold">{user?.invite_code}</Text>
+          </Flex>
+        </VStack>
       </Box>
+
+      {/* Admin Panel - only for admins */}
+      {user?.is_admin && (
+        <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="24px">
+          <Flex justify="space-between" align="center" mb="16px">
+            <Text fontSize="lg" fontWeight="semibold" color="fg">👑 Admin Panel</Text>
+            <Text fontSize="sm" color="fg.muted">{users.length} registered users</Text>
+          </Flex>
+          {usersLoading ? (
+            <Text color="fg.muted">Loading users...</Text>
+          ) : (
+            <VStack align="stretch" gap="8px">
+              {users.map(u => (
+                <Flex key={u.id} justify="space-between" align="center" p="12px" bg="bg.muted" borderRadius="md">
+                  <VStack align="start" gap="0">
+                    <HStack gap="8px">
+                      <Text fontSize="sm" color="fg">{u.name}</Text>
+                      {u.is_admin && <Text fontSize="xs" color="brand.fg">Admin</Text>}
+                      {!u.is_active && <Text fontSize="xs" color="error.fg">Disabled</Text>}
+                    </HStack>
+                    <Text fontSize="xs" color="fg.muted">{u.email}</Text>
+                  </VStack>
+                  <Text fontSize="xs" color="fg.subtle">
+                    {u.created_at ? new Date(u.created_at).toLocaleDateString('sv-SE') : 'N/A'}
+                  </Text>
+                </Flex>
+              ))}
+            </VStack>
+          )}
+        </Box>
+      )}
 
       {/* Display Preferences */}
       <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="24px">
         <Text fontSize="lg" fontWeight="semibold" color="fg" mb="16px">Display Preferences</Text>
-        <VStack align="stretch" gap="16px">
+        <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap="16px">
           <Flex justify="space-between" align="center">
             <Text fontSize="sm" color="fg.muted">Currency</Text>
-            <SelectBox value={settings.displayCurrency} options={[{ value: 'SEK', label: 'SEK' }, { value: 'EUR', label: 'EUR' }, { value: 'USD', label: 'USD' }]} onChange={v => saveSettings({ ...settings, displayCurrency: v })} />
+            <SelectBox value={settings.displayCurrency} options={[{ value: 'SEK', label: 'SEK' }, { value: 'USD', label: 'USD' }, { value: 'EUR', label: 'EUR' }]} onChange={(v) => saveSettings({ ...settings, displayCurrency: v })} />
           </Flex>
           <Flex justify="space-between" align="center">
             <Text fontSize="sm" color="fg.muted">Number Format</Text>
-            <SelectBox value={settings.numberFormat} options={[{ value: 'sv-SE', label: '1 234,56' }, { value: 'en-US', label: '1,234.56' }]} onChange={v => saveSettings({ ...settings, numberFormat: v })} />
+            <SelectBox value={settings.numberFormat} options={[{ value: 'sv-SE', label: 'Swedish (1 234,56)' }, { value: 'en-US', label: 'US (1,234.56)' }]} onChange={(v) => saveSettings({ ...settings, numberFormat: v })} />
           </Flex>
           <Flex justify="space-between" align="center">
-            <Text fontSize="sm" color="fg.muted">Chart Style</Text>
-            <SelectBox value={settings.chartStyle} options={[{ value: 'line', label: 'Line' }, { value: 'area', label: 'Area' }]} onChange={v => saveSettings({ ...settings, chartStyle: v })} />
+            <Text fontSize="sm" color="fg.muted">Default Strategy</Text>
+            <SelectBox value={settings.defaultStrategy} options={[{ value: 'sammansatt_momentum', label: 'Momentum' }, { value: 'trendande_varde', label: 'Värde' }, { value: 'trendande_utdelning', label: 'Utdelning' }, { value: 'trendande_kvalitet', label: 'Kvalitet' }]} onChange={(v) => saveSettings({ ...settings, defaultStrategy: v })} />
           </Flex>
-        </VStack>
+        </Grid>
       </Box>
 
-      {/* Portfolio Configuration */}
+      {/* Data & Export */}
       <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="24px">
-        <Text fontSize="lg" fontWeight="semibold" color="fg" mb="16px">Portfolio Configuration</Text>
-        <VStack align="stretch" gap="16px">
-          <Flex justify="space-between" align="center">
-            <VStack align="start" gap="0">
-              <Text fontSize="sm" color="fg.muted">Default Strategy</Text>
-              <Text fontSize="xs" color="fg.subtle">Used for backtests and analysis</Text>
-            </VStack>
-            <SelectBox value={settings.defaultStrategy} options={[
-              { value: 'sammansatt_momentum', label: 'Momentum' },
-              { value: 'trendande_varde', label: 'Värde' },
-              { value: 'trendande_utdelning', label: 'Utdelning' },
-              { value: 'trendande_kvalitet', label: 'Kvalitet' }
-            ]} onChange={v => saveSettings({ ...settings, defaultStrategy: v })} />
-          </Flex>
-          <Flex justify="space-between" align="center">
-            <VStack align="start" gap="0">
-              <Text fontSize="sm" color="fg.muted">Portfolio Value</Text>
-              <Text fontSize="xs" color="fg.subtle">For rebalancing calculations</Text>
-            </VStack>
-            <HStack>
-              <Input value={settings.portfolioValue} onChange={e => saveSettings({ ...settings, portfolioValue: Number(e.target.value) })} size="sm" bg="bg.muted" borderColor="border" w="120px" type="number" />
-              <Text fontSize="sm" color="fg.subtle">kr</Text>
-            </HStack>
-          </Flex>
-        </VStack>
-      </Box>
-
-      {/* Data Export */}
-      <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="24px">
-        <Text fontSize="lg" fontWeight="semibold" color="fg" mb="16px">Data Export</Text>
+        <Text fontSize="lg" fontWeight="semibold" color="fg" mb="16px">Data & Export</Text>
         <VStack align="stretch" gap="12px">
           <Flex justify="space-between" align="center">
             <VStack align="start" gap="0">
-              <Text fontSize="sm" color="fg.muted">Export Portfolio</Text>
-              <Text fontSize="xs" color="fg.subtle">Download holdings as CSV</Text>
+              <Text fontSize="sm" color="fg">Export Portfolio</Text>
+              <Text fontSize="xs" color="fg.muted">Download as CSV</Text>
             </VStack>
-            <Button size="sm" variant="outline" borderColor="brand.fg" color="brand.fg" onClick={exportPortfolio}>Export CSV</Button>
-          </Flex>
-          <Flex justify="space-between" align="center">
-            <VStack align="start" gap="0">
-              <Text fontSize="sm" color="fg.muted">Clear Cache</Text>
-              <Text fontSize="xs" color="fg.subtle">Force refresh all data</Text>
-            </VStack>
-            <Button size="sm" variant="outline" borderColor="error.fg" color="error.fg" onClick={clearCache}>Clear</Button>
+            <Button size="sm" variant="outline" borderColor="border" color="fg" onClick={exportPortfolio}>Export</Button>
           </Flex>
           {exportStatus && <Text fontSize="sm" color="success.fg">{exportStatus}</Text>}
         </VStack>
-      </Box>
-
-      {/* About */}
-      <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="24px">
-        <Text fontSize="lg" fontWeight="semibold" color="fg" mb="8px">About</Text>
-        <Text fontSize="sm" color="fg.muted">Börslabbet Clone v1.0</Text>
-        <Text fontSize="xs" color="fg.subtle" mt="4px">Swedish stock strategy platform implementing Börslabbet's proven investment strategies.</Text>
       </Box>
     </VStack>
   );
