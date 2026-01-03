@@ -47,8 +47,8 @@ export function DataIntegrityBanner() {
     >
       <Flex justify="space-between" align="start">
         <HStack align="start" gap={tokens.spacing.sm}>
-          <Text fontSize="xl" color={iconColor}>
-            {isCritical ? '🚨' : '⚠️'}
+          <Text fontSize="xl" color={iconColor} fontWeight="bold">
+            {isCritical ? '!' : '!'}
           </Text>
           <VStack align="start" gap={tokens.spacing.xs}>
             <Text

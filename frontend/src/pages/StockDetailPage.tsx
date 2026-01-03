@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Box, Flex, Text, Button, HStack, VStack, Skeleton, Input } from '@chakra-ui/react';
+import { Box, Flex, Text, Button, HStack, VStack, Skeleton } from '@chakra-ui/react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { useQueries } from '@tanstack/react-query';
 import { api } from '../api/client';
@@ -17,7 +17,6 @@ interface UserHolding {
 export default function StockDetailPage() {
   const { ticker } = useParams<{ ticker: string }>();
   const [period, setPeriod] = useState<Period>('1Y');
-  const [priceAlert, setPriceAlert] = useState('');
   const [userHolding, setUserHolding] = useState<UserHolding | null>(null);
 
   // TanStack Query hooks
@@ -74,7 +73,7 @@ export default function StockDetailPage() {
       <VStack gap="24px" align="stretch">
         <Box bg="red.900/20" borderColor="red.500" borderWidth="1px" borderRadius="8px" p="16px">
           <Text color="red.400" fontWeight="semibold">Failed to load stock data</Text>
-          <Text color="gray.300" fontSize="sm">Stock "{ticker}" could not be loaded.</Text>
+          <Text color="fg.muted" fontSize="sm">Stock "{ticker}" could not be loaded.</Text>
         </Box>
       </VStack>
     );
@@ -103,9 +102,9 @@ export default function StockDetailPage() {
         </Link>
         <HStack justify="space-between" align="start">
           <VStack align="start" gap="4px">
-            <Text fontSize="2xl" fontWeight="bold" color="gray.50">{stock.ticker.replace('.ST', '')}</Text>
-            <Text fontSize="sm" color="gray.200">{stock.name}</Text>
-            <HStack gap="8px" fontSize="xs" color="gray.300">
+            <Text fontSize="2xl" fontWeight="bold" color="fg">{stock.ticker.replace('.ST', '')}</Text>
+            <Text fontSize="sm" color="fg.muted">{stock.name}</Text>
+            <HStack gap="8px" fontSize="xs" color="fg.muted">
               <Text>{stock.sector || 'Unknown'}</Text>
               {stock.market_cap && (
                 <>
@@ -121,7 +120,7 @@ export default function StockDetailPage() {
             )}
           </VStack>
           <VStack align="end" gap="2px">
-            <Text fontSize="2xl" fontWeight="bold" color="gray.50">{currentPrice.toFixed(2)} kr</Text>
+            <Text fontSize="2xl" fontWeight="bold" color="fg">{currentPrice.toFixed(2)} kr</Text>
             <Text fontSize="sm" color={priceChange >= 0 ? 'success.500' : 'error.500'} fontWeight="semibold">
               {priceChange >= 0 ? '▲' : '▼'} {Math.abs(priceChange).toFixed(2)} ({formatPct(priceChangePct)})
             </Text>
@@ -131,23 +130,23 @@ export default function StockDetailPage() {
 
       {/* Your Position (if holding) */}
       {userHolding && currentPrice > 0 && (
-        <Box bg="gray.700" borderColor="brand.500" borderWidth="1px" borderRadius="8px" p="16px">
-          <Text fontSize="sm" fontWeight="semibold" color="gray.50" mb="8px">Your Position</Text>
+        <Box bg="bg.subtle" borderColor="brand.500" borderWidth="1px" borderRadius="8px" p="16px">
+          <Text fontSize="sm" fontWeight="semibold" color="fg" mb="8px">Your Position</Text>
           <HStack justify="space-between" flexWrap="wrap" gap="16px">
             <VStack align="start" gap="2px">
-              <Text fontSize="xs" color="gray.300">Shares</Text>
-              <Text fontSize="sm" color="gray.100">{userHolding.shares}</Text>
+              <Text fontSize="xs" color="fg.muted">Shares</Text>
+              <Text fontSize="sm" color="fg">{userHolding.shares}</Text>
             </VStack>
             <VStack align="start" gap="2px">
-              <Text fontSize="xs" color="gray.300">Entry Price</Text>
-              <Text fontSize="sm" color="gray.100">{userHolding.avgPrice.toFixed(2)} kr</Text>
+              <Text fontSize="xs" color="fg.muted">Entry Price</Text>
+              <Text fontSize="sm" color="fg">{userHolding.avgPrice.toFixed(2)} kr</Text>
             </VStack>
             <VStack align="start" gap="2px">
-              <Text fontSize="xs" color="gray.300">Value</Text>
-              <Text fontSize="sm" color="gray.100">{formatSEK(userHolding.shares * currentPrice)}</Text>
+              <Text fontSize="xs" color="fg.muted">Value</Text>
+              <Text fontSize="sm" color="fg">{formatSEK(userHolding.shares * currentPrice)}</Text>
             </VStack>
             <VStack align="start" gap="2px">
-              <Text fontSize="xs" color="gray.300">P&L</Text>
+              <Text fontSize="xs" color="fg.muted">P&L</Text>
               {(() => {
                 const pnl = userHolding.shares * (currentPrice - userHolding.avgPrice);
                 const pnlPct = userHolding.avgPrice > 0 ? (pnl / (userHolding.shares * userHolding.avgPrice)) * 100 : 0;
@@ -170,8 +169,8 @@ export default function StockDetailPage() {
           { label: '6M', value: stock.return_6m },
           { label: 'YTD', value: stock.return_12m },
         ].map(({ label, value }) => (
-          <Box key={label} px="12px" py="8px" bg="gray.700" borderRadius="6px">
-            <Text fontSize="xs" color="gray.300">{label}</Text>
+          <Box key={label} px="12px" py="8px" bg="bg.subtle" borderRadius="6px">
+            <Text fontSize="xs" color="fg.muted">{label}</Text>
             <Text fontSize="sm" fontWeight="semibold" color={value && value >= 0 ? 'success.500' : 'error.500'}>
               {formatPct(value)}
             </Text>
@@ -180,17 +179,17 @@ export default function StockDetailPage() {
       </HStack>
 
       {/* Price Chart */}
-      <Box bg="gray.700" borderColor="gray.600" borderWidth="1px" borderRadius="8px" p="24px">
+      <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="8px" p="24px">
         <Flex justify="space-between" align="center" mb="16px">
-          <Text fontSize="lg" fontWeight="semibold" color="gray.50">Price Chart</Text>
+          <Text fontSize="lg" fontWeight="semibold" color="fg">Price Chart</Text>
           <HStack gap="4px">
             {(['1D', '5D', '1M', '3M', '1Y', 'ALL'] as Period[]).map(p => (
               <Button
                 key={p}
                 size="xs"
                 bg={period === p ? 'brand.500' : 'transparent'}
-                color={period === p ? 'white' : 'gray.200'}
-                _hover={{ bg: period === p ? 'brand.600' : 'gray.600' }}
+                color={period === p ? 'white' : 'fg.muted'}
+                _hover={{ bg: period === p ? 'brand.600' : 'border' }}
                 onClick={() => setPeriod(p)}
               >
                 {p}
@@ -218,8 +217,8 @@ export default function StockDetailPage() {
       {/* Metrics Grid */}
       <Flex gap="16px" flexWrap="wrap">
         {/* Valuation */}
-        <Box flex="1" minW="200px" bg="gray.700" borderColor="gray.600" borderWidth="1px" borderRadius="8px" p="16px">
-          <Text fontSize="sm" fontWeight="semibold" color="gray.50" mb="12px">Valuation</Text>
+        <Box flex="1" minW="200px" bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="8px" p="16px">
+          <Text fontSize="sm" fontWeight="semibold" color="fg" mb="12px">Valuation</Text>
           <VStack align="stretch" gap="8px">
             {[
               { label: 'P/E', value: formatNum(stock.pe) },
@@ -228,16 +227,16 @@ export default function StockDetailPage() {
               { label: 'EV/EBITDA', value: formatNum(stock.ev_ebitda) },
             ].map(({ label, value }) => (
               <HStack key={label} justify="space-between">
-                <Text fontSize="xs" color="gray.300">{label}</Text>
-                <Text fontSize="xs" color="gray.100" fontFamily="mono">{value}</Text>
+                <Text fontSize="xs" color="fg.muted">{label}</Text>
+                <Text fontSize="xs" color="fg" fontFamily="mono">{value}</Text>
               </HStack>
             ))}
           </VStack>
         </Box>
 
         {/* Quality */}
-        <Box flex="1" minW="200px" bg="gray.700" borderColor="gray.600" borderWidth="1px" borderRadius="8px" p="16px">
-          <Text fontSize="sm" fontWeight="semibold" color="gray.50" mb="12px">Quality</Text>
+        <Box flex="1" minW="200px" bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="8px" p="16px">
+          <Text fontSize="sm" fontWeight="semibold" color="fg" mb="12px">Quality</Text>
           <VStack align="stretch" gap="8px">
             {[
               { label: 'ROE', value: formatPct(stock.roe) },
@@ -246,8 +245,8 @@ export default function StockDetailPage() {
               { label: 'Div Yield', value: formatPct(stock.dividend_yield) },
             ].map(({ label, value }) => (
               <HStack key={label} justify="space-between">
-                <Text fontSize="xs" color="gray.300">{label}</Text>
-                <Text fontSize="xs" color="gray.100" fontFamily="mono">{value}</Text>
+                <Text fontSize="xs" color="fg.muted">{label}</Text>
+                <Text fontSize="xs" color="fg" fontFamily="mono">{value}</Text>
               </HStack>
             ))}
           </VStack>
@@ -255,27 +254,17 @@ export default function StockDetailPage() {
       </Flex>
 
       {/* Actions */}
-      <Box bg="gray.700" borderColor="gray.600" borderWidth="1px" borderRadius="8px" p="16px">
-        <Text fontSize="sm" fontWeight="semibold" color="gray.50" mb="12px">Actions</Text>
+      <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="8px" p="16px">
+        <Text fontSize="sm" fontWeight="semibold" color="fg" mb="12px">Actions</Text>
         <HStack gap="8px" flexWrap="wrap">
-          <HStack gap="8px">
-            <Input
-              size="sm"
-              placeholder="Price alert (kr)"
-              value={priceAlert}
-              onChange={(e) => setPriceAlert(e.target.value)}
-              bg="gray.600"
-              borderColor="gray.500"
-              width="120px"
-              type="number"
-            />
-            <Button size="sm" bg="brand.500" color="white" onClick={() => setPriceAlert('')}>
-              Set Alert
-            </Button>
-          </HStack>
           <Link to="/dividends">
             <Button size="sm" variant="outline" borderColor="brand.500" color="brand.500">
               Dividend Calendar
+            </Button>
+          </Link>
+          <Link to="/alerts">
+            <Button size="sm" variant="outline" borderColor="brand.500" color="brand.500">
+              Manage Alerts
             </Button>
           </Link>
         </HStack>

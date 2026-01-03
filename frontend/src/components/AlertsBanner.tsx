@@ -40,7 +40,7 @@ export function AlertsBanner() {
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
-          <span>⚠️ {alert.message}</span>
+          <span style={{ color: '#f59e0b' }}>! {alert.message}</span>
           <button 
             onClick={() => setDismissed(new Set([...dismissed, alert.message]))}
             style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.2rem' }}

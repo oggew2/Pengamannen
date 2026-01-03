@@ -6,6 +6,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { Dashboard } from './pages/Dashboard';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginPage } from './pages/LoginPage';
+import { Toaster } from './components/toaster';
 
 // Lazy load pages
 const StrategyPage = lazy(() => import('./pages/StrategyPage').then(m => ({ default: m.StrategyPage })));
@@ -74,6 +75,7 @@ export function App() {
     <ErrorBoundary>
       <AuthProvider>
         <ProtectedApp />
+        <Toaster />
       </AuthProvider>
     </ErrorBoundary>
   );

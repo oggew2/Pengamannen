@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useQueries } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useRebalanceDates, queryKeys } from '../api/hooks';
+import { toaster } from '../components/toaster';
 
 const STRATEGIES = [
   { key: 'sammansatt_momentum', label: 'Momentum', color: '#4299E1', rebalance: 'quarterly', desc: 'Kvartalsvis' },
@@ -60,6 +61,10 @@ export default function MinStrategiPage() {
   const [investAmount, setInvestAmount] = useState(() => {
     const saved = localStorage.getItem('investAmount');
     return saved || '';
+  });
+  const [boughtTickers, setBoughtTickers] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem('boughtTickers');
+    return saved ? new Set(JSON.parse(saved)) : new Set();
   });
   const [suggestion, setSuggestion] = useState<{
     current: { holdings: any[]; value: number; new_investment: number; total: number };
@@ -148,6 +153,7 @@ export default function MinStrategiPage() {
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.momentumHoldings, JSON.stringify(momentumHoldings)); }, [momentumHoldings]);
   useEffect(() => { if (investAmount) localStorage.setItem('investAmount', investAmount); }, [investAmount]);
+  useEffect(() => { localStorage.setItem('boughtTickers', JSON.stringify([...boughtTickers])); }, [boughtTickers]);
 
   // Check momentum banding
   const checkMomentumBanding = async (holdingsToCheck?: string[]) => {
@@ -212,6 +218,26 @@ export default function MinStrategiPage() {
     return result;
   }, [selected, strategyData]);
 
+  // TanStack Query for pick prices (for share calculation)
+  const pickPriceQueries = useQueries({
+    queries: picks.map(p => ({
+      queryKey: queryKeys.stocks.prices(p.ticker, 1),
+      queryFn: () => api.getStockPrices(p.ticker, 1),
+      enabled: !!p.ticker,
+    })),
+  });
+
+  const pickPrices = useMemo(() => {
+    const priceMap: Record<string, number> = {};
+    picks.forEach((p, i) => {
+      const data = pickPriceQueries[i]?.data;
+      if (data?.prices?.[0]) {
+        priceMap[p.ticker] = data.prices[0].close;
+      }
+    });
+    return priceMap;
+  }, [picks, pickPriceQueries]);
+
   // Actions (buy/sell/hold)
   const actions = useMemo(() => {
     const result: Action[] = [];
@@ -259,7 +285,17 @@ export default function MinStrategiPage() {
 
   const applyImport = () => {
     if (!importResult) return;
-    const newHoldings = importResult.holdings.map(h => ({ ticker: h.ticker, shares: h.shares, avgPrice: 0 }));
+    // Merge with existing holdings - CSV shares replace, but keep avgPrice from existing or use current price
+    const existingMap = new Map(holdings.map(h => [h.ticker, h]));
+    const newHoldings = importResult.holdings.map(h => {
+      const existing = existingMap.get(h.ticker);
+      const currentPrice = prices[h.ticker] || pickPrices[h.ticker] || 0;
+      return {
+        ticker: h.ticker,
+        shares: h.shares,
+        avgPrice: existing?.avgPrice || currentPrice // Keep existing avgPrice or use current price
+      };
+    });
     setHoldings(newHoldings);
     localStorage.setItem(STORAGE_KEYS.holdings, JSON.stringify(newHoldings));
     // Clear any pending suggestions/trades when importing
@@ -281,6 +317,44 @@ export default function MinStrategiPage() {
     const updated = holdings.filter(h => h.ticker !== ticker);
     setHoldings(updated);
     localStorage.setItem(STORAGE_KEYS.holdings, JSON.stringify(updated));
+  };
+
+  // Add bought stocks to holdings
+  const addBoughtToHoldings = () => {
+    const boughtPicks = picks.filter(p => boughtTickers.has(p.ticker));
+    if (boughtPicks.length === 0) return;
+    
+    const perStock = parseFloat(investAmount) / selected.length / 10;
+    const newHoldings = [...holdings];
+    let addedCount = 0;
+    
+    for (const p of boughtPicks) {
+      const allocation = perStock * p.strategies.length;
+      const price = pickPrices[p.ticker] || 0;
+      const shares = price > 0 ? Math.floor(allocation / price) : 0;
+      if (shares === 0) continue;
+      
+      const existing = newHoldings.find(h => h.ticker === p.ticker);
+      if (existing) {
+        const totalShares = existing.shares + shares;
+        const totalCost = existing.shares * existing.avgPrice + shares * price;
+        existing.shares = totalShares;
+        existing.avgPrice = totalCost / totalShares;
+      } else {
+        newHoldings.push({ ticker: p.ticker, shares, avgPrice: price });
+      }
+      addedCount++;
+    }
+    
+    setHoldings(newHoldings);
+    localStorage.setItem(STORAGE_KEYS.holdings, JSON.stringify(newHoldings));
+    setBoughtTickers(new Set());
+    
+    toaster.create({
+      title: `${addedCount} aktier tillagda`,
+      description: 'Gå till Portfölj-fliken för att se dina innehav',
+      type: 'success',
+    });
   };
 
   // Get investment suggestion
@@ -362,6 +436,84 @@ export default function MinStrategiPage() {
 
   const formatSEK = (v: number) => new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', maximumFractionDigits: 0 }).format(v);
 
+  // Generate ICS file for rebalance reminders
+  const generateICS = () => {
+    const events: string[] = [];
+    const now = new Date();
+    const stamp = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    
+    for (const strat of STRATEGIES.filter(s => selected.includes(s.key))) {
+      const nextDate = rebalanceDates[strat.key];
+      if (!nextDate) continue;
+      
+      const [year, month, day] = nextDate.split('-').map(Number);
+      const eventDate = `${year}${String(month).padStart(2, '0')}${String(day).padStart(2, '0')}`;
+      const uid = `${strat.key}-${eventDate}@borslabbet`;
+      const rrule = strat.rebalance === 'quarterly' ? 'RRULE:FREQ=MONTHLY;INTERVAL=3' : 'RRULE:FREQ=YEARLY';
+      
+      let event = `BEGIN:VEVENT
+UID:${uid}
+DTSTAMP:${stamp}
+DTSTART;VALUE=DATE:${eventDate}
+SUMMARY:Rebalansera ${strat.label}
+DESCRIPTION:Dags att rebalansera din ${strat.label}-portfölj på Börslabbet.
+${rrule}`;
+      
+      if (settings.reminders.weekBefore) {
+        event += `
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Rebalansering om 1 vecka
+TRIGGER:-P1W
+END:VALARM`;
+      }
+      if (settings.reminders.dayBefore) {
+        event += `
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Rebalansering imorgon
+TRIGGER:-P1D
+END:VALARM`;
+      }
+      
+      event += `
+END:VEVENT`;
+      events.push(event);
+    }
+    
+    const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Borslabbet//Rebalansering//SV
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+${events.join('\n')}
+END:VCALENDAR`;
+    
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'borslabbet-rebalansering.ics';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Copy buy list to clipboard
+  const copyBuyListToClipboard = () => {
+    const perStock = parseFloat(investAmount) / selected.length / 10;
+    const lines = [...picks]
+      .sort((a, b) => b.strategies.length - a.strategies.length)
+      .map(p => {
+        const allocation = perStock * p.strategies.length;
+        const price = pickPrices[p.ticker] || 0;
+        const shares = price > 0 ? Math.floor(allocation / price) : 0;
+        return `${p.ticker}\t${shares} st\t${Math.round(shares * price)} kr`;
+      });
+    const text = `Köplista - ${formatSEK(parseFloat(investAmount))}\n${'─'.repeat(30)}\n${lines.join('\n')}`;
+    navigator.clipboard.writeText(text);
+    toaster.create({ title: 'Kopierat till urklipp', type: 'success' });
+  };
+
   return (
     <VStack gap="24px" align="stretch">
       {/* Header */}
@@ -373,9 +525,9 @@ export default function MinStrategiPage() {
       {/* Tabs */}
       <HStack gap="0" borderBottom="1px solid" borderColor="border">
         {[
-          { key: 'strategier', label: 'Strategier', icon: '📊' },
-          { key: 'portfolj', label: 'Portfölj', icon: '💼' },
-          { key: 'rebalansering', label: 'Rebalansering', icon: '⚖️' },
+          { key: 'strategier', label: 'Strategier' },
+          { key: 'portfolj', label: 'Portfölj' },
+          { key: 'rebalansering', label: 'Rebalansering' },
         ].map(t => (
           <Box
             key={t.key}
@@ -391,7 +543,7 @@ export default function MinStrategiPage() {
             _hover={{ color: 'fg' }}
             transition="all 150ms"
           >
-            {t.icon} {t.label}
+            {t.label}
           </Box>
         ))}
       </HStack>
@@ -399,6 +551,30 @@ export default function MinStrategiPage() {
       {/* Tab Content */}
       {tab === 'strategier' && (
         <VStack gap="20px" align="stretch">
+          {/* Step Indicator */}
+          <Flex gap="8px" align="center" fontSize="sm">
+            <Flex align="center" gap="6px" color={selected.length > 0 ? 'success' : 'brand.solid'}>
+              <Box w="20px" h="20px" borderRadius="full" bg={selected.length > 0 ? 'success' : 'brand.solid'} color="white" display="flex" alignItems="center" justifyContent="center" fontSize="xs" fontWeight="bold">
+                {selected.length > 0 ? '✓' : '1'}
+              </Box>
+              <Text fontWeight={selected.length === 0 ? 'semibold' : 'normal'}>Välj strategi</Text>
+            </Flex>
+            <Box w="24px" h="2px" bg={selected.length > 0 ? 'success' : 'border'} />
+            <Flex align="center" gap="6px" color={parseFloat(investAmount) > 0 ? 'success' : selected.length > 0 ? 'brand.solid' : 'fg.muted'}>
+              <Box w="20px" h="20px" borderRadius="full" bg={parseFloat(investAmount) > 0 ? 'success' : selected.length > 0 ? 'brand.solid' : 'bg.muted'} color={selected.length > 0 ? 'white' : 'fg.muted'} display="flex" alignItems="center" justifyContent="center" fontSize="xs" fontWeight="bold" border={selected.length === 0 ? '2px solid' : 'none'} borderColor="border">
+                {parseFloat(investAmount) > 0 ? '✓' : '2'}
+              </Box>
+              <Text fontWeight={selected.length > 0 && !parseFloat(investAmount) ? 'semibold' : 'normal'}>Ange belopp</Text>
+            </Flex>
+            <Box w="24px" h="2px" bg={parseFloat(investAmount) > 0 ? 'success' : 'border'} />
+            <Flex align="center" gap="6px" color={boughtTickers.size > 0 ? 'success' : parseFloat(investAmount) > 0 ? 'brand.solid' : 'fg.muted'}>
+              <Box w="20px" h="20px" borderRadius="full" bg={boughtTickers.size > 0 ? 'success' : parseFloat(investAmount) > 0 ? 'brand.solid' : 'bg.muted'} color={parseFloat(investAmount) > 0 ? 'white' : 'fg.muted'} display="flex" alignItems="center" justifyContent="center" fontSize="xs" fontWeight="bold" border={parseFloat(investAmount) <= 0 ? '2px solid' : 'none'} borderColor="border">
+                {boughtTickers.size > 0 ? '✓' : '3'}
+              </Box>
+              <Text fontWeight={parseFloat(investAmount) > 0 ? 'semibold' : 'normal'}>Köp aktier</Text>
+            </Flex>
+          </Flex>
+
           {/* Strategy Selector */}
           <Box>
             <Text fontSize="sm" fontWeight="semibold" color="fg" mb="12px">Välj strategier att följa</Text>
@@ -427,8 +603,248 @@ export default function MinStrategiPage() {
             </SimpleGrid>
           </Box>
 
-          {/* Picks Summary */}
+          {/* Investment Calculator - Progressive disclosure: only show when strategies selected */}
           {selected.length > 0 && (
+            <Box bg="bg.subtle" borderRadius="8px" p="16px" borderColor="border" borderWidth="1px">
+              <Text fontWeight="semibold" color="fg" mb="12px">Investeringsbelopp</Text>
+              <HStack gap="12px" mb="12px">
+                <Input
+                  type="number"
+                  placeholder="Belopp (SEK)"
+                  value={investAmount}
+                  onChange={e => setInvestAmount(e.target.value)}
+                  bg="bg.muted"
+                  borderColor="border"
+                  w="150px"
+                  size="sm"
+                />
+                <Text fontSize="sm" color="fg.muted">
+                  {investAmount && parseFloat(investAmount) > 0 ? (
+                    <>
+                      {formatSEK(parseFloat(investAmount) / selected.length)} per strategi → {formatSEK(parseFloat(investAmount) / selected.length / 10)} per aktie
+                    </>
+                  ) : 'Ange belopp för att beräkna'}
+                </Text>
+              </HStack>
+            </Box>
+          )}
+
+          {/* Rebalance Dates & Reminders */}
+          {selected.length > 0 && (
+            <Box bg="bg.subtle" borderRadius="8px" p="16px" borderColor="border" borderWidth="1px">
+              <Flex justify="space-between" align="center" mb="12px">
+                <Text fontWeight="semibold" color="fg">Nästa rebalansering</Text>
+                <Button size="xs" colorPalette="blue" onClick={generateICS} disabled={selected.length === 0}>
+                  Exportera kalender
+                </Button>
+              </Flex>
+              <VStack gap="8px" align="stretch" mb="12px">
+                {STRATEGIES.filter(s => selected.includes(s.key)).map(s => {
+                  const nextDate = rebalanceDates[s.key];
+                  const daysUntil = nextDate ? Math.ceil((new Date(nextDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+                  return (
+                    <Flex key={s.key} p="10px" bg="bg.muted" borderRadius="6px" justify="space-between" align="center">
+                      <HStack gap="8px">
+                        <Box w="8px" h="8px" borderRadius="full" bg={s.color} />
+                        <Text fontSize="sm" fontWeight="medium" color="fg">{s.label}</Text>
+                      </HStack>
+                      <HStack gap="8px">
+                        {nextDate && (
+                          <>
+                            <Text fontSize="sm" color="fg.muted">{new Date(nextDate).toLocaleDateString('sv-SE')}</Text>
+                            <Text fontSize="xs" px="6px" py="2px" borderRadius="4px" bg={daysUntil && daysUntil <= 7 ? 'warning/20' : 'bg.subtle'} color={daysUntil && daysUntil <= 7 ? 'warning' : 'fg.muted'}>
+                              {daysUntil} dagar
+                            </Text>
+                          </>
+                        )}
+                      </HStack>
+                    </Flex>
+                  );
+                })}
+              </VStack>
+              <Flex gap="16px" pt="8px" borderTop="1px solid" borderColor="border">
+                <HStack gap="6px">
+                  <Box
+                    as="button"
+                    w="18px"
+                    h="18px"
+                    borderRadius="4px"
+                    border="2px solid"
+                    borderColor={settings.reminders.weekBefore ? 'brand.solid' : 'border'}
+                    bg={settings.reminders.weekBefore ? 'brand.solid' : 'transparent'}
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    onClick={() => setSettings(s => ({ ...s, reminders: { ...s.reminders, weekBefore: !s.reminders.weekBefore } }))}
+                  >
+                    {settings.reminders.weekBefore && <Text color="white" fontSize="xs">✓</Text>}
+                  </Box>
+                  <Text fontSize="sm" color="fg.muted">1 vecka innan</Text>
+                </HStack>
+                <HStack gap="6px">
+                  <Box
+                    as="button"
+                    w="18px"
+                    h="18px"
+                    borderRadius="4px"
+                    border="2px solid"
+                    borderColor={settings.reminders.dayBefore ? 'brand.solid' : 'border'}
+                    bg={settings.reminders.dayBefore ? 'brand.solid' : 'transparent'}
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    onClick={() => setSettings(s => ({ ...s, reminders: { ...s.reminders, dayBefore: !s.reminders.dayBefore } }))}
+                  >
+                    {settings.reminders.dayBefore && <Text color="white" fontSize="xs">✓</Text>}
+                  </Box>
+                  <Text fontSize="sm" color="fg.muted">1 dag innan</Text>
+                </HStack>
+              </Flex>
+            </Box>
+          )}
+
+          {/* Buy List */}
+          {selected.length > 0 && parseFloat(investAmount) > 0 && (
+            <Box bg="bg.subtle" borderRadius="8px" p="16px" borderColor="border" borderWidth="1px">
+              <Flex justify="space-between" align="center" mb="12px">
+                <HStack gap="8px">
+                  <Text fontWeight="semibold" color="fg">Köplista</Text>
+                  <Text fontSize="sm" color="fg.muted">
+                    {boughtTickers.size}/{picks.length} köpta
+                  </Text>
+                </HStack>
+                <HStack gap="8px">
+                  <Button size="xs" variant="ghost" onClick={copyBuyListToClipboard} title="Kopiera till urklipp">
+                    Kopiera
+                  </Button>
+                  {boughtTickers.size > 0 && boughtTickers.size < picks.length && (
+                    <Button size="xs" variant="ghost" onClick={() => setBoughtTickers(new Set(picks.map(p => p.ticker)))}>
+                      Markera alla
+                    </Button>
+                  )}
+                  {boughtTickers.size > 0 && (
+                    <Button size="xs" variant="ghost" onClick={() => setBoughtTickers(new Set())}>
+                      Rensa
+                    </Button>
+                  )}
+                </HStack>
+              </Flex>
+              
+              {/* Progress bar */}
+              <Box bg="bg.muted" borderRadius="4px" h="4px" mb="12px" overflow="hidden">
+                <Box bg="success" h="100%" w={`${(boughtTickers.size / picks.length) * 100}%`} transition="width 200ms" />
+              </Box>
+
+              <VStack gap="8px" align="stretch" maxH="400px" overflowY="auto">
+                {[...picks]
+                  .sort((a, b) => (b.strategies.length - a.strategies.length)) // Overlaps first
+                  .map(p => {
+                  const perStock = parseFloat(investAmount) / selected.length / 10;
+                  const allocation = perStock * p.strategies.length;
+                  const price = pickPrices[p.ticker];
+                  const shares = price && allocation > 0 ? Math.floor(allocation / price) : 0;
+                  const actualCost = shares * (price || 0);
+                  const isBought = boughtTickers.has(p.ticker);
+                  const isLoading = !price && pickPriceQueries.some(q => q.isLoading);
+                  return (
+                    <Flex
+                      key={p.ticker}
+                      p="12px"
+                      bg={isBought ? 'success/10' : 'bg.muted'}
+                      borderRadius="6px"
+                      justify="space-between"
+                      align="center"
+                      opacity={isBought ? 0.7 : 1}
+                      transition="all 150ms"
+                    >
+                      <HStack gap="12px">
+                        <Box
+                          as="button"
+                          w="20px"
+                          h="20px"
+                          borderRadius="4px"
+                          border="2px solid"
+                          borderColor={isBought ? 'success' : 'border'}
+                          bg={isBought ? 'success' : 'transparent'}
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                          onClick={() => setBoughtTickers(prev => {
+                            const next = new Set(prev);
+                            isBought ? next.delete(p.ticker) : next.add(p.ticker);
+                            return next;
+                          })}
+                          aria-label={`Markera ${p.ticker} som köpt`}
+                          flexShrink={0}
+                        >
+                          {isBought && <Text color="white" fontSize="xs">✓</Text>}
+                        </Box>
+                        <Link to={`/stock/${p.ticker}`}>
+                          <HStack gap="8px" _hover={{ textDecoration: 'underline' }}>
+                            <Text fontWeight="semibold" color="fg" fontFamily="mono" textDecoration={isBought ? 'line-through' : 'none'}>{p.ticker}</Text>
+                            <Text fontSize="sm" color="fg.muted" maxW="100px" truncate>{p.name}</Text>
+                          </HStack>
+                        </Link>
+                        <a
+                          href={`https://www.avanza.se/aktier/om-aktien.html?query=${encodeURIComponent(p.ticker)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Öppna i Avanza"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <Text fontSize="xs" color="fg.muted" _hover={{ color: 'brand.solid' }}>↗</Text>
+                        </a>
+                      </HStack>
+                      <HStack gap="8px">
+                        {isLoading ? (
+                          <Text fontSize="xs" color="fg.muted">...</Text>
+                        ) : (
+                          <>
+                            {shares > 0 && <Text fontSize="sm" fontWeight="semibold" color="fg">{shares} st</Text>}
+                            <Text fontSize="sm" fontWeight="semibold" color={p.strategies.length > 1 ? 'success' : 'fg'}>
+                              {formatSEK(actualCost || allocation)}
+                            </Text>
+                          </>
+                        )}
+                        {p.strategies.map(s => (
+                          <Box key={s.key} bg={`${s.color}40`} px="6px" py="2px" borderRadius="4px" title={s.label}>
+                            <Text fontSize="xs" color="fg" fontWeight="medium">{s.label.slice(0, 3)}</Text>
+                          </Box>
+                        ))}
+                      </HStack>
+                    </Flex>
+                  );
+                })}
+              </VStack>
+
+              {/* Summary and Add to Holdings */}
+              <Flex justify="space-between" align="center" mt="12px" pt="12px" borderTop="1px solid" borderColor="border">
+                <VStack align="start" gap="2px">
+                  <Text fontSize="sm" color="fg.muted">
+                    Totalt: {formatSEK(parseFloat(investAmount))}
+                  </Text>
+                  <Text fontSize="sm" color="success" fontWeight="semibold">
+                    Köpt: {formatSEK(picks.filter(p => boughtTickers.has(p.ticker)).reduce((sum, p) => {
+                      const perStock = parseFloat(investAmount) / selected.length / 10;
+                      return sum + perStock * p.strategies.length;
+                    }, 0))}
+                  </Text>
+                </VStack>
+                {boughtTickers.size > 0 && (
+                  <Button
+                    colorPalette="blue"
+                    size="sm"
+                    onClick={addBoughtToHoldings}
+                  >
+                    Lägg till i portfölj ({boughtTickers.size})
+                  </Button>
+                )}
+              </Flex>
+            </Box>
+          )}
+
+          {/* Picks Summary (when no amount entered) */}
+          {selected.length > 0 && !parseFloat(investAmount) && (
             <Box bg="bg.subtle" borderRadius="8px" p="16px" borderColor="border" borderWidth="1px">
               <Flex justify="space-between" align="center" mb="12px">
                 <Text fontWeight="semibold" color="fg">
@@ -452,12 +868,12 @@ export default function MinStrategiPage() {
                     >
                       <HStack gap="12px">
                         <Text fontWeight="semibold" color="fg" fontFamily="mono">{p.ticker}</Text>
-                        <Text fontSize="sm" color="fg.muted" maxW="150px" truncate>{p.name}</Text>
+                        <Text fontSize="sm" color="fg.muted" maxW="120px" truncate>{p.name}</Text>
                       </HStack>
                       <HStack gap="4px">
                         {p.strategies.map(s => (
-                          <Box key={s.key} bg={`${s.color}30`} px="6px" py="2px" borderRadius="4px">
-                            <Text fontSize="xs" color="fg">#{s.rank}</Text>
+                          <Box key={s.key} bg={`${s.color}40`} px="6px" py="2px" borderRadius="4px" title={s.label}>
+                            <Text fontSize="xs" color="fg" fontWeight="medium">{s.label.slice(0, 3)}</Text>
                           </Box>
                         ))}
                       </HStack>
@@ -466,15 +882,14 @@ export default function MinStrategiPage() {
                 ))}
               </VStack>
               <Text fontSize="xs" color="fg.muted" mt="12px">
-                💡 Klicka på en aktie för mer information. Gå till Portfölj-fliken för att importera dina innehav.
+                Ange ett belopp ovan för att se köplista med antal aktier.
               </Text>
             </Box>
           )}
 
           {selected.length === 0 && (
             <Box bg="bg.subtle" borderRadius="8px" p="48px" textAlign="center">
-              <Text fontSize="3xl" mb="12px">📊</Text>
-              <Text color="fg.muted">Välj minst en strategi ovan</Text>
+              <Text color="fg.muted">Välj minst en strategi ovan för att komma igång</Text>
             </Box>
           )}
         </VStack>
@@ -502,7 +917,7 @@ export default function MinStrategiPage() {
 
           {/* CSV Import */}
           <Box bg="bg.subtle" borderRadius="8px" p="20px" borderColor="border" borderWidth="1px" borderStyle="dashed">
-            <Text fontWeight="semibold" color="fg" mb="8px">📁 Importera från Avanza</Text>
+            <Text fontWeight="semibold" color="fg" mb="8px">Importera från Avanza</Text>
             <Text fontSize="sm" color="fg.muted" mb="12px">
               Exportera transaktioner: Avanza → Konto → Transaktioner → Exportera CSV
             </Text>
@@ -559,7 +974,6 @@ export default function MinStrategiPage() {
 
           {holdings.length === 0 && (
             <Box bg="bg.subtle" borderRadius="8px" p="48px" textAlign="center">
-              <Text fontSize="3xl" mb="12px">💼</Text>
               <Text color="fg.muted">Importera eller lägg till innehav ovan</Text>
             </Box>
           )}
@@ -570,7 +984,7 @@ export default function MinStrategiPage() {
         <VStack gap="20px" align="stretch">
           {/* Mode Toggle */}
           <Box bg="bg.subtle" borderRadius="8px" p="20px" borderColor="border" borderWidth="1px">
-            <Text fontWeight="semibold" color="fg" mb="12px">📊 Rebalanseringsmetod</Text>
+            <Text fontWeight="semibold" color="fg" mb="12px">Rebalanseringsmetod</Text>
             <HStack gap="12px">
               <Box
                 as="button"
@@ -596,8 +1010,12 @@ export default function MinStrategiPage() {
                 borderColor={settings.bandingMode ? 'brand.solid' : 'border'}
                 onClick={() => setSettings(s => ({ ...s, bandingMode: true }))}
                 textAlign="left"
+                title="Banding minskar omsättningen genom att behålla aktier som fortfarande är inom topp 20%, istället för att sälja så fort de faller ur topp 10. Detta sparar courtage och minskar skatteeffekter."
               >
-                <Text fontWeight="semibold" color="fg" fontSize="sm">Banding (Momentum)</Text>
+                <HStack gap="4px" mb="2px">
+                  <Text fontWeight="semibold" color="fg" fontSize="sm">Banding (Momentum)</Text>
+                  <Text fontSize="xs" color="fg.muted" cursor="help" title="Banding minskar omsättningen genom att behålla aktier som fortfarande är inom topp 20%, istället för att sälja så fort de faller ur topp 10.">ⓘ</Text>
+                </HStack>
                 <Text fontSize="xs" color="fg.muted">Månadsvis, sälj endast under topp 20%</Text>
               </Box>
             </HStack>
@@ -605,7 +1023,7 @@ export default function MinStrategiPage() {
 
           {/* Investment Suggestion */}
           <Box bg="bg.subtle" borderRadius="8px" p="20px" borderColor="border" borderWidth="1px">
-            <Text fontWeight="semibold" color="fg" mb="12px">💰 Investeringsförslag</Text>
+            <Text fontWeight="semibold" color="fg" mb="12px">Investeringsförslag</Text>
             <HStack gap="12px" mb="16px" flexWrap="wrap">
               <Box flex="1" minW="150px">
                 <Text fontSize="xs" color="fg.muted" mb="4px">Belopp att investera</Text>
@@ -639,7 +1057,7 @@ export default function MinStrategiPage() {
                 <SimpleGrid columns={{ base: 1, md: 3 }} gap="12px">
                   {/* TODAY - Current Holdings */}
                   <Box bg="bg.muted" borderRadius="6px" p="12px">
-                    <Text fontSize="sm" fontWeight="semibold" color="fg" mb="8px">📊 IDAG</Text>
+                    <Text fontSize="sm" fontWeight="semibold" color="fg" mb="8px">IDAG</Text>
                     <VStack gap="4px" align="stretch" mb="8px">
                       {suggestion.current.holdings.length > 0 ? (
                         suggestion.current.holdings.map(h => (
@@ -670,7 +1088,7 @@ export default function MinStrategiPage() {
 
                   {/* REBALANCE - Actions */}
                   <Box bg="bg.muted" borderRadius="6px" p="12px">
-                    <Text fontSize="sm" fontWeight="semibold" color="fg" mb="8px">⚖️ ÅTGÄRDER</Text>
+                    <Text fontSize="sm" fontWeight="semibold" color="fg" mb="8px">ÅTGÄRDER</Text>
                     {suggestion.sells.length > 0 && (
                       <Box mb="8px">
                         <Text fontSize="xs" color="error.fg" fontWeight="semibold" mb="4px">SÄLJ</Text>
@@ -687,7 +1105,9 @@ export default function MinStrategiPage() {
                               onClick={() => toggleTradeExecuted('sells', s.ticker)}
                             >
                               <HStack gap="4px">
-                                <Text>{executedTrades.sells.includes(s.ticker) ? '✅' : '🔴'}</Text>
+                                <Text color={executedTrades.sells.includes(s.ticker) ? 'success.fg' : 'error.fg'}>
+                                  {executedTrades.sells.includes(s.ticker) ? '✓' : '•'}
+                                </Text>
                                 <Text color="fg" fontFamily="mono">{s.ticker}</Text>
                               </HStack>
                               <Text color="fg.muted">-{formatSEK(s.value)}</Text>
@@ -713,8 +1133,10 @@ export default function MinStrategiPage() {
                             >
                               <Flex justify="space-between">
                                 <HStack gap="4px">
-                                  <Text>{executedTrades.buys.includes(b.ticker) ? '✅' : '🟢'}</Text>
-                                  {b.strategies.length > 1 && <Text>⭐</Text>}
+                                  <Text color={executedTrades.buys.includes(b.ticker) ? 'success.fg' : 'brand.fg'}>
+                                    {executedTrades.buys.includes(b.ticker) ? '✓' : '+'}
+                                  </Text>
+                                  {b.strategies.length > 1 && <Text color="warning.fg">★</Text>}
                                   {b.avanza_id ? (
                                     <a href={`https://www.avanza.se/aktier/om-aktien.html/${b.avanza_id}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
                                       <Text color="brand.fg" fontFamily="mono" textDecoration="underline">{b.ticker}</Text>
@@ -741,12 +1163,12 @@ export default function MinStrategiPage() {
 
                   {/* AFTER - Target Portfolio */}
                   <Box bg="bg.muted" borderRadius="6px" p="12px">
-                    <Text fontSize="sm" fontWeight="semibold" color="fg" mb="8px">✅ EFTER</Text>
+                    <Text fontSize="sm" fontWeight="semibold" color="fg" mb="8px">EFTER</Text>
                     <VStack gap="4px" align="stretch" mb="8px">
                       {suggestion.target_portfolio.map(t => (
                         <Flex key={t.ticker} justify="space-between" fontSize="xs">
                           <HStack gap="4px">
-                            {t.strategies.length > 1 && <Text>⭐</Text>}
+                            {t.strategies.length > 1 && <Text color="warning.fg">★</Text>}
                             <Text color="fg" fontFamily="mono">{t.ticker}</Text>
                             <Text color="fg.muted">({t.weight}%)</Text>
                           </HStack>
@@ -766,7 +1188,7 @@ export default function MinStrategiPage() {
                 {/* Cost and Apply */}
                 <Flex justify="space-between" align="center" p="12px" bg="bg.muted" borderRadius="6px">
                   <Text fontSize="xs" color="fg.muted">
-                    💰 Kostnad: {formatSEK(suggestion.costs.total)} (courtage {formatSEK(suggestion.costs.courtage)} + spread {formatSEK(suggestion.costs.spread)})
+                    Kostnad: {formatSEK(suggestion.costs.total)} (courtage {formatSEK(suggestion.costs.courtage)} + spread {formatSEK(suggestion.costs.spread)})
                   </Text>
                   {(executedTrades.sells.length > 0 || executedTrades.buys.length > 0) && (
                     <Button size="sm" colorPalette="green" onClick={applyExecutedTrades}>
@@ -792,7 +1214,7 @@ export default function MinStrategiPage() {
             <Box bg="bg.subtle" borderRadius="8px" p="20px" borderColor="border" borderWidth="1px">
               <Flex justify="space-between" align="center" mb="16px">
                 <Box>
-                  <Text fontWeight="semibold" color="fg">🎯 Momentumportföljen</Text>
+                  <Text fontWeight="semibold" color="fg">Momentumportföljen</Text>
                   <Text fontSize="xs" color="fg.muted">Köp topp 10%, sälj under topp 20%, kontrollera månadsvis</Text>
                 </Box>
                 {momentumHoldings.length === 0 ? (
@@ -843,7 +1265,7 @@ export default function MinStrategiPage() {
                       <Flex key={k.ticker} p="8px" bg={k.rank <= bandingResult.thresholds.buy_rank ? 'success.subtle' : 'warning.subtle'} borderRadius="4px" justify="space-between">
                         <HStack gap="8px">
                           <Text fontSize="sm" color={k.rank <= bandingResult.thresholds.buy_rank ? 'success.fg' : 'warning.fg'}>
-                            {k.rank <= bandingResult.thresholds.buy_rank ? '✅' : '⚠️'}
+                            {k.rank <= bandingResult.thresholds.buy_rank ? '✓' : '!'}
                           </Text>
                           <Text fontSize="sm" color="fg" fontFamily="mono">{k.ticker}</Text>
                           <Text fontSize="xs" color="fg.muted">{k.name}</Text>
@@ -854,7 +1276,7 @@ export default function MinStrategiPage() {
                     {bandingResult.sells.map(s => (
                       <Flex key={s.ticker} p="8px" bg="error.subtle" borderRadius="4px" justify="space-between">
                         <HStack gap="8px">
-                          <Text fontSize="sm" color="error.fg">❌</Text>
+                          <Text fontSize="sm" color="error.fg">×</Text>
                           <Text fontSize="sm" color="fg" fontFamily="mono">{s.ticker}</Text>
                           <Text fontSize="xs" color="fg.muted">{s.reason}</Text>
                         </HStack>
@@ -866,7 +1288,7 @@ export default function MinStrategiPage() {
                   {/* Suggested buys */}
                   {bandingResult.suggested_buys.length > 0 && (
                     <Box>
-                      <Text fontSize="sm" fontWeight="semibold" color="success.fg" mb="8px">🟢 Köp istället</Text>
+                      <Text fontSize="sm" fontWeight="semibold" color="success.fg" mb="8px">Köp istället</Text>
                       <VStack gap="4px" align="stretch">
                         {bandingResult.suggested_buys.map(b => (
                           <Flex key={b.ticker} p="8px" bg="success.subtle" borderRadius="4px" justify="space-between">
@@ -890,7 +1312,7 @@ export default function MinStrategiPage() {
 
                   {bandingResult.sells.length === 0 && (
                     <Box p="12px" bg="success.subtle" borderRadius="6px" textAlign="center">
-                      <Text color="success.fg" fontSize="sm">✅ Inga byten behövs - alla aktier inom topp 20%</Text>
+                      <Text color="success.fg" fontSize="sm">Inga byten behövs - alla aktier inom topp 20%</Text>
                     </Box>
                   )}
                 </VStack>
@@ -963,7 +1385,7 @@ export default function MinStrategiPage() {
               {/* Sell List */}
               {actions.filter(a => a.type === 'SELL').length > 0 && (
                 <Box mb="12px">
-                  <Text fontSize="sm" fontWeight="semibold" color="error.fg" mb="8px">🔴 Sälj</Text>
+                  <Text fontSize="sm" fontWeight="semibold" color="error.fg" mb="8px">Sälj</Text>
                   <VStack gap="4px" align="stretch">
                     {actions.filter(a => a.type === 'SELL').map(a => (
                       <Flex key={a.ticker} p="8px" bg="bg.muted" borderRadius="4px" justify="space-between">
@@ -978,7 +1400,7 @@ export default function MinStrategiPage() {
               {/* Buy List */}
               {actions.filter(a => a.type === 'BUY').length > 0 && (
                 <Box>
-                  <Text fontSize="sm" fontWeight="semibold" color="success.fg" mb="8px">🟢 Köp</Text>
+                  <Text fontSize="sm" fontWeight="semibold" color="success.fg" mb="8px">Köp</Text>
                   <VStack gap="4px" align="stretch">
                     {actions.filter(a => a.type === 'BUY').map(a => (
                       <Flex key={a.ticker} p="8px" bg="bg.muted" borderRadius="4px" justify="space-between">
@@ -996,7 +1418,7 @@ export default function MinStrategiPage() {
               {/* Cost Estimate */}
               {costs && (
                 <Box mt="16px" p="12px" bg="bg.muted" borderRadius="6px">
-                  <Text fontSize="sm" fontWeight="semibold" color="fg" mb="4px">💰 Uppskattad kostnad</Text>
+                  <Text fontSize="sm" fontWeight="semibold" color="fg" mb="4px">Uppskattad kostnad</Text>
                   <Text fontSize="sm" color="fg.muted">
                     Courtage: {formatSEK(costs.courtage)} • Spread: {formatSEK(costs.spread_estimate)} • Totalt: {formatSEK(costs.total)} ({costs.percentage?.toFixed(2)}%)
                   </Text>
@@ -1008,7 +1430,6 @@ export default function MinStrategiPage() {
           {/* Empty state for classic mode */}
           {!settings.bandingMode && (holdings.length === 0 || selected.length === 0) && (
             <Box bg="bg.subtle" borderRadius="8px" p="48px" textAlign="center">
-              <Text fontSize="3xl" mb="12px">⚖️</Text>
               <Text color="fg.muted">
                 {holdings.length === 0 ? 'Importera innehav i Portfölj-fliken först' : 'Välj strategier i första fliken'}
               </Text>

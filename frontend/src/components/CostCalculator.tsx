@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { NativeSelect } from '@chakra-ui/react';
 import styles from '../styles/App.module.css';
 
 interface CostBreakdown {
@@ -133,27 +134,25 @@ export function CostCalculator() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div>
             <label style={{ display: 'block', color: '#d1d5db', fontSize: '0.875rem', marginBottom: '4px' }}>Strategi</label>
-            <select
-              value={strategy}
-              onChange={(e) => setStrategy(e.target.value as keyof typeof STRATEGIES)}
-              className={styles.select}
-            >
-              {Object.entries(STRATEGIES).map(([key, s]) => (
-                <option key={key} value={key}>{s.name}</option>
-              ))}
-            </select>
+            <NativeSelect.Root size="sm" w="100%">
+              <NativeSelect.Field value={strategy} onChange={(e) => setStrategy(e.target.value as keyof typeof STRATEGIES)} bg="bg.muted" borderColor="border" color="fg">
+                {Object.entries(STRATEGIES).map(([key, s]) => (
+                  <option key={key} value={key}>{s.name}</option>
+                ))}
+              </NativeSelect.Field>
+              <NativeSelect.Indicator />
+            </NativeSelect.Root>
           </div>
           <div>
             <label style={{ display: 'block', color: '#d1d5db', fontSize: '0.875rem', marginBottom: '4px' }}>Mäklare</label>
-            <select
-              value={broker}
-              onChange={(e) => setBroker(e.target.value as keyof typeof BROKERS)}
-              className={styles.select}
-            >
-              {Object.entries(BROKERS).map(([key, b]) => (
-                <option key={key} value={key}>{b.name}</option>
-              ))}
-            </select>
+            <NativeSelect.Root size="sm" w="100%">
+              <NativeSelect.Field value={broker} onChange={(e) => setBroker(e.target.value as keyof typeof BROKERS)} bg="bg.muted" borderColor="border" color="fg">
+                {Object.entries(BROKERS).map(([key, b]) => (
+                  <option key={key} value={key}>{b.name}</option>
+                ))}
+              </NativeSelect.Field>
+              <NativeSelect.Indicator />
+            </NativeSelect.Root>
           </div>
         </div>
       </div>
@@ -186,7 +185,7 @@ export function CostCalculator() {
         marginBottom: '16px' 
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '1.25rem' }}>{costs.isViable ? '✅' : '⚠️'}</span>
+          <span style={{ fontSize: '1.25rem', color: costs.isViable ? '#10b981' : '#f59e0b' }}>{costs.isViable ? '✓' : '!'}</span>
           <div>
             <div style={{ color: costs.isViable ? '#d1fae5' : '#fecaca', fontWeight: '600' }}>
               {costs.isViable ? 'Lönsamt' : 'Höga kostnader'}
@@ -238,15 +237,14 @@ export function CostCalculator() {
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
           <h4 style={{ color: '#f3f4f6', fontWeight: '600' }}>Tillväxt över tid</h4>
-          <select
-            value={years}
-            onChange={(e) => setYears(Number(e.target.value))}
-            style={{ background: '#374151', color: '#f3f4f6', border: '1px solid #4b5563', borderRadius: '4px', padding: '4px 8px' }}
-          >
-            <option value={5}>5 år</option>
-            <option value={10}>10 år</option>
-            <option value={20}>20 år</option>
-          </select>
+          <NativeSelect.Root size="sm" w="auto">
+            <NativeSelect.Field value={years} onChange={(e) => setYears(Number(e.target.value))} bg="bg.muted" borderColor="border" color="fg">
+              <option value={5}>5 år</option>
+              <option value={10}>10 år</option>
+              <option value={20}>20 år</option>
+            </NativeSelect.Field>
+            <NativeSelect.Indicator />
+          </NativeSelect.Root>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '12px' }}>

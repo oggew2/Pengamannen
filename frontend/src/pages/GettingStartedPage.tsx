@@ -57,8 +57,8 @@ export default function GettingStartedPage() {
   return (
     <VStack gap="32px" align="stretch">
       <Box>
-        <Text fontSize="2xl" fontWeight="bold" color="gray.50">Kom igång</Text>
-        <Text color="gray.400" mt="4px">Hitta rätt strategi och förstå kostnaderna</Text>
+        <Text fontSize="2xl" fontWeight="bold" color="fg">Kom igång</Text>
+        <Text color="fg.subtle" mt="4px">Hitta rätt strategi och förstå kostnaderna</Text>
       </Box>
 
       {/* Strategy Quiz */}
@@ -69,10 +69,10 @@ export default function GettingStartedPage() {
 
       {/* Steps */}
       <Box>
-        <Text fontSize="xl" fontWeight="semibold" color="gray.50" mb="16px">5 steg för att börja</Text>
+        <Text fontSize="xl" fontWeight="semibold" color="fg" mb="16px">5 steg för att börja</Text>
         <VStack gap="16px" align="stretch">
         {steps.map((step) => (
-          <Box key={step.number} bg="gray.700" borderRadius="8px" p="20px" border="1px solid" borderColor="gray.600">
+          <Box key={step.number} bg="bg.subtle" borderRadius="8px" p="20px" border="1px solid" borderColor="border">
             <Flex gap="16px" align="flex-start">
               <Flex
                 w="36px"
@@ -86,10 +86,10 @@ export default function GettingStartedPage() {
                 <Text fontWeight="bold" color="white">{step.number}</Text>
               </Flex>
               <Box flex="1">
-                <Text fontSize="lg" fontWeight="semibold" color="gray.50">{step.title}</Text>
-                <Text color="gray.300" mt="8px" lineHeight="1.6">{step.description}</Text>
-                <Box bg="gray.600" borderRadius="6px" p="12px" mt="12px">
-                  <Text fontSize="sm" color="gray.200">💡 {step.tip}</Text>
+                <Text fontSize="lg" fontWeight="semibold" color="fg">{step.title}</Text>
+                <Text color="fg.muted" mt="8px" lineHeight="1.6">{step.description}</Text>
+                <Box bg="border" borderRadius="6px" p="12px" mt="12px">
+                  <Text fontSize="sm" color="fg.muted">{step.tip}</Text>
                 </Box>
                 {step.link && (
                   <Link to={step.link}>
@@ -107,24 +107,24 @@ export default function GettingStartedPage() {
 
       {/* Strategy Overview */}
       <Box>
-        <Text fontSize="xl" fontWeight="semibold" color="gray.50" mb="16px">Våra strategier</Text>
+        <Text fontSize="xl" fontWeight="semibold" color="fg" mb="16px">Våra strategier</Text>
         <SimpleGrid columns={{ base: 1, md: 2 }} gap="12px">
           {strategies.map((s) => (
             <Link key={s.path} to={s.path}>
               <Box
-                bg="gray.700"
+                bg="bg.subtle"
                 borderRadius="8px"
                 p="16px"
                 border="1px solid"
-                borderColor="gray.600"
-                _hover={{ borderColor: 'brand.500', bg: 'gray.650' }}
+                borderColor="border"
+                _hover={{ borderColor: 'brand.500', bg: 'bg.hover' }}
                 transition="all 150ms"
               >
-                <Text fontWeight="semibold" color="gray.50">{s.name}</Text>
-                <Text fontSize="sm" color="gray.400" mt="4px">{s.description}</Text>
+                <Text fontWeight="semibold" color="fg">{s.name}</Text>
+                <Text fontSize="sm" color="fg.subtle" mt="4px">{s.description}</Text>
                 <HStack mt="8px" gap="8px">
-                  <Box bg="gray.600" px="8px" py="2px" borderRadius="4px">
-                    <Text fontSize="xs" color="gray.300">{s.rebalance}</Text>
+                  <Box bg="border" px="8px" py="2px" borderRadius="4px">
+                    <Text fontSize="xs" color="fg.muted">{s.rebalance}</Text>
                   </Box>
                 </HStack>
               </Box>
@@ -134,31 +134,31 @@ export default function GettingStartedPage() {
       </Box>
 
       {/* Quick Tips */}
-      <Box bg="gray.700" borderRadius="8px" p="20px" border="1px solid" borderColor="gray.600">
-        <Text fontSize="lg" fontWeight="semibold" color="gray.50" mb="12px">Viktigt att tänka på</Text>
+      <Box bg="bg.subtle" borderRadius="8px" p="20px" border="1px solid" borderColor="border">
+        <Text fontSize="lg" fontWeight="semibold" color="fg" mb="12px">Viktigt att tänka på</Text>
         <VStack align="stretch" gap="8px">
           <HStack align="flex-start" gap="8px">
             <Text color="brand.400">•</Text>
-            <Text fontSize="sm" color="gray.300">Använd ISK för skattefördelar - du betalar bara ~0.9% årlig skatt istället för 30% på vinster</Text>
+            <Text fontSize="sm" color="fg.muted">Använd ISK för skattefördelar - du betalar bara ~0.9% årlig skatt istället för 30% på vinster</Text>
           </HStack>
           <HStack align="flex-start" gap="8px">
             <Text color="brand.400">•</Text>
-            <Text fontSize="sm" color="gray.300">Investera långsiktigt - strategierna fungerar bäst över 5+ år</Text>
+            <Text fontSize="sm" color="fg.muted">Investera långsiktigt - strategierna fungerar bäst över 5+ år</Text>
           </HStack>
           <HStack align="flex-start" gap="8px">
             <Text color="brand.400">•</Text>
-            <Text fontSize="sm" color="gray.300">Följ systemet - låt inte känslor styra dina beslut</Text>
+            <Text fontSize="sm" color="fg.muted">Följ systemet - låt inte känslor styra dina beslut</Text>
           </HStack>
           <HStack align="flex-start" gap="8px">
             <Text color="brand.400">•</Text>
-            <Text fontSize="sm" color="gray.300">Historisk avkastning är ingen garanti för framtida resultat</Text>
+            <Text fontSize="sm" color="fg.muted">Historisk avkastning är ingen garanti för framtida resultat</Text>
           </HStack>
         </VStack>
       </Box>
 
       {/* Disclaimer */}
-      <Box bg="gray.800" borderRadius="8px" p="16px" border="1px solid" borderColor="gray.700">
-        <Text fontSize="xs" color="gray.500" lineHeight="1.6">
+      <Box bg="bg.muted" borderRadius="8px" p="16px" border="1px solid" borderColor="bg.subtle">
+        <Text fontSize="xs" color="fg0" lineHeight="1.6">
           <Text as="span" fontWeight="semibold">Ansvarsbegränsning:</Text> Informationen på denna sida är endast för utbildningsändamål och ska inte ses som köp- eller säljrekommendationer eller individuell rådgivning. Historisk avkastning är ingen garanti för framtida avkastning. Finansiella tillgångar kan både öka och minska i värde och det finns risk att du inte får tillbaka investerat kapital.
         </Text>
       </Box>

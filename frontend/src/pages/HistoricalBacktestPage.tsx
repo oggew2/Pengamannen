@@ -1,6 +1,6 @@
 import { useState } from 'react';
+import { Box, Text, VStack, HStack, Flex, Button, Input, Skeleton, SimpleGrid, NativeSelect } from '@chakra-ui/react';
 import { BacktestChart } from '../components/BacktestChart';
-import styles from '../styles/App.module.css';
 
 interface YearlyReturn {
   year: number;
@@ -59,9 +59,8 @@ export function HistoricalBacktestPage() {
         credentials: 'include'
       });
       if (!res.ok) throw new Error('Backtest failed');
-      const data = await res.json();
-      setResult(data);
-    } catch (e) {
+      setResult(await res.json());
+    } catch {
       setError('Failed to run backtest');
     } finally {
       setLoading(false);
@@ -78,9 +77,8 @@ export function HistoricalBacktestPage() {
         credentials: 'include'
       });
       if (!res.ok) throw new Error('Compare failed');
-      const data = await res.json();
-      setCompareResult(data);
-    } catch (e) {
+      setCompareResult(await res.json());
+    } catch {
       setError('Failed to compare strategies');
     } finally {
       setLoading(false);
@@ -88,156 +86,158 @@ export function HistoricalBacktestPage() {
   };
 
   return (
-    <div>
-      <h1 className={styles.pageTitle}>Historical Backtest (20+ Years)</h1>
+    <VStack gap="24px" align="stretch">
+      <Box>
+        <Text fontSize="2xl" fontWeight="bold" color="fg">Historisk Backtest (20+ år)</Text>
+        <Text color="fg.muted" fontSize="sm">Testa strategier på historisk data</Text>
+      </Box>
 
-      <div className={styles.grid}>
-        <div className={styles.card}>
-          <h3 className={styles.cardTitle}>Configuration</h3>
+      <SimpleGrid columns={{ base: 1, md: 2 }} gap="24px">
+        {/* Configuration */}
+        <Box bg="bg.subtle" borderRadius="8px" p="24px" borderColor="border" borderWidth="1px">
+          <Text fontSize="lg" fontWeight="semibold" color="fg" mb="16px">Konfiguration</Text>
           
-          <label htmlFor="hist-strategy" className={styles.formLabel}>Strategy</label>
-          <select id="hist-strategy" value={strategy} onChange={e => setStrategy(e.target.value)} className={styles.select}>
-            {STRATEGIES.map(s => (
-              <option key={s.value} value={s.value}>{s.label}</option>
-            ))}
-          </select>
+          <VStack gap="16px" align="stretch">
+            <Box>
+              <Text fontSize="sm" color="fg.muted" mb="4px">Strategi</Text>
+              <NativeSelect.Root w="100%">
+                <NativeSelect.Field value={strategy} onChange={e => setStrategy(e.target.value)} bg="bg.muted" borderColor="border" color="fg">
+                  {STRATEGIES.map(s => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </NativeSelect.Field>
+                <NativeSelect.Indicator />
+              </NativeSelect.Root>
+            </Box>
 
-          <label htmlFor="hist-start" className={styles.formLabel}>Start Year</label>
-          <input
-            id="hist-start"
-            type="number"
-            min={1990}
-            max={2023}
-            value={startYear}
-            onChange={e => setStartYear(Number(e.target.value))}
-            className={styles.input}
-          />
+            <HStack gap="12px">
+              <Box flex="1">
+                <Text fontSize="sm" color="fg.muted" mb="4px">Startår</Text>
+                <Input type="number" min={1990} max={2023} value={startYear} onChange={e => setStartYear(Number(e.target.value))} bg="bg.muted" borderColor="border" size="sm" />
+              </Box>
+              <Box flex="1">
+                <Text fontSize="sm" color="fg.muted" mb="4px">Slutår</Text>
+                <Input type="number" min={2000} max={2024} value={endYear} onChange={e => setEndYear(Number(e.target.value))} bg="bg.muted" borderColor="border" size="sm" />
+              </Box>
+            </HStack>
 
-          <label htmlFor="hist-end" className={styles.formLabel}>End Year</label>
-          <input
-            id="hist-end"
-            type="number"
-            min={2000}
-            max={2024}
-            value={endYear}
-            onChange={e => setEndYear(Number(e.target.value))}
-            className={styles.input}
-          />
+            <VStack gap="8px" align="stretch">
+              <Button colorPalette="blue" onClick={runBacktest} loading={loading} disabled={loading}>
+                Kör enskild strategi
+              </Button>
+              <Button variant="outline" borderColor="brand.fg" color="brand.fg" onClick={compareAll} loading={loading} disabled={loading}>
+                Jämför alla strategier
+              </Button>
+            </VStack>
 
-          <button onClick={runBacktest} disabled={loading} className={styles.btn}>
-            {loading ? 'Running...' : 'Run Single Strategy'}
-          </button>
-          
-          <button onClick={compareAll} disabled={loading} className={styles.btn} style={{marginTop: '0.5rem', background: '#3b82f6'}}>
-            {loading ? 'Comparing...' : 'Compare All Strategies'}
-          </button>
+            {error && <Text color="error.fg" fontSize="sm">{error}</Text>}
+          </VStack>
+        </Box>
 
-          {error && <p className={styles.error}>{error}</p>}
-        </div>
+        {/* Results */}
+        {loading && !result && !compareResult && (
+          <Box bg="bg.subtle" borderRadius="8px" p="24px" borderColor="border" borderWidth="1px">
+            <Skeleton height="24px" width="200px" mb="16px" />
+            <VStack gap="12px" align="stretch">
+              <Skeleton height="60px" />
+              <Skeleton height="60px" />
+              <Skeleton height="60px" />
+            </VStack>
+          </Box>
+        )}
 
         {result && (
-          <div className={styles.card}>
-            <h3 className={styles.cardTitle}>Results: {result.strategy_name}</h3>
-            <p className={styles.cardMeta}>{result.years} years ({result.start_date} to {result.end_date})</p>
-            <p className={styles.cardMeta}>Data: {result.data_source}</p>
+          <Box bg="bg.subtle" borderRadius="8px" p="24px" borderColor="border" borderWidth="1px">
+            <Text fontSize="lg" fontWeight="semibold" color="fg" mb="4px">{result.strategy_name}</Text>
+            <Text fontSize="sm" color="fg.muted" mb="4px">{result.years} år ({result.start_date} till {result.end_date})</Text>
+            <Text fontSize="xs" color="fg.subtle" mb="16px">Data: {result.data_source}</Text>
             
-            <div className={styles.statsGrid}>
-              <div className={styles.stat}>
-                <div className={styles.statValue} style={{color: result.cagr_pct >= 0 ? '#0d9488' : '#dc3545'}}>
+            <SimpleGrid columns={3} gap="12px" mb="16px">
+              <Box p="12px" bg="bg.muted" borderRadius="6px" textAlign="center">
+                <Text fontSize="xl" fontWeight="bold" color={result.cagr_pct >= 0 ? 'success.fg' : 'error.fg'} fontFamily="mono">
                   {result.cagr_pct.toFixed(1)}%
-                </div>
-                <div className={styles.statLabel}>CAGR</div>
-              </div>
-              <div className={styles.stat}>
-                <div className={styles.statValue}>{result.sharpe_ratio.toFixed(2)}</div>
-                <div className={styles.statLabel}>Sharpe</div>
-              </div>
-              <div className={styles.stat}>
-                <div className={styles.statValue} style={{color: '#dc3545'}}>
-                  {result.max_drawdown_pct.toFixed(1)}%
-                </div>
-                <div className={styles.statLabel}>Max DD</div>
-              </div>
-            </div>
+                </Text>
+                <Text fontSize="xs" color="fg.muted">CAGR</Text>
+              </Box>
+              <Box p="12px" bg="bg.muted" borderRadius="6px" textAlign="center">
+                <Text fontSize="xl" fontWeight="bold" color="fg" fontFamily="mono">{result.sharpe_ratio.toFixed(2)}</Text>
+                <Text fontSize="xs" color="fg.muted">Sharpe</Text>
+              </Box>
+              <Box p="12px" bg="bg.muted" borderRadius="6px" textAlign="center">
+                <Text fontSize="xl" fontWeight="bold" color="error.fg" fontFamily="mono">{result.max_drawdown_pct.toFixed(1)}%</Text>
+                <Text fontSize="xs" color="fg.muted">Max DD</Text>
+              </Box>
+            </SimpleGrid>
 
-            <div style={{marginTop: '1rem', fontSize: '0.875rem'}}>
-              <p>💰 Final Value: <strong>${result.final_value.toLocaleString()}</strong></p>
-              <p>📈 Total Return: <strong>{result.total_return_pct.toFixed(1)}%</strong></p>
-              <p>🎯 Win Rate: <strong>{result.win_rate_pct.toFixed(0)}%</strong> of years positive</p>
-              <p>🏆 Best Year: <strong>{result.best_year.year}</strong> ({result.best_year.return.toFixed(1)}%)</p>
-              <p>📉 Worst Year: <strong>{result.worst_year.year}</strong> ({result.worst_year.return.toFixed(1)}%)</p>
-              <p>🔄 Rebalances: <strong>{result.rebalance_count}</strong></p>
-            </div>
-          </div>
+            <VStack gap="8px" align="stretch" fontSize="sm">
+              <Flex justify="space-between"><Text color="fg.muted">Slutvärde:</Text><Text color="fg" fontWeight="semibold">${result.final_value.toLocaleString()}</Text></Flex>
+              <Flex justify="space-between"><Text color="fg.muted">Total avkastning:</Text><Text color="fg" fontWeight="semibold">{result.total_return_pct.toFixed(1)}%</Text></Flex>
+              <Flex justify="space-between"><Text color="fg.muted">Vinstfrekvens:</Text><Text color="fg" fontWeight="semibold">{result.win_rate_pct.toFixed(0)}% positiva år</Text></Flex>
+              <Flex justify="space-between"><Text color="fg.muted">Bästa år:</Text><Text color="success.fg" fontWeight="semibold">{result.best_year.year} ({result.best_year.return.toFixed(1)}%)</Text></Flex>
+              <Flex justify="space-between"><Text color="fg.muted">Sämsta år:</Text><Text color="error.fg" fontWeight="semibold">{result.worst_year.year} ({result.worst_year.return.toFixed(1)}%)</Text></Flex>
+              <Flex justify="space-between"><Text color="fg.muted">Ombalanseringar:</Text><Text color="fg" fontWeight="semibold">{result.rebalance_count}</Text></Flex>
+            </VStack>
+          </Box>
         )}
-      </div>
+      </SimpleGrid>
 
+      {/* Equity Curve */}
       {result?.equity_curve && (
-        <div className={styles.card} style={{marginTop: '1.5rem'}}>
-          <h3 className={styles.cardTitle}>Equity Curve</h3>
-          <BacktestChart
-            values={result.equity_curve.map(e => e.value)}
-            labels={[result.start_date, result.end_date]}
-          />
-        </div>
+        <Box bg="bg.subtle" borderRadius="8px" p="24px" borderColor="border" borderWidth="1px">
+          <Text fontSize="lg" fontWeight="semibold" color="fg" mb="16px">Värdeutveckling</Text>
+          <BacktestChart values={result.equity_curve.map(e => e.value)} labels={[result.start_date, result.end_date]} />
+        </Box>
       )}
 
+      {/* Yearly Returns */}
       {result?.yearly_returns && (
-        <div className={styles.card} style={{marginTop: '1.5rem'}}>
-          <h3 className={styles.cardTitle}>Yearly Returns</h3>
-          <div style={{display: 'flex', flexWrap: 'wrap', gap: '0.5rem'}}>
+        <Box bg="bg.subtle" borderRadius="8px" p="24px" borderColor="border" borderWidth="1px">
+          <Text fontSize="lg" fontWeight="semibold" color="fg" mb="16px">Årsavkastning</Text>
+          <Flex gap="8px" flexWrap="wrap">
             {result.yearly_returns.map(yr => (
-              <div
-                key={yr.year}
-                style={{
-                  padding: '0.5rem',
-                  borderRadius: '4px',
-                  background: yr.return >= 0 ? '#d1fae5' : '#fee2e2',
-                  color: yr.return >= 0 ? '#065f46' : '#991b1b',
-                  fontSize: '0.75rem',
-                  textAlign: 'center',
-                  minWidth: '60px'
-                }}
-              >
-                <div style={{fontWeight: 600}}>{yr.year}</div>
-                <div>{yr.return.toFixed(1)}%</div>
-              </div>
+              <Box key={yr.year} p="8px" borderRadius="4px" bg={yr.return >= 0 ? 'success.subtle' : 'error.subtle'} textAlign="center" minW="60px">
+                <Text fontSize="xs" fontWeight="semibold" color={yr.return >= 0 ? 'success.fg' : 'error.fg'}>{yr.year}</Text>
+                <Text fontSize="xs" color={yr.return >= 0 ? 'success.fg' : 'error.fg'}>{yr.return.toFixed(1)}%</Text>
+              </Box>
             ))}
-          </div>
-        </div>
+          </Flex>
+        </Box>
       )}
 
+      {/* Strategy Comparison */}
       {compareResult && (
-        <div className={styles.card} style={{marginTop: '1.5rem'}}>
-          <h3 className={styles.cardTitle}>Strategy Comparison</h3>
-          <p className={styles.cardMeta}>{compareResult.period}</p>
+        <Box bg="bg.subtle" borderRadius="8px" p="24px" borderColor="border" borderWidth="1px">
+          <Text fontSize="lg" fontWeight="semibold" color="fg" mb="4px">Strategijämförelse</Text>
+          <Text fontSize="sm" color="fg.muted" mb="16px">{compareResult.period}</Text>
           
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Rank</th>
-                <th>Strategy</th>
-                <th>CAGR</th>
-                <th>Sharpe</th>
-                <th>Max DD</th>
-                <th>Win Rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              {compareResult.summary.map((s, i) => (
-                <tr key={s.strategy}>
-                  <td>{i + 1}</td>
-                  <td>{s.strategy}</td>
-                  <td style={{color: s.cagr >= 0 ? '#0d9488' : '#dc3545'}}>{s.cagr.toFixed(1)}%</td>
-                  <td>{s.sharpe.toFixed(2)}</td>
-                  <td style={{color: '#dc3545'}}>{s.max_dd.toFixed(1)}%</td>
-                  <td>{s.win_rate.toFixed(0)}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+          <Box overflowX="auto">
+            <Box as="table" width="100%" fontSize="sm">
+              <Box as="thead">
+                <Box as="tr" borderBottom="1px solid" borderColor="border">
+                  <Box as="th" p="12px" textAlign="left" color="fg.muted" fontWeight="medium">Rank</Box>
+                  <Box as="th" p="12px" textAlign="left" color="fg.muted" fontWeight="medium">Strategi</Box>
+                  <Box as="th" p="12px" textAlign="right" color="fg.muted" fontWeight="medium">CAGR</Box>
+                  <Box as="th" p="12px" textAlign="right" color="fg.muted" fontWeight="medium">Sharpe</Box>
+                  <Box as="th" p="12px" textAlign="right" color="fg.muted" fontWeight="medium">Max DD</Box>
+                  <Box as="th" p="12px" textAlign="right" color="fg.muted" fontWeight="medium">Vinstfrekvens</Box>
+                </Box>
+              </Box>
+              <Box as="tbody">
+                {compareResult.summary.map((s, i) => (
+                  <Box as="tr" key={s.strategy} borderBottom="1px solid" borderColor="border" _hover={{ bg: 'bg.muted' }}>
+                    <Box as="td" p="12px"><Text color="fg.muted">{i + 1}</Text></Box>
+                    <Box as="td" p="12px"><Text color="fg" fontWeight="medium">{s.strategy}</Text></Box>
+                    <Box as="td" p="12px" textAlign="right"><Text color={s.cagr >= 0 ? 'success.fg' : 'error.fg'} fontFamily="mono">{s.cagr.toFixed(1)}%</Text></Box>
+                    <Box as="td" p="12px" textAlign="right"><Text color="fg" fontFamily="mono">{s.sharpe.toFixed(2)}</Text></Box>
+                    <Box as="td" p="12px" textAlign="right"><Text color="error.fg" fontFamily="mono">{s.max_dd.toFixed(1)}%</Text></Box>
+                    <Box as="td" p="12px" textAlign="right"><Text color="fg" fontFamily="mono">{s.win_rate.toFixed(0)}%</Text></Box>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          </Box>
+        </Box>
       )}
-    </div>
+    </VStack>
   );
 }

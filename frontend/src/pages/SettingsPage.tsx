@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Box, Flex, Text, VStack, HStack, Button, Grid } from '@chakra-ui/react';
+import { Link } from 'react-router-dom';
+import { Box, Flex, Text, VStack, HStack, Button, Grid, NativeSelect } from '@chakra-ui/react';
 import { api } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -69,9 +70,12 @@ export default function SettingsPage() {
   };
 
   const SelectBox = ({ value, options, onChange }: { value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) => (
-    <select value={value} onChange={(e) => onChange(e.target.value)} style={{ background: '#374151', color: '#f3f4f6', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '14px' }}>
-      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
+    <NativeSelect.Root size="sm" w="auto">
+      <NativeSelect.Field value={value} onChange={(e) => onChange(e.target.value)} bg="bg.muted" borderColor="border" color="fg">
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </NativeSelect.Field>
+      <NativeSelect.Indicator />
+    </NativeSelect.Root>
   );
 
   return (
@@ -105,7 +109,7 @@ export default function SettingsPage() {
       {user?.is_admin && (
         <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="24px">
           <Flex justify="space-between" align="center" mb="16px">
-            <Text fontSize="lg" fontWeight="semibold" color="fg">👑 Admin Panel</Text>
+            <Text fontSize="lg" fontWeight="semibold" color="fg">Admin Panel</Text>
             <Text fontSize="sm" color="fg.muted">{users.length} registered users</Text>
           </Flex>
           {usersLoading ? (
@@ -187,6 +191,13 @@ export default function SettingsPage() {
             <Button size="sm" variant="outline" borderColor="border" color="fg" onClick={exportPortfolio}>Export</Button>
           </Flex>
           {exportStatus && <Text fontSize="sm" color="success.fg">{exportStatus}</Text>}
+          <Flex justify="space-between" align="center" pt="8px" borderTop="1px solid" borderColor="border">
+            <VStack align="start" gap="0">
+              <Text fontSize="sm" color="fg">Data Management</Text>
+              <Text fontSize="xs" color="fg.muted">Sync stocks, prices, and scan for new data</Text>
+            </VStack>
+            <Link to="/data"><Button size="sm" variant="outline" borderColor="brand.fg" color="brand.fg">Manage Data</Button></Link>
+          </Flex>
         </VStack>
       </Box>
     </VStack>

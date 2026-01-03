@@ -45,7 +45,7 @@ export function LoginPage() {
         <VStack gap="24px" align="stretch">
           <VStack gap="8px">
             <Text fontSize="2xl" fontWeight="bold" color="fg">
-              📈 Börslabbet
+              Börslabbet
             </Text>
             <Text fontSize="sm" color="fg.muted">
               {mode === 'login' ? 'Sign in to your account' : 'Create a new account'}

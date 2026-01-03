@@ -187,7 +187,7 @@ export function StrategyQuiz() {
 
         {result.warnings.length > 0 && (
           <div style={{ background: '#78350f', padding: '12px', borderRadius: '6px', marginBottom: '16px' }}>
-            <div style={{ fontWeight: 'bold', color: '#fcd34d', marginBottom: '4px' }}>⚠️ Tänk på</div>
+            <div style={{ fontWeight: 'bold', color: '#fcd34d', marginBottom: '4px' }}>Tänk på</div>
             {result.warnings.map((w, i) => (
               <p key={i} style={{ color: '#fef3c7', fontSize: '0.875rem', marginTop: '4px' }}>{w}</p>
             ))}

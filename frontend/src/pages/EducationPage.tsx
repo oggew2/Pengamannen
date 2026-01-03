@@ -133,7 +133,7 @@ export default function EducationPage() {
 
   return (
     <VStack gap="24px" align="stretch">
-      <Text fontSize="2xl" fontWeight="bold" color="gray.50">Learn</Text>
+      <Text fontSize="2xl" fontWeight="bold" color="fg">Learn</Text>
 
       {/* Tabs */}
       <HStack gap="8px" flexWrap="wrap">
@@ -148,12 +148,12 @@ export default function EducationPage() {
             px="16px"
             py="8px"
             borderRadius="6px"
-            bg={activeTab === tab.key ? 'brand.500' : 'gray.700'}
-            color={activeTab === tab.key ? 'white' : 'gray.200'}
+            bg={activeTab === tab.key ? 'brand.500' : 'bg.subtle'}
+            color={activeTab === tab.key ? 'white' : 'fg.muted'}
             fontWeight="medium"
             fontSize="sm"
             onClick={() => { setActiveTab(tab.key as typeof activeTab); setExpandedSection(0); }}
-            _hover={{ bg: activeTab === tab.key ? 'brand.600' : 'gray.600' }}
+            _hover={{ bg: activeTab === tab.key ? 'brand.600' : 'border' }}
             transition="all 150ms"
           >
             {tab.label}
@@ -162,29 +162,29 @@ export default function EducationPage() {
       </HStack>
 
       {/* Content */}
-      <Box bg="gray.700" borderRadius="8px" p="24px">
-        <Text fontSize="xl" fontWeight="semibold" color="gray.50" mb="16px">{content.title}</Text>
+      <Box bg="bg.subtle" borderRadius="8px" p="24px">
+        <Text fontSize="xl" fontWeight="semibold" color="fg" mb="16px">{content.title}</Text>
         
         <VStack align="stretch" gap="12px">
           {content.sections.map((section, i) => (
-            <Box key={i} borderRadius="6px" overflow="hidden" border="1px solid" borderColor="gray.600">
+            <Box key={i} borderRadius="6px" overflow="hidden" border="1px solid" borderColor="border">
               <Flex
                 as="button"
                 w="100%"
                 p="12px 16px"
                 justify="space-between"
                 align="center"
-                bg={expandedSection === i ? 'gray.600' : 'transparent'}
+                bg={expandedSection === i ? 'border' : 'transparent'}
                 onClick={() => setExpandedSection(expandedSection === i ? null : i)}
-                _hover={{ bg: 'gray.600' }}
+                _hover={{ bg: 'border' }}
                 transition="background 150ms"
               >
-                <Text fontSize="sm" fontWeight="medium" color="gray.100">{section.title}</Text>
-                <Text color="gray.400">{expandedSection === i ? '−' : '+'}</Text>
+                <Text fontSize="sm" fontWeight="medium" color="fg">{section.title}</Text>
+                <Text color="fg.subtle">{expandedSection === i ? '−' : '+'}</Text>
               </Flex>
               {expandedSection === i && (
-                <Box p="16px" bg="gray.650" borderTop="1px solid" borderColor="gray.600">
-                  <Text fontSize="sm" color="gray.200" whiteSpace="pre-wrap" lineHeight="1.7">
+                <Box p="16px" bg="bg.hover" borderTop="1px solid" borderColor="border">
+                  <Text fontSize="sm" color="fg.muted" whiteSpace="pre-wrap" lineHeight="1.7">
                     {section.content}
                   </Text>
                 </Box>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Box, Flex, Text, VStack, HStack, Button } from '@chakra-ui/react';
+import { Box, Flex, Text, VStack, HStack, Button, NativeSelect } from '@chakra-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { queryKeys, useSyncData, useScanStocks, useSyncPrices, type ScanResult } from '../api/hooks';
@@ -62,7 +62,7 @@ function SyncStatusPanel() {
   };
 
   return (
-    <Box bg="gray.800" borderRadius="lg" p="6">
+    <Box bg="bg.muted" borderRadius="lg" p="6">
       <Flex justify="space-between" align="center" mb="4">
         <Text fontSize="lg" fontWeight="semibold" color="white">Sync History (7 days)</Text>
         <HStack gap="4">
@@ -72,27 +72,27 @@ function SyncStatusPanel() {
       </Flex>
 
       <VStack align="stretch" gap="2" mb="4">
-        <Flex justify="space-between" p="2" bg="gray.700" borderRadius="md">
-          <Text color="gray.400" fontSize="sm">Last successful sync</Text>
+        <Flex justify="space-between" p="2" bg="bg.subtle" borderRadius="md">
+          <Text color="fg.subtle" fontSize="sm">Last successful sync</Text>
           <Text color="green.400" fontSize="sm">
             {history.last_successful_sync ? formatDate(history.last_successful_sync) : 'Never'}
           </Text>
         </Flex>
-        <Flex justify="space-between" p="2" bg="gray.700" borderRadius="md">
-          <Text color="gray.400" fontSize="sm">Next scheduled sync</Text>
+        <Flex justify="space-between" p="2" bg="bg.subtle" borderRadius="md">
+          <Text color="fg.subtle" fontSize="sm">Next scheduled sync</Text>
           <Text color="blue.400" fontSize="sm">{formatDate(history.next_scheduled_sync)}</Text>
         </Flex>
       </VStack>
 
       {history.history.length > 0 && (
         <VStack align="stretch" gap="1">
-          <Text fontSize="sm" color="gray.400" mb="1">Recent syncs</Text>
+          <Text fontSize="sm" color="fg.subtle" mb="1">Recent syncs</Text>
           {history.history.slice(0, 5).map((entry) => (
             <Flex 
               key={entry.id} 
               justify="space-between" 
               p="2" 
-              bg={entry.success ? 'gray.750' : 'red.900'} 
+              bg={entry.success ? 'bg.subtle' : 'red.900'} 
               borderRadius="md"
               borderLeftWidth="3px"
               borderColor={entry.success ? 'green.500' : 'red.500'}
@@ -101,13 +101,13 @@ function SyncStatusPanel() {
                 <Text color={entry.success ? 'green.400' : 'red.400'} fontSize="sm">
                   {entry.success ? '✓' : '✗'}
                 </Text>
-                <Text color="gray.300" fontSize="sm">{formatDate(entry.timestamp)}</Text>
+                <Text color="fg.muted" fontSize="sm">{formatDate(entry.timestamp)}</Text>
               </HStack>
               <HStack gap="4">
                 {entry.duration_seconds && (
-                  <Text color="gray.500" fontSize="xs">{entry.duration_seconds.toFixed(0)}s</Text>
+                  <Text color="fg0" fontSize="xs">{entry.duration_seconds.toFixed(0)}s</Text>
                 )}
-                <Text color="gray.400" fontSize="xs">{entry.stocks_updated} stocks</Text>
+                <Text color="fg.subtle" fontSize="xs">{entry.stocks_updated} stocks</Text>
               </HStack>
             </Flex>
           ))}
@@ -115,7 +115,7 @@ function SyncStatusPanel() {
       )}
 
       {history.history.length === 0 && (
-        <Text color="gray.500" fontSize="sm" textAlign="center" py="4">
+        <Text color="fg0" fontSize="sm" textAlign="center" py="4">
           No sync history available
         </Text>
       )}
@@ -223,40 +223,39 @@ export default function DataManagementPage() {
       <SyncStatusPanel />
 
       {/* Data Status */}
-      <Box bg="gray.800" borderRadius="lg" p="6">
+      <Box bg="bg.muted" borderRadius="lg" p="6">
         <Text fontSize="lg" fontWeight="semibold" color="white" mb="4">Data Status</Text>
         <VStack align="stretch" gap="3">
           <Flex justify="space-between">
-            <Text color="gray.400">Stocks</Text>
+            <Text color="fg.subtle">Stocks</Text>
             <Text color="white">{syncStatus?.stocks ?? 0}</Text>
           </Flex>
           <Flex justify="space-between">
-            <Text color="gray.400">Prices</Text>
+            <Text color="fg.subtle">Prices</Text>
             <Text color="white">{syncStatus?.prices?.toLocaleString() ?? 0}</Text>
           </Flex>
           <Flex justify="space-between">
-            <Text color="gray.400">Fundamentals</Text>
+            <Text color="fg.subtle">Fundamentals</Text>
             <Text color="white">{syncStatus?.fundamentals ?? 0}</Text>
           </Flex>
           <Flex justify="space-between">
-            <Text color="gray.400">Latest Price</Text>
+            <Text color="fg.subtle">Latest Price</Text>
             <Text color="white">{syncStatus?.latest_price_date ?? 'N/A'}</Text>
           </Flex>
         </VStack>
       </Box>
 
       {/* Stock Universe */}
-      <Box bg="gray.800" borderRadius="lg" p="6">
+      <Box bg="bg.muted" borderRadius="lg" p="6">
         <Flex justify="space-between" align="center" mb="4">
           <Text fontSize="lg" fontWeight="semibold" color="white">Stock Universe</Text>
           <HStack>
-            <select 
-              value={threads} 
-              onChange={(e) => setThreads(Number(e.target.value))}
-              style={{ background: '#2D3748', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 12px' }}
-            >
-              {[5, 10, 15, 20].map(n => <option key={n} value={n}>{n} threads</option>)}
-            </select>
+            <NativeSelect.Root size="sm">
+              <NativeSelect.Field value={threads} onChange={(e) => setThreads(Number(e.target.value))} bg="bg.subtle" borderColor="border" color="fg">
+                {[5, 10, 15, 20].map(n => <option key={n} value={n}>{n} threads</option>)}
+              </NativeSelect.Field>
+              <NativeSelect.Indicator />
+            </NativeSelect.Root>
             <Button size="sm" colorPalette="blue" onClick={scanForStocks} loading={scanMutation.isPending}>
               Scan All
             </Button>
@@ -266,21 +265,21 @@ export default function DataManagementPage() {
         {stockUniverse && (
           <VStack align="stretch" gap="2" mb="4">
             <Flex justify="space-between">
-              <Text color="gray.400">Total</Text>
+              <Text color="fg.subtle">Total</Text>
               <Text color="white">{stockUniverse.total}</Text>
             </Flex>
             <Flex justify="space-between">
-              <Text color="gray.400">Real Stocks</Text>
+              <Text color="fg.subtle">Real Stocks</Text>
               <Text color="green.400">{stockUniverse.real_stocks}</Text>
             </Flex>
             <Flex justify="space-between">
-              <Text color="gray.400">ETFs (excluded)</Text>
-              <Text color="gray.500">{stockUniverse.by_type?.etf_certificate ?? 0}</Text>
+              <Text color="fg.subtle">ETFs (excluded)</Text>
+              <Text color="fg0">{stockUniverse.by_type?.etf_certificate ?? 0}</Text>
             </Flex>
           </VStack>
         )}
 
-        <Text fontSize="sm" color="gray.400" mb="2">Scan Ranges (click to select)</Text>
+        <Text fontSize="sm" color="fg.subtle" mb="2">Scan Ranges (click to select)</Text>
         <VStack align="stretch" gap="2">
           {scanRanges.map(r => {
             const key = `${r.start}-${r.end}`;
@@ -290,7 +289,7 @@ export default function DataManagementPage() {
                 key={key}
                 justify="space-between"
                 p="3"
-                bg={selected ? 'blue.900' : 'gray.700'}
+                bg={selected ? 'blue.900' : 'bg.subtle'}
                 borderRadius="md"
                 cursor="pointer"
                 onClick={() => toggleRange(key)}
@@ -299,13 +298,13 @@ export default function DataManagementPage() {
               >
                 <Box>
                   <Text color="white" fontSize="sm">{r.name}</Text>
-                  <Text color="gray.500" fontSize="xs">{r.start.toLocaleString()} - {r.end.toLocaleString()}</Text>
+                  <Text color="fg0" fontSize="xs">{r.start.toLocaleString()} - {r.end.toLocaleString()}</Text>
                 </Box>
                 <Box textAlign="right">
-                  <Text color={r.last_scanned ? 'green.400' : 'gray.500'} fontSize="xs">
+                  <Text color={r.last_scanned ? 'green.400' : 'fg0'} fontSize="xs">
                     {r.last_scanned ? new Date(r.last_scanned).toLocaleDateString() : 'Never'}
                   </Text>
-                  {r.stocks_found ? <Text color="gray.400" fontSize="xs">{r.stocks_found} found</Text> : null}
+                  {r.stocks_found ? <Text color="fg.subtle" fontSize="xs">{r.stocks_found} found</Text> : null}
                 </Box>
               </Flex>
             );
@@ -323,33 +322,32 @@ export default function DataManagementPage() {
       </Box>
 
       {/* Extended Price Sync */}
-      <Box bg="gray.800" borderRadius="lg" p="6">
+      <Box bg="bg.muted" borderRadius="lg" p="6">
         <Flex justify="space-between" align="center" mb="4">
           <Box>
             <Text fontSize="lg" fontWeight="semibold" color="white">Extended Historical Prices</Text>
-            <Text fontSize="sm" color="gray.400">Fetch 10+ years by stitching multiple API requests</Text>
+            <Text fontSize="sm" color="fg.subtle">Fetch 10+ years by stitching multiple API requests</Text>
           </Box>
           <HStack>
-            <select 
-              value={priceYears} 
-              onChange={(e) => setPriceYears(Number(e.target.value))}
-              style={{ background: '#2D3748', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 12px' }}
-            >
-              {[5, 10, 15, 20].map(n => <option key={n} value={n}>{n} years</option>)}
-            </select>
+            <NativeSelect.Root size="sm">
+              <NativeSelect.Field value={priceYears} onChange={(e) => setPriceYears(Number(e.target.value))} bg="bg.subtle" borderColor="border" color="fg">
+                {[5, 10, 15, 20].map(n => <option key={n} value={n}>{n} years</option>)}
+              </NativeSelect.Field>
+              <NativeSelect.Indicator />
+            </NativeSelect.Root>
             <Button size="sm" colorPalette="orange" onClick={syncExtendedPrices} loading={priceSyncMutation.isPending}>
               Sync Extended
             </Button>
           </HStack>
         </Flex>
-        <Text fontSize="xs" color="gray.500">
+        <Text fontSize="xs" color="fg0">
           Note: This makes multiple API calls per stock (~{Math.ceil(priceYears * 365 / 1800)} requests each). 
           Uses 3 threads to avoid rate limiting. May take 30+ minutes for all stocks.
         </Text>
       </Box>
 
-      <Box bg="gray.900" p="4" borderRadius="md" borderLeftWidth="4px" borderColor="blue.400">
-        <Text color="gray.400" fontSize="sm">
+      <Box bg="bg" p="4" borderRadius="md" borderLeftWidth="4px" borderColor="blue.400">
+        <Text color="fg.subtle" fontSize="sm">
           <Text as="span" color="blue.400" fontWeight="medium">Data Source: </Text>
           Avanza API - Swedish stocks from Stockholmsbörsen and First North Stockholm.
         </Text>

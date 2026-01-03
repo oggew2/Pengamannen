@@ -95,7 +95,7 @@ export function StrategyPage() {
       <VStack gap="24px" align="stretch">
         <Box bg="red.900/20" borderColor="red.500" borderWidth="1px" borderRadius="8px" p="16px">
           <Text color="red.400" fontWeight="semibold">Failed to load strategy rankings</Text>
-          <Text color="gray.300" fontSize="sm">Please check your connection and try again.</Text>
+          <Text color="fg.muted" fontSize="sm">Please check your connection and try again.</Text>
         </Box>
       </VStack>
     );
@@ -124,55 +124,55 @@ export function StrategyPage() {
         <Link to="/">
           <Text fontSize="sm" color="brand.500" mb="8px">← Back to Dashboard</Text>
         </Link>
-        <Text fontSize="2xl" fontWeight="bold" color="gray.50">{strategy.display_name}</Text>
+        <Text fontSize="2xl" fontWeight="bold" color="fg">{strategy.display_name}</Text>
       </Box>
 
       {/* Strategy Overview */}
-      <Box bg="gray.700" borderColor="gray.600" borderWidth="1px" borderRadius="8px" p="24px">
-        <Text fontSize="lg" fontWeight="semibold" color="gray.50" mb="12px">How It Works</Text>
-        <Text fontSize="sm" color="gray.200" mb="16px">{info.description}</Text>
+      <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="8px" p="24px">
+        <Text fontSize="lg" fontWeight="semibold" color="fg" mb="12px">How It Works</Text>
+        <Text fontSize="sm" color="fg.muted" mb="16px">{info.description}</Text>
         
         <HStack gap="24px" flexWrap="wrap" mb="16px">
           <VStack align="start" gap="2px">
-            <Text fontSize="xs" color="gray.300">Rebalancing</Text>
-            <Text fontSize="sm" color="gray.100" fontWeight="medium">{strategy.rebalance_frequency}</Text>
+            <Text fontSize="xs" color="fg.muted">Rebalancing</Text>
+            <Text fontSize="sm" color="fg" fontWeight="medium">{strategy.rebalance_frequency}</Text>
           </VStack>
           <VStack align="start" gap="2px">
-            <Text fontSize="xs" color="gray.300">Holdings</Text>
-            <Text fontSize="sm" color="gray.100" fontWeight="medium">{strategy.portfolio_size} stocks</Text>
+            <Text fontSize="xs" color="fg.muted">Holdings</Text>
+            <Text fontSize="sm" color="fg" fontWeight="medium">{strategy.portfolio_size} stocks</Text>
           </VStack>
           <VStack align="start" gap="2px">
-            <Text fontSize="xs" color="gray.300">1Y Return</Text>
+            <Text fontSize="xs" color="fg.muted">1Y Return</Text>
             <Text fontSize="sm" color={backtestResult && backtestResult.total_return_pct >= 0 ? 'success.500' : 'error.500'} fontWeight="medium">
               {backtestResult ? `${backtestResult.total_return_pct >= 0 ? '+' : ''}${backtestResult.total_return_pct.toFixed(1)}%` : '—'}
             </Text>
           </VStack>
           <VStack align="start" gap="2px">
-            <Text fontSize="xs" color="gray.300">Sharpe</Text>
-            <Text fontSize="sm" color="gray.100" fontWeight="medium">
+            <Text fontSize="xs" color="fg.muted">Sharpe</Text>
+            <Text fontSize="sm" color="fg" fontWeight="medium">
               {backtestResult ? backtestResult.sharpe.toFixed(2) : '—'}
             </Text>
           </VStack>
           <VStack align="start" gap="2px">
-            <Text fontSize="xs" color="gray.300">Max DD</Text>
+            <Text fontSize="xs" color="fg.muted">Max DD</Text>
             <Text fontSize="sm" color="error.500" fontWeight="medium">
               {backtestResult ? `${backtestResult.max_drawdown_pct.toFixed(1)}%` : '—'}
             </Text>
           </VStack>
         </HStack>
 
-        <Text fontSize="sm" fontWeight="semibold" color="gray.50" mb="8px">Rules</Text>
+        <Text fontSize="sm" fontWeight="semibold" color="fg" mb="8px">Rules</Text>
         <VStack align="start" gap="4px">
           {info.rules.map((rule, i) => (
-            <Text key={i} fontSize="xs" color="gray.300">• {rule}</Text>
+            <Text key={i} fontSize="xs" color="fg.muted">• {rule}</Text>
           ))}
         </VStack>
       </Box>
 
       {/* Performance Chart */}
       {chartData.length > 0 && (
-        <Box bg="gray.700" borderColor="gray.600" borderWidth="1px" borderRadius="8px" p="24px">
-          <Text fontSize="lg" fontWeight="semibold" color="gray.50" mb="16px">Historical Performance</Text>
+        <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="8px" p="24px">
+          <Text fontSize="lg" fontWeight="semibold" color="fg" mb="16px">Historical Performance</Text>
           <Box height="250px">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
@@ -187,9 +187,9 @@ export function StrategyPage() {
       )}
 
       {/* Current Holdings */}
-      <Box bg="gray.700" borderColor="gray.600" borderWidth="1px" borderRadius="8px" p="24px">
+      <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="8px" p="24px">
         <Flex justify="space-between" align="center" mb="16px">
-          <Text fontSize="lg" fontWeight="semibold" color="gray.50">Current Top 10</Text>
+          <Text fontSize="lg" fontWeight="semibold" color="fg">Current Top 10</Text>
           <Button size="sm" variant="outline" borderColor="brand.500" color="brand.500" onClick={() => {
             const csv = ['Rank,Ticker,Name,1M,3M,6M', ...stocks.slice(0, 10).map((s, i) => {
               const d = stockDetails[s.ticker];
@@ -205,28 +205,28 @@ export function StrategyPage() {
         
         <Box overflowX="auto">
           <Box as="table" width="100%" fontSize="sm">
-            <Box as="thead" bg="gray.600">
+            <Box as="thead" bg="border">
               <Box as="tr">
-                <Box as="th" p="12px" textAlign="left" color="gray.200" fontWeight="medium">#</Box>
-                <Box as="th" p="12px" textAlign="left" color="gray.200" fontWeight="medium">Ticker</Box>
-                <Box as="th" p="12px" textAlign="left" color="gray.200" fontWeight="medium">Name</Box>
-                <Box as="th" p="12px" textAlign="right" color="gray.200" fontWeight="medium">1M</Box>
-                <Box as="th" p="12px" textAlign="right" color="gray.200" fontWeight="medium">3M</Box>
-                <Box as="th" p="12px" textAlign="right" color="gray.200" fontWeight="medium">6M</Box>
+                <Box as="th" p="12px" textAlign="left" color="fg.muted" fontWeight="medium">#</Box>
+                <Box as="th" p="12px" textAlign="left" color="fg.muted" fontWeight="medium">Ticker</Box>
+                <Box as="th" p="12px" textAlign="left" color="fg.muted" fontWeight="medium">Name</Box>
+                <Box as="th" p="12px" textAlign="right" color="fg.muted" fontWeight="medium">1M</Box>
+                <Box as="th" p="12px" textAlign="right" color="fg.muted" fontWeight="medium">3M</Box>
+                <Box as="th" p="12px" textAlign="right" color="fg.muted" fontWeight="medium">6M</Box>
               </Box>
             </Box>
             <Box as="tbody">
               {stocks.slice(0, 10).map((stock, i) => {
                 const details = stockDetails[stock.ticker];
                 return (
-                  <Box as="tr" key={stock.ticker} borderTop="1px solid" borderColor="gray.600">
-                    <Box as="td" p="12px" color="gray.300">{i + 1}</Box>
+                  <Box as="tr" key={stock.ticker} borderTop="1px solid" borderColor="border">
+                    <Box as="td" p="12px" color="fg.muted">{i + 1}</Box>
                     <Box as="td" p="12px">
                       <Link to={`/stock/${stock.ticker}`}>
                         <Text color="brand.500" fontWeight="medium" fontFamily="mono">{stock.ticker.replace('.ST', '')}</Text>
                       </Link>
                     </Box>
-                    <Box as="td" p="12px" color="gray.200">{stock.name || '—'}</Box>
+                    <Box as="td" p="12px" color="fg.muted">{stock.name || '—'}</Box>
                     <Box as="td" p="12px" textAlign="right" color={details?.return_1m && details.return_1m >= 0 ? 'success.500' : 'error.500'} fontFamily="mono">
                       {formatPct(details?.return_1m ?? null)}
                     </Box>
@@ -252,17 +252,17 @@ export function StrategyPage() {
         const pageStocks = remainingStocks.slice((rankingsPage - 1) * PAGE_SIZE, rankingsPage * PAGE_SIZE);
         
         return (
-          <Box bg="gray.700" borderColor="gray.600" borderWidth="1px" borderRadius="8px" p="24px">
-            <Text fontSize="lg" fontWeight="semibold" color="gray.50" mb="16px">Full Rankings ({stocks.length} stocks)</Text>
+          <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="8px" p="24px">
+            <Text fontSize="lg" fontWeight="semibold" color="fg" mb="16px">Full Rankings ({stocks.length} stocks)</Text>
             <Box overflowX="auto">
               <Box as="table" width="100%" fontSize="sm">
-                <Box as="thead" bg="gray.600">
+                <Box as="thead" bg="border">
                   <Box as="tr">
-                    <Box as="th" p="8px" textAlign="left" color="gray.200" fontWeight="medium">#</Box>
-                    <Box as="th" p="8px" textAlign="left" color="gray.200" fontWeight="medium">Ticker</Box>
-                    <Box as="th" p="8px" textAlign="left" color="gray.200" fontWeight="medium">Name</Box>
-                    <Box as="th" p="8px" textAlign="right" color="gray.200" fontWeight="medium">1M</Box>
-                    <Box as="th" p="8px" textAlign="right" color="gray.200" fontWeight="medium">3M</Box>
+                    <Box as="th" p="8px" textAlign="left" color="fg.muted" fontWeight="medium">#</Box>
+                    <Box as="th" p="8px" textAlign="left" color="fg.muted" fontWeight="medium">Ticker</Box>
+                    <Box as="th" p="8px" textAlign="left" color="fg.muted" fontWeight="medium">Name</Box>
+                    <Box as="th" p="8px" textAlign="right" color="fg.muted" fontWeight="medium">1M</Box>
+                    <Box as="th" p="8px" textAlign="right" color="fg.muted" fontWeight="medium">3M</Box>
                   </Box>
                 </Box>
                 <Box as="tbody">
@@ -270,14 +270,14 @@ export function StrategyPage() {
                     const details = stockDetails[stock.ticker];
                     const rank = 10 + (rankingsPage - 1) * PAGE_SIZE + i + 1;
                     return (
-                      <Box as="tr" key={stock.ticker} borderTop="1px solid" borderColor="gray.600">
-                        <Box as="td" p="8px" color="gray.400" fontSize="xs">{rank}</Box>
+                      <Box as="tr" key={stock.ticker} borderTop="1px solid" borderColor="border">
+                        <Box as="td" p="8px" color="fg.subtle" fontSize="xs">{rank}</Box>
                         <Box as="td" p="8px">
                           <Link to={`/stock/${stock.ticker}`}>
-                            <Text color="gray.300" fontSize="xs" fontFamily="mono">{stock.ticker.replace('.ST', '')}</Text>
+                            <Text color="fg.muted" fontSize="xs" fontFamily="mono">{stock.ticker.replace('.ST', '')}</Text>
                           </Link>
                         </Box>
-                        <Box as="td" p="8px" color="gray.400" fontSize="xs">{stock.name || '—'}</Box>
+                        <Box as="td" p="8px" color="fg.subtle" fontSize="xs">{stock.name || '—'}</Box>
                         <Box as="td" p="8px" textAlign="right" fontSize="xs" color={details?.return_1m && details.return_1m >= 0 ? 'success.500' : 'error.500'} fontFamily="mono">
                           {formatPct(details?.return_1m ?? null)}
                         </Box>
@@ -346,8 +346,8 @@ function CustomPortfolioBuilder() {
   };
 
   return (
-    <Box bg="gray.700" borderColor="gray.600" borderWidth="1px" borderRadius="8px" p="24px">
-      <Text fontSize="lg" fontWeight="semibold" color="gray.50" mb="16px">Custom Portfolio Builder</Text>
+    <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="8px" p="24px">
+      <Text fontSize="lg" fontWeight="semibold" color="fg" mb="16px">Custom Portfolio Builder</Text>
       
       <VStack align="stretch" gap="12px" mb="16px">
         {strategies.map(s => (
@@ -358,30 +358,30 @@ function CustomPortfolioBuilder() {
                 w="18px" h="18px"
                 borderRadius="3px"
                 border="2px solid"
-                borderColor={weights[s.name] > 0 ? 'brand.500' : 'gray.500'}
+                borderColor={weights[s.name] > 0 ? 'brand.500' : 'fg0'}
                 bg={weights[s.name] > 0 ? 'brand.500' : 'transparent'}
                 onClick={() => setWeights(prev => ({ ...prev, [s.name]: prev[s.name] > 0 ? 0 : 25 }))}
               >
                 {weights[s.name] > 0 && <Text fontSize="10px" color="white" lineHeight="14px">✓</Text>}
               </Box>
-              <Text fontSize="sm" color="gray.100">{s.display}</Text>
+              <Text fontSize="sm" color="fg">{s.display}</Text>
             </HStack>
             <HStack gap="8px">
-              <Button size="xs" variant="ghost" color="gray.300" onClick={() => adjustWeight(s.name, -5)}>−</Button>
-              <Text fontSize="sm" color="gray.100" fontFamily="mono" minW="40px" textAlign="center">{weights[s.name]}%</Text>
-              <Button size="xs" variant="ghost" color="gray.300" onClick={() => adjustWeight(s.name, 5)}>+</Button>
+              <Button size="xs" variant="ghost" color="fg.muted" onClick={() => adjustWeight(s.name, -5)}>−</Button>
+              <Text fontSize="sm" color="fg" fontFamily="mono" minW="40px" textAlign="center">{weights[s.name]}%</Text>
+              <Button size="xs" variant="ghost" color="fg.muted" onClick={() => adjustWeight(s.name, 5)}>+</Button>
             </HStack>
           </HStack>
         ))}
       </VStack>
 
-      <HStack justify="space-between" mb="16px" pt="12px" borderTop="1px solid" borderColor="gray.600">
-        <Text fontSize="sm" color="gray.200">Total:</Text>
+      <HStack justify="space-between" mb="16px" pt="12px" borderTop="1px solid" borderColor="border">
+        <Text fontSize="sm" color="fg.muted">Total:</Text>
         <Text fontSize="sm" fontWeight="semibold" color={total === 100 ? 'success.500' : 'warning.500'}>{total}%</Text>
       </HStack>
 
       <HStack justify="space-between" mb="16px">
-        <Text fontSize="sm" color="gray.200">Est. Annual Return:</Text>
+        <Text fontSize="sm" color="fg.muted">Est. Annual Return:</Text>
         <Text fontSize="sm" fontWeight="semibold" color="success.500">{(estReturn * 100).toFixed(1)}%</Text>
       </HStack>
 
@@ -469,9 +469,9 @@ function PerformanceComparison() {
   }
 
   return (
-    <Box bg="gray.700" borderColor="gray.600" borderWidth="1px" borderRadius="8px" p="24px">
+    <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="8px" p="24px">
       <Flex justify="space-between" align="center" mb="16px">
-        <Text fontSize="lg" fontWeight="semibold" color="gray.50">Performance Comparison</Text>
+        <Text fontSize="lg" fontWeight="semibold" color="fg">Performance Comparison</Text>
         <Button size="sm" variant="outline" borderColor="brand.500" color="brand.500" onClick={exportCSV}>
           Download CSV
         </Button>
@@ -479,13 +479,13 @@ function PerformanceComparison() {
       
       <Box overflowX="auto">
         <Box as="table" width="100%" fontSize="sm">
-          <Box as="thead" bg="gray.600">
+          <Box as="thead" bg="border">
             <Box as="tr">
-              <Box as="th" p="12px" textAlign="left" color="gray.200" fontWeight="medium"></Box>
-              <Box as="th" p="12px" textAlign="right" color="gray.200" fontWeight="medium">Momentum</Box>
-              <Box as="th" p="12px" textAlign="right" color="gray.200" fontWeight="medium">Värde</Box>
-              <Box as="th" p="12px" textAlign="right" color="gray.200" fontWeight="medium">Utdelning</Box>
-              <Box as="th" p="12px" textAlign="right" color="gray.200" fontWeight="medium">Kvalitet</Box>
+              <Box as="th" p="12px" textAlign="left" color="fg.muted" fontWeight="medium"></Box>
+              <Box as="th" p="12px" textAlign="right" color="fg.muted" fontWeight="medium">Momentum</Box>
+              <Box as="th" p="12px" textAlign="right" color="fg.muted" fontWeight="medium">Värde</Box>
+              <Box as="th" p="12px" textAlign="right" color="fg.muted" fontWeight="medium">Utdelning</Box>
+              <Box as="th" p="12px" textAlign="right" color="fg.muted" fontWeight="medium">Kvalitet</Box>
             </Box>
           </Box>
           <Box as="tbody">
@@ -497,8 +497,8 @@ function PerformanceComparison() {
               { label: 'Sharpe', key: 'sharpe', format: (v: number) => v.toFixed(2) },
               { label: 'Max DD', key: 'maxDD', format: (v: number) => `${v.toFixed(1)}%` },
             ].map(row => (
-              <Box as="tr" key={row.label} borderTop="1px solid" borderColor="gray.600">
-                <Box as="td" p="12px" color="gray.300">{row.label}</Box>
+              <Box as="tr" key={row.label} borderTop="1px solid" borderColor="border">
+                <Box as="td" p="12px" color="fg.muted">{row.label}</Box>
                 <Box as="td" p="12px" textAlign="right" color={row.key === 'maxDD' ? 'error.500' : 'success.500'} fontFamily="mono">
                   {row.format(perfData.sammansatt_momentum?.[row.key as keyof typeof perfData.sammansatt_momentum] || 0)}
                 </Box>
@@ -516,7 +516,7 @@ function PerformanceComparison() {
           </Box>
         </Box>
       </Box>
-      <Text fontSize="xs" color="gray.400" mt="8px">* Data from backtest API. Fallback estimates used if backtest unavailable.</Text>
+      <Text fontSize="xs" color="fg.subtle" mt="8px">* Data from backtest API. Fallback estimates used if backtest unavailable.</Text>
     </Box>
   );
 }
