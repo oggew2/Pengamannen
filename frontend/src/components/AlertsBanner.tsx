@@ -16,8 +16,8 @@ export function AlertsBanner() {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    api.get<{ alerts: Alert[] }>('/alerts')
-      .then(data => setAlerts(data.alerts || []))
+    api.get<{ alerts: { alerts: Alert[] } }>('/alerts')
+      .then(data => setAlerts(data.alerts?.alerts || []))
       .catch(() => {});
   }, []);
 
