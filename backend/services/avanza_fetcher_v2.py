@@ -638,8 +638,13 @@ def _sync_prices_threaded(db, tickers: list, fetcher, id_map: dict, days: int = 
     return successful
 
 
-async def avanza_sync(db, region: str = 'sweden', market_cap: str = 'large', websocket_manager=None) -> Dict:
-    """Sync fundamentals and prices using Avanza Direct API."""
+async def avanza_sync(db, region: str = 'sweden', market_cap: str = 'large', websocket_manager=None, tier: str = 'active') -> Dict:
+    """Sync fundamentals and prices using Avanza Direct API.
+    
+    Args:
+        tier: 'active' (default) - fast daily sync of ~700 active stocks
+              'discovery' - full sync of ~7,800 stocks to find new ones
+    """
     from services.live_universe import get_live_stock_universe, get_avanza_id_map
     from services.cache import invalidate_cache
     from models import Stock, Fundamentals, FundamentalsSnapshot
@@ -652,9 +657,9 @@ async def avanza_sync(db, region: str = 'sweden', market_cap: str = 'large', web
         invalidate_cache()
         logger.info("Cleared all caches before sync")
         
-        tickers = get_live_stock_universe(region, market_cap)
+        tickers = get_live_stock_universe(region, market_cap, tier=tier)
         id_map = get_avanza_id_map()
-        logger.info(f"Starting Avanza sync: {len(tickers)} stocks")
+        logger.info(f"Starting Avanza sync: {len(tickers)} stocks (tier={tier})")
         
         fetcher = AvanzaDirectFetcher()
         results = fetcher.fetch_multiple_threaded(tickers, max_workers=10, force_refresh=True)

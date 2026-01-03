@@ -10,23 +10,33 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-def get_live_stock_universe(region: str = 'sweden', market_cap: str = 'large', market: str = 'both') -> List[str]:
-    """Get stock universe from database - all stocks with avanza_id for sync.
+def get_live_stock_universe(region: str = 'sweden', market_cap: str = 'large', market: str = 'both', tier: str = 'active') -> List[str]:
+    """Get stock universe from database for sync.
     
-    Note: Removed is_active filter to allow syncing newly discovered stocks.
-    After sync, mark_stocks_with_fundamentals_active() sets is_active correctly.
-    Strategy calculations in ranking.py filter by stock_type and market_cap.
+    Args:
+        tier: 'active' (default) - only stocks with fundamentals (fast, ~700 stocks)
+              'discovery' - all stocks including inactive (slow, ~7,800 stocks)
+              
+    The daily sync uses 'active' tier for speed.
+    Weekly discovery sync uses 'discovery' tier to find new stocks.
     """
     import sqlite3
     
     conn = sqlite3.connect('app.db')
     cur = conn.cursor()
     
-    # Fetch all stocks with avanza_id (removed is_active filter)
-    # This allows newly discovered stocks to be synced
-    query = """SELECT ticker FROM stocks 
-               WHERE stock_type IN ('stock', 'sdb') 
-               AND avanza_id IS NOT NULL AND avanza_id != ''"""
+    if tier == 'active':
+        # Fast daily sync: only stocks that already have fundamentals
+        query = """SELECT ticker FROM stocks 
+                   WHERE stock_type IN ('stock', 'sdb') 
+                   AND is_active = 1
+                   AND avanza_id IS NOT NULL AND avanza_id != ''"""
+    else:
+        # Discovery sync: all stocks to find new ones with fundamentals
+        query = """SELECT ticker FROM stocks 
+                   WHERE stock_type IN ('stock', 'sdb') 
+                   AND avanza_id IS NOT NULL AND avanza_id != ''"""
+    
     if market == 'stockholmsborsen':
         query += " AND market = 'Stockholmsbörsen'"
     elif market == 'first_north':
@@ -36,7 +46,7 @@ def get_live_stock_universe(region: str = 'sweden', market_cap: str = 'large', m
     tickers = [row[0] for row in cur.fetchall()]
     conn.close()
     
-    logger.info(f"Using {len(tickers)} Swedish stocks for sync ({market})")
+    logger.info(f"Using {len(tickers)} Swedish stocks for sync (tier={tier}, market={market})")
     return tickers
 
 

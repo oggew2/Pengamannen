@@ -1914,64 +1914,11 @@ async def trigger_data_sync(
 
 @v1_router.get("/data/status/detailed")
 def get_detailed_data_status(db: Session = Depends(get_db)):
-    """Get detailed data status with cache information."""
-    from services.smart_cache import smart_cache
-    from services.avanza_fetcher_v2 import AvanzaDirectFetcher
-    from services.live_universe import get_live_stock_universe
+    """Get detailed data status with freshness summary."""
+    from services.data_transparency import DataTransparencyService
     
-    # Get stock universe
-    tickers = get_live_stock_universe('sweden', 'large')
-    
-    # Get cache stats
-    cache_stats = smart_cache.get_cache_stats()
-    
-    # Get individual stock status
-    fetcher = AvanzaDirectFetcher()
-    stock_status = []
-    
-    for ticker in tickers[:15]:  # Check first 15 for performance
-        # Get stock ID from known mapping
-        stock_id = fetcher.known_stocks.get(ticker)
-        
-        if stock_id:
-            endpoint = f"stock_overview/{stock_id}"
-            params = {'stock_id': stock_id}
-            cached_data = cache.get(endpoint, params)
-            
-            if cached_data:
-                stock_status.append({
-                    'ticker': ticker,
-                    'stock_id': stock_id,
-                    'last_updated': cached_data.get('last_updated'),
-                    'fetch_success': cached_data.get('fetch_success', True),
-                    'error': cached_data.get('error'),
-                    'has_data': bool(cached_data.get('current_price'))
-                })
-            else:
-                stock_status.append({
-                    'ticker': ticker,
-                    'stock_id': stock_id,
-                    'last_updated': None,
-                    'fetch_success': None,
-                    'error': None,
-                    'has_data': False
-                })
-        else:
-            stock_status.append({
-                'ticker': ticker,
-                'stock_id': None,
-                'last_updated': None,
-                'fetch_success': False,
-                'error': 'No stock ID mapping',
-                'has_data': False
-            })
-    
-    return {
-        'cache_stats': cache_stats,
-        'stock_status': stock_status,
-        'total_stocks': len(tickers),
-        'checked_stocks': len(stock_status)
-    }
+    transparency = DataTransparencyService()
+    return transparency.get_detailed_data_status(db)
 
 @v1_router.post("/data/refresh-stock/{ticker}")
 async def refresh_single_stock(ticker: str, db: Session = Depends(get_db)):

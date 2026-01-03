@@ -140,9 +140,11 @@ def sync_job(is_retry: bool = False):
 def scan_new_stocks_job():
     """Job to scan for new stocks - runs every 2 weeks at night.
     
-    Also reclassifies existing stocks to catch any misclassified warrants/bonds.
+    Also reclassifies existing stocks and runs a discovery sync
+    to find fundamentals for newly discovered stocks.
     """
     logger.info("Starting scheduled stock scan for new listings")
+    db = SessionLocal()
     try:
         from services.stock_scanner import scan_for_new_stocks, classify_stock_type
         import sqlite3
@@ -177,8 +179,26 @@ def scan_new_stocks_job():
             max_workers=10
         )
         logger.info(f"Stock scan complete: {result['new_stocks_found']} new stocks found")
+        
+        # Step 3: Discovery sync - try to get fundamentals for inactive stocks
+        # This runs less frequently than daily sync but covers all stocks
+        logger.info("Running discovery sync for inactive stocks...")
+        from services.avanza_fetcher_v2 import avanza_sync
+        from services.stock_validator import mark_stocks_with_fundamentals_active
+        
+        # Pass tier='discovery' to sync all stocks, not just active ones
+        discovery_result = asyncio.run(avanza_sync(db, region="sweden", market_cap="large", tier='discovery'))
+        logger.info(f"Discovery sync complete: {discovery_result}")
+        
+        # Update is_active based on which stocks now have fundamentals
+        active_result = mark_stocks_with_fundamentals_active(db)
+        if active_result.get('success'):
+            logger.info(f"Updated is_active: {active_result['updated']} stocks now active")
+        
     except Exception as e:
         logger.error(f"Stock scan failed: {e}")
+    finally:
+        db.close()
 
 def send_reports_job():
     """Job to send email reports - runs daily, sends based on schedule."""

@@ -26,24 +26,39 @@ TRACKER_PATTERNS = ['TRACK', 'SKALA ', 'AXESS ', ' NORDNET']
 # ETF ticker prefixes (Xtrackers, iShares, etc.)
 ETF_PREFIXES = ['XDAX', 'XD3E', 'XRS2', 'XNAS', 'XSPX', 'XMWO', 'XMEM', 'XESX']
 # Crypto tracker patterns
-CRYPTO_PATTERNS = ['BITCOIN', 'ETHEREUM', 'XBT', 'CRYPTO']
+CRYPTO_PATTERNS = ['BITCOIN', 'ETHEREUM', 'XBT', 'CRYPTO', '2LBT', '2LET', '2SBT', '2SET']
 # Name patterns indicating ETPs (not stocks)
 ETP_NAME_PATTERNS = ['WisdomTree', 'Physical Solana', 'Physical Bitcoin', 'Physical Ethereum',
-                     'Xtrackers', 'UCITS ETF', 'Tracker', 'CoinShares']
+                     'Xtrackers', 'UCITS ETF', 'Tracker', 'CoinShares', 'HANetf', 'ETP']
 SCAN_STATE_FILE = 'scan_state.json'
 
 # Regex for warrants/options (e.g., ASSAB7R200, HMB6B170, NDASE6C140)
 import re
 WARRANT_PATTERN = re.compile(r'^[A-Z]+\d+[A-Z]\d+$')  # TICKER + digits + letter + digits
 MINI_PATTERN = re.compile(r'^MINI [LS] ')  # Mini futures
+# Teckningsoptioner (TO = subscription warrants)
+TO_WARRANT_PATTERN = re.compile(r'.* TO\d')  # e.g., "NEO TO 1 B", "SES TO 5", "AERO TO7"
 
 # Additional warrant patterns for Swedish bank warrants
 SHB_WARRANT_PATTERN = re.compile(r'.*\d[A-Z]\s*\d+SHB$')  # e.g., ABB6A 700SHB
 NDS_WARRANT_PATTERN = re.compile(r'.*\d[A-Z]\s*\d+NDS[X]?$')  # e.g., VOL6A 277NDSX
 WARRANT_SERIES_PATTERN = re.compile(r'^[A-Z]{2,5}\d[A-Z]')  # e.g., ABB6A, VOL6M (warrant series)
 
-# Bond patterns
+# Bond patterns - various Swedish bond naming conventions
 BOND_UNDERSCORE_PATTERN = re.compile(r'^[A-Z]+_\d+')  # e.g., FABG_125, HEBA_101GB
+BOND_PATTERNS = ['_FRN_', '_G2', 'VINSTANDELS', '144A', 'REG_S', 'KREDITCERTIFIKAT', '_SPLB', 
+                 'FRB', 'RANTEBEVIS', '_SIF_', 'FA_', 'SPLB', '_BOND_', 'BOND_', '_SEK_',
+                 '_HO', 'BARC_', 'OBLIG', 'CARDBO', 'SVEO']
+# Year patterns for bonds (2020-2035)
+BOND_YEAR_PATTERN = re.compile(r'^[A-Z]+20[2-3]\d')  # e.g., MFG2027, NYF2028
+# Green bonds and other bond suffixes
+BOND_SUFFIX_PATTERN = re.compile(r'^[A-Z]+\d+GB$')  # e.g., FPAR105GB, HUF130GB
+# Structured product patterns
+STRUCTURED_PATTERNS = ['_GTM_', '_AIO_', 'CACIBO_', 'SHYB20', 'GTM', '_OC_', 'SE00', 'SEICA', 'ARW0', '_FO_', 'FONDANDEL']
+# Crypto patterns for trackers
+CRYPTO_PATTERNS = ['BITCOIN', 'ETHEREUM', 'XBT', 'CRYPTO', '2LBT', '2LET', '2SBT', '2SET', 'BTC', 'ETH']
+# BTA = Betald Tecknad Aktie (paid subscribed share) - temporary instrument
+BTA_PATTERN = re.compile(r'.* BTA')
 
 # Index product patterns
 INDEX_PATTERNS = ['OMXS30', 'S30MIN', 'OMXSML']
@@ -65,11 +80,23 @@ def classify_stock_type(ticker: str, name: str = '') -> str:
     name_upper = name.upper() if name else ''
     
     # === WARRANTS/OPTIONS ===
-    # SHB bank warrants (ABB6A 700SHB, VOL6M 235SHB)
-    if ticker_upper.endswith('SHB'):
-        return 'warrant'
+    # SHB bank warrants (ABB6A 700SHB, VOL6M 235SHB, SHBA6C84.61X)
+    if ticker_upper.endswith('SHB') or ticker_upper.startswith('SHB'):
+        if re.search(r'\d[A-Z]', ticker_upper):
+            return 'warrant'
     # Nordea warrants (VOL6A 277NDSX, SEB6M 129NDSX)
     if 'NDS' in ticker_upper and re.search(r'\d[A-Z]\s*\d+NDS', ticker_upper):
+        return 'warrant'
+    # BNP warrants and structured products (BNPXO36CAR0728, BNPO_GTM_4423)
+    if ticker_upper.startswith('BNP'):
+        return 'warrant'
+    # AVA tracker warrants (TSL6R290AVA, OMX6F2600AVA, DAX6R19500AVA)
+    if ticker_upper.endswith('AVA') and re.search(r'\d[A-Z]', ticker_upper):
+        return 'warrant'
+    # Warrant with strike price pattern (8TRA6A235, VOLV6A180, HM 6B 150, SBBB6A3.50)
+    # Pattern: TICKER + digit + letter + digits (strike price, may have decimal)
+    clean_ticker = ticker_upper.replace(' ', '').replace('.', '')
+    if re.match(r'^[A-Z0-9]+\d[A-Z]\d{2,}[A-Z]?$', clean_ticker):
         return 'warrant'
     # Warrant series pattern (ABB6A, VOL6M, HM 6A - letter+digit+letter at position 2-5)
     if WARRANT_SERIES_PATTERN.match(ticker_upper) and re.search(r'\d[A-Z]\s', ticker_upper):
@@ -107,6 +134,9 @@ def classify_stock_type(ticker: str, name: str = '') -> str:
     # Tickers ending with ' H' (hedge products)
     if ticker_upper.endswith(' H'):
         return 'etf_certificate'
+    # Structured products (CS_AIO_*, UBSO_GTM_*, CACIBO_*, SHYB20*)
+    if any(p in ticker_upper for p in STRUCTURED_PATTERNS):
+        return 'etf_certificate'
     # Name-based ETP detection
     if any(p.upper() in name_upper for p in ETP_NAME_PATTERNS):
         return 'etf_certificate'
@@ -115,6 +145,23 @@ def classify_stock_type(ticker: str, name: str = '') -> str:
     # Underscore + number pattern (FABG_125, HEBA_101GB, CAST_448)
     if BOND_UNDERSCORE_PATTERN.match(ticker_upper):
         return 'bond'
+    # Bond patterns (FRN, 144A, REG_S, etc.)
+    if any(p in ticker_upper for p in BOND_PATTERNS):
+        return 'bond'
+    # Green bonds (FPAR105GB, HUF130GB)
+    if BOND_SUFFIX_PATTERN.match(ticker_upper):
+        return 'bond'
+    # Year-based bonds (MFG2027, NYF2028)
+    if BOND_YEAR_PATTERN.match(ticker_upper):
+        return 'bond'
+    
+    # === WARRANTS - Teckningsoptioner (TO) ===
+    if TO_WARRANT_PATTERN.match(ticker_upper):
+        return 'warrant'
+    
+    # === BTA - Betald Tecknad Aktie (temporary instrument) ===
+    if BTA_PATTERN.match(ticker_upper):
+        return 'warrant'  # Classify as warrant since it's a temporary instrument
     
     # === PREFERENCE SHARES ===
     if ' PREF' in ticker_upper:
