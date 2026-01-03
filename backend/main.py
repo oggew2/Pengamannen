@@ -1977,9 +1977,14 @@ def _compute_strategy_rankings(name: str, config: dict, db: Session, include_etf
     # Support both old ("type") and new ("category") config keys
     strategy_type = config.get("category", config.get("type", ""))
     
-    prices = db.query(DailyPrice).all()
+    # CRITICAL FIX: Load only recent prices (last 400 days) to prevent memory exhaustion
+    # Full history is 2.3M rows (~690MB) - loading all would exhaust 4GB RAM
+    cutoff_date = date.today() - timedelta(days=400)
+    prices = db.query(DailyPrice).filter(DailyPrice.date >= cutoff_date).all()
     fundamentals = db.query(Fundamentals).all()
     stocks = db.query(Stock).all()
+    
+    logger.info(f"Loaded {len(prices)} price records (last 400 days), {len(fundamentals)} fundamentals")
     
     # Build lookups
     market_caps = {s.ticker: s.market_cap_msek or 0 for s in stocks}
@@ -1992,6 +1997,11 @@ def _compute_strategy_rankings(name: str, config: dict, db: Session, include_etf
         "payout_ratio": f.payout_ratio, "market_cap": market_caps.get(f.ticker, 0),
         "stock_type": stock_types.get(f.ticker, 'stock')
     } for f in fundamentals]) if fundamentals else pd.DataFrame()
+    
+    # Free memory from raw query results
+    del prices, fundamentals, stocks
+    import gc
+    gc.collect()
     
     # Filter out ETFs/certificates by default
     from services.ranking import filter_by_min_market_cap, filter_real_stocks
@@ -2820,8 +2830,9 @@ def run_strategy(strategy_id: int, db: Session = Depends(get_db)):
     if not strategy:
         raise HTTPException(status_code=404, detail="Strategy not found")
     
-    # Get data
-    prices = db.query(DailyPrice).all()
+    # CRITICAL FIX: Load only recent prices to prevent memory exhaustion
+    cutoff_date = date.today() - timedelta(days=400)
+    prices = db.query(DailyPrice).filter(DailyPrice.date >= cutoff_date).all()
     fundamentals = db.query(Fundamentals).all()
     
     prices_df = pd.DataFrame([{"ticker": p.ticker, "date": p.date, "close": p.close} for p in prices]) if prices else pd.DataFrame()
@@ -2831,6 +2842,11 @@ def run_strategy(strategy_id: int, db: Session = Depends(get_db)):
         "dividend_yield": f.dividend_yield, "roe": f.roe, "roa": f.roa, "roic": f.roic, "fcfroe": f.fcfroe,
         "payout_ratio": f.payout_ratio
     } for f in fundamentals]) if fundamentals else pd.DataFrame()
+    
+    # Free memory
+    del prices, fundamentals
+    import gc
+    gc.collect()
     
     result = run_custom_strategy(
         fund_df, prices_df,

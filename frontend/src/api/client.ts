@@ -36,29 +36,29 @@ export const api = {
   get: <T>(url: string) => fetchJson<T>(url),
   post: <T>(url: string, body: unknown) => postJson<T>(url, body),
   
-  getStrategies: () => fetchJson<StrategyMeta[]>('/v1/strategies'),
-  getStrategyRankings: (name: string) => fetchJson<RankedStock[]>(`/v1/strategies/${name}`),
-  getStrategyTop10: (name: string) => fetchJson<RankedStock[]>(`/v1/strategies/${name}/top10`),
-  getPortfolio: () => fetchJson<PortfolioResponse>('/v1/portfolio/sverige'),
-  getRebalanceDates: () => fetchJson<RebalanceDate[]>('/v1/portfolio/rebalance-dates'),
-  getStock: (ticker: string) => fetchJson<StockDetail>(`/v1/stocks/${encodeURIComponent(ticker)}`),
-  getStockPrices: (ticker: string, days?: number) => fetchJson<{prices: Array<{date: string; close: number}>}>(`/v1/stocks/${encodeURIComponent(ticker)}/prices${days ? `?days=${days}` : ''}`),
+  getStrategies: () => fetchJson<StrategyMeta[]>('/strategies'),
+  getStrategyRankings: (name: string) => fetchJson<RankedStock[]>(`/strategies/${name}`),
+  getStrategyTop10: (name: string) => fetchJson<RankedStock[]>(`/strategies/${name}/top10`),
+  getPortfolio: () => fetchJson<PortfolioResponse>('/portfolio/sverige'),
+  getRebalanceDates: () => fetchJson<RebalanceDate[]>('/portfolio/rebalance-dates'),
+  getStock: (ticker: string) => fetchJson<StockDetail>(`/stocks/${encodeURIComponent(ticker)}`),
+  getStockPrices: (ticker: string, days?: number) => fetchJson<{prices: Array<{date: string; close: number}>}>(`/stocks/${encodeURIComponent(ticker)}/prices${days ? `?days=${days}` : ''}`),
   
   // Data integrity - CRITICAL for trading
-  getDataIntegrity: () => fetchJson<DataIntegrityResponse>('/v1/data/integrity/quick'),
-  getDataIntegrityFull: () => fetchJson<DataIntegrityFullResponse>('/v1/data/integrity'),
-  validateStrategy: (name: string) => fetchJson<StrategyValidation>(`/v1/strategies/${name}/validate`),
+  getDataIntegrity: () => fetchJson<DataIntegrityResponse>('/data/integrity/quick'),
+  getDataIntegrityFull: () => fetchJson<DataIntegrityFullResponse>('/data/integrity'),
+  validateStrategy: (name: string) => fetchJson<StrategyValidation>(`/strategies/${name}/validate`),
   
   // Rebalancing endpoints
   getRebalanceTrades: (strategy: string, portfolioValue: number, currentHoldings?: Array<{ticker: string; shares: number; value: number}>) => 
-    postJson<RebalanceTradesResponse>(`/v1/rebalance/trades?strategy=${encodeURIComponent(strategy)}&portfolio_value=${portfolioValue}`, currentHoldings || []),
+    postJson<RebalanceTradesResponse>(`/rebalance/trades?strategy=${encodeURIComponent(strategy)}&portfolio_value=${portfolioValue}`, currentHoldings || []),
   sendRebalanceReminder: (email: string, strategy: string) =>
-    postJson<{message: string}>(`/v1/notifications/rebalance-reminder?email=${encodeURIComponent(email)}&strategy=${encodeURIComponent(strategy)}`, {}),
+    postJson<{message: string}>(`/notifications/rebalance-reminder?email=${encodeURIComponent(email)}&strategy=${encodeURIComponent(strategy)}`, {}),
   
   // Other endpoints
-  combinePortfolio: (req: CombinerRequest) => postJson<PortfolioResponse>('/v1/portfolio/combiner', req),
-  runBacktest: (req: BacktestRequest) => postJson<BacktestResult>('/v1/backtesting/run', req),
-  getBacktestResults: (strategy: string) => fetchJson<BacktestResult[]>(`/v1/backtesting/results/${strategy}`),
+  combinePortfolio: (req: CombinerRequest) => postJson<PortfolioResponse>('/portfolio/combiner', req),
+  runBacktest: (req: BacktestRequest) => postJson<BacktestResult>('/backtesting/run', req),
+  getBacktestResults: (strategy: string) => fetchJson<BacktestResult[]>(`/backtesting/results/${strategy}`),
 };
 
 // Rebalancing types
