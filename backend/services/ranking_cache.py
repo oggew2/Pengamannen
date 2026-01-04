@@ -90,6 +90,8 @@ def compute_all_rankings(db) -> dict:
         "dividend_yield": f.dividend_yield, "roe": f.roe,
         "roa": f.roa, "roic": f.roic, "fcfroe": f.fcfroe,
         "payout_ratio": f.payout_ratio,
+        "operating_cf": f.operating_cf,
+        "net_income": f.net_income,
         "market_cap": market_caps.get(f.ticker, 0),
         "stock_type": stock_types.get(f.ticker, 'stock'),
         "sector": stock_sectors.get(f.ticker)
@@ -129,11 +131,11 @@ def compute_all_rankings(db) -> dict:
                     current_holdings=current_momentum_holdings
                 )
             elif strategy_type == "value":
-                ranked_df = calculate_value_score(prices_df, fund_df)
+                ranked_df = calculate_value_score(fund_df, prices_df)
             elif strategy_type == "dividend":
-                ranked_df = calculate_dividend_score(prices_df, fund_df)
+                ranked_df = calculate_dividend_score(fund_df, prices_df)
             elif strategy_type == "quality":
-                ranked_df = calculate_quality_score(fund_df)
+                ranked_df = calculate_quality_score(fund_df, prices_df)
             else:
                 logger.warning(f"Unknown strategy type: {strategy_type}")
                 continue
@@ -217,3 +219,147 @@ def get_cached_rankings(db, strategy_name: str) -> list:
     ).order_by(StrategySignal.rank).all()
     
     return rankings
+
+
+@monitor_memory_usage
+def compute_all_rankings_tv(db) -> dict:
+    """
+    Compute rankings using TradingView data.
+    Much simpler - no price pivot table needed!
+    """
+    from models import Fundamentals, Stock, StrategySignal
+    from services.ranking import (
+        calculate_momentum_score_from_tv, get_fscore_from_tv,
+        filter_by_min_market_cap, filter_real_stocks, filter_financial_companies,
+        _filter_top_percentile
+    )
+    
+    with open('config/strategies.yaml') as f:
+        strategies = yaml.safe_load(f).get('strategies', {})
+    
+    # Load fundamentals with TradingView data
+    fundamentals = db.query(Fundamentals).filter(
+        Fundamentals.data_source == 'tradingview'
+    ).all()
+    
+    if not fundamentals:
+        logger.warning("No TradingView data found, falling back to Avanza")
+        return compute_all_rankings(db)
+    
+    stocks = db.query(Stock).all()
+    market_caps = {s.ticker: s.market_cap_msek or 0 for s in stocks}
+    stock_types = {s.ticker: getattr(s, 'stock_type', 'stock') for s in stocks}
+    stock_sectors = {s.ticker: getattr(s, 'sector', None) for s in stocks}
+    
+    fund_df = pd.DataFrame([{
+        'ticker': f.ticker,
+        'market_cap': market_caps.get(f.ticker, (f.market_cap or 0) / 1e6),
+        'pe': f.pe, 'pb': f.pb, 'ps': f.ps,
+        'p_fcf': f.p_fcf, 'ev_ebitda': f.ev_ebitda,
+        'roe': f.roe, 'roa': f.roa, 'roic': f.roic, 'fcfroe': f.fcfroe,
+        'dividend_yield': f.dividend_yield,
+        'perf_3m': f.perf_3m, 'perf_6m': f.perf_6m, 'perf_12m': f.perf_12m,
+        'piotroski_f_score': f.piotroski_f_score,
+        'stock_type': stock_types.get(f.ticker, 'stock'),
+        'sector': stock_sectors.get(f.ticker),
+    } for f in fundamentals])
+    
+    fund_df = filter_real_stocks(fund_df)
+    fund_df = filter_by_min_market_cap(fund_df)
+    
+    current_momentum_holdings = get_current_holdings(db, 'sammansatt_momentum')
+    db.query(StrategySignal).delete()
+    
+    results = {}
+    today = date.today()
+    
+    for strategy_name, config in strategies.items():
+        strategy_type = config.get("category", config.get("type", ""))
+        
+        try:
+            if strategy_type == "momentum":
+                filtered = filter_financial_companies(fund_df, for_momentum=True)
+                momentum = calculate_momentum_score_from_tv(filtered)
+                f_scores = get_fscore_from_tv(filtered)
+                if not f_scores.empty:
+                    valid = f_scores[f_scores > 3].index
+                    momentum = momentum[momentum.index.isin(valid)]
+                ranked = momentum.sort_values(ascending=False)
+                ranked_df = pd.DataFrame({
+                    'ticker': ranked.index, 'rank': range(1, len(ranked)+1), 'score': ranked.values
+                })
+            elif strategy_type == "value":
+                filtered = filter_financial_companies(fund_df)
+                df = filtered.set_index('ticker')
+                ranks = pd.DataFrame(index=df.index)
+                for col in ['pe', 'pb', 'ps', 'p_fcf', 'ev_ebitda']:
+                    if col in df.columns:
+                        ranks[col] = df[col].rank(ascending=True)
+                if 'dividend_yield' in df.columns:
+                    ranks['dividend_yield'] = df['dividend_yield'].rank(ascending=False)
+                value_score = ranks.mean(axis=1, skipna=True)
+                top_value = _filter_top_percentile(-value_score, 40)
+                momentum = calculate_momentum_score_from_tv(filtered)
+                filtered_mom = momentum[momentum.index.isin(top_value)]
+                n_select = max(10, int(len(filtered_mom) * 0.25))
+                top_n = filtered_mom.sort_values(ascending=False).head(n_select)
+                top10 = top_n.head(10)
+                ranked_df = pd.DataFrame({
+                    'ticker': top10.index, 'rank': range(1, len(top10)+1), 'score': top10.values
+                })
+            elif strategy_type == "dividend":
+                filtered = filter_financial_companies(fund_df)
+                df = filtered.set_index('ticker')
+                top_yield = _filter_top_percentile(df['dividend_yield'], 40)
+                momentum = calculate_momentum_score_from_tv(filtered)
+                filtered_mom = momentum[momentum.index.isin(top_yield)]
+                n_select = max(10, int(len(filtered_mom) * 0.25))
+                top_n = filtered_mom.sort_values(ascending=False).head(n_select)
+                top10 = top_n.head(10)
+                ranked_df = pd.DataFrame({
+                    'ticker': top10.index, 'rank': range(1, len(top10)+1), 'score': top10.values
+                })
+            elif strategy_type == "quality":
+                filtered = filter_financial_companies(fund_df)
+                df = filtered.set_index('ticker')
+                ranks = pd.DataFrame(index=df.index)
+                for col in ['roe', 'roa', 'roic', 'fcfroe']:
+                    if col in df.columns:
+                        ranks[col] = df[col].rank(ascending=False, na_option='bottom')
+                quality_score = ranks.mean(axis=1)
+                top_quality = _filter_top_percentile(-quality_score, 40)
+                momentum = calculate_momentum_score_from_tv(filtered)
+                filtered_mom = momentum[momentum.index.isin(top_quality)]
+                n_select = max(10, int(len(filtered_mom) * 0.25))
+                top_n = filtered_mom.sort_values(ascending=False).head(n_select)
+                top10 = top_n.head(10)
+                ranked_df = pd.DataFrame({
+                    'ticker': top10.index, 'rank': range(1, len(top10)+1), 'score': top10.values
+                })
+            else:
+                continue
+            
+            if ranked_df.empty:
+                continue
+            
+            top_stocks = ranked_df.head(10)
+            db.bulk_insert_mappings(StrategySignal, [{
+                'strategy_name': strategy_name,
+                'ticker': row['ticker'],
+                'rank': rank,
+                'score': float(row.get('score', 0)),
+                'calculated_date': today
+            } for rank, (_, row) in enumerate(top_stocks.iterrows(), 1)])
+            
+            results[strategy_name] = {
+                "computed": len(ranked_df),
+                "top_10": list(top_stocks['ticker'])
+            }
+            logger.info(f"✓ {strategy_name}: {len(ranked_df)} stocks, top: {results[strategy_name]['top_10'][:3]}...")
+            
+        except Exception as e:
+            logger.error(f"Error computing {strategy_name}: {e}")
+            results[strategy_name] = {"error": str(e)}
+    
+    db.commit()
+    return {"computed_date": today.isoformat(), "strategies": results, "source": "tradingview"}

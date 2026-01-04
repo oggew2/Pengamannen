@@ -53,3 +53,5 @@ backend/data_sync_config.json
 backend/reports/
 docs/TEST_RESULTS_*.md
 .env
+backend/app.db.backup*
+*.db.backup*

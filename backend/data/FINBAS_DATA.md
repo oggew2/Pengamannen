@@ -124,3 +124,42 @@ python scripts/import_finbas.py
 2. **Market cap is monthly** - Only available at month-end dates
 3. **ISINs change over time** - Use `ticker_all_isins` for full history
 4. **Academic use only** - FinBas license restricts commercial use
+
+
+## Historical Fundamentals for Backtesting
+
+### Current Limitations
+FinBas provides only `book_value` for fundamentals. Full value/quality backtesting needs:
+- P/E (price/earnings)
+- P/B (price/book) ✓ Can calculate from FinBas
+- P/S (price/sales)
+- P/FCF (price/free cash flow)
+- EV/EBITDA
+- ROE, ROA, ROIC
+- Dividend yield
+
+### Options for Historical Fundamentals
+
+#### 1. FinBas P/B Only (FREE)
+Use existing `book_value` to calculate P/B = market_cap / book_value.
+- **Pros:** Free, already have data, 1998-2023 coverage
+- **Cons:** Single factor only, limited strategy accuracy
+- **Use case:** Simple value backtest, proof of concept
+
+#### 2. EODHD API ($19.99/mo)
+Commercial API with Swedish stock fundamentals.
+- **Coverage:** 833 Stockholm tickers, 21+ years history
+- **Data:** P/E, P/B, ROE, EBITDA, EPS, dividend yield, quarterly reports
+- **Pros:** Comprehensive, includes delisted companies
+- **Cons:** Monthly cost, API rate limits
+- **Use case:** Production-quality backtesting
+
+#### 3. Build Point-in-Time Database (DIY)
+Scrape/collect quarterly reports over time.
+- **Sources:** Börsdata, company IR pages, Avanza
+- **Pros:** Free, full control, exact data needed
+- **Cons:** Time-intensive, maintenance burden, look-ahead bias risk
+- **Use case:** Long-term project, academic research
+
+### Recommendation
+Start with FinBas P/B backtest to validate infrastructure, then evaluate EODHD if more factors needed.

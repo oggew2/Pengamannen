@@ -3,6 +3,7 @@ APScheduler jobs for automatic data fetching.
 """
 import logging
 import asyncio
+import os
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -18,33 +19,158 @@ scheduler = BackgroundScheduler()
 _sync_retry_count = 0
 _MAX_RETRIES = 2
 
+# Data source: 'tradingview' or 'avanza'
+DATA_SOURCE = os.getenv('DATA_SOURCE', 'tradingview')
+
+
+async def tradingview_sync(db, force_refresh: bool = False) -> dict:
+    """
+    Sync fundamentals from TradingView Scanner API.
+    Much faster than Avanza (~1s vs ~51s).
+    Saves weekly snapshots for historical backtesting.
+    """
+    from services.tradingview_fetcher import TradingViewFetcher
+    from services.ticker_mapping import tv_to_db_ticker
+    from models import Fundamentals, Stock, FundamentalsSnapshot
+    from datetime import date, timedelta
+    import time
+    
+    start_time = time.time()
+    fetcher = TradingViewFetcher()
+    today = date.today()
+    
+    try:
+        stocks = fetcher.fetch_all(min_market_cap=2e9)
+        
+        if not stocks:
+            logger.error("TradingView returned no data")
+            return {"status": "ERROR", "message": "No data from TradingView"}
+        
+        # Get existing tickers for matching
+        existing_stocks = {s.ticker: s for s in db.query(Stock).all()}
+        
+        # Check if we should save a snapshot (weekly for historical backtesting)
+        week_start = today - timedelta(days=today.weekday())
+        existing_snapshot = db.query(FundamentalsSnapshot).filter(
+            FundamentalsSnapshot.snapshot_date >= week_start
+        ).first()
+        save_snapshot = existing_snapshot is None
+        
+        updated = 0
+        snapshots_saved = 0
+        for stock_data in stocks:
+            db_ticker = stock_data['db_ticker']
+            
+            # Update or create fundamentals record
+            fund = db.query(Fundamentals).filter(
+                Fundamentals.ticker == db_ticker,
+                Fundamentals.data_source == 'tradingview'
+            ).first()
+            
+            if not fund:
+                fund = Fundamentals(ticker=db_ticker)
+                db.add(fund)
+            
+            # Update all fields
+            fund.market_cap = stock_data.get('market_cap')
+            fund.pe = stock_data.get('pe')
+            fund.pb = stock_data.get('pb')
+            fund.ps = stock_data.get('ps')
+            fund.p_fcf = stock_data.get('p_fcf')
+            fund.ev_ebitda = stock_data.get('ev_ebitda')
+            fund.roe = stock_data.get('roe')
+            fund.roa = stock_data.get('roa')
+            fund.roic = stock_data.get('roic')
+            fund.fcfroe = stock_data.get('fcfroe')
+            fund.dividend_yield = stock_data.get('dividend_yield')
+            fund.net_income = stock_data.get('net_income')
+            fund.operating_cf = stock_data.get('operating_cf')
+            fund.total_assets = stock_data.get('total_assets')
+            fund.long_term_debt = stock_data.get('long_term_debt')
+            fund.current_ratio = stock_data.get('current_ratio')
+            fund.gross_margin = stock_data.get('gross_margin')
+            fund.shares_outstanding = stock_data.get('shares_outstanding')
+            fund.perf_1m = stock_data.get('perf_1m')
+            fund.perf_3m = stock_data.get('perf_3m')
+            fund.perf_6m = stock_data.get('perf_6m')
+            fund.perf_12m = stock_data.get('perf_12m')
+            fund.piotroski_f_score = stock_data.get('piotroski_f_score')
+            fund.data_source = 'tradingview'
+            fund.fetched_date = today
+            
+            # Update stock metadata if exists
+            if db_ticker in existing_stocks:
+                stock = existing_stocks[db_ticker]
+                if stock_data.get('market_cap'):
+                    stock.market_cap_msek = stock_data['market_cap'] / 1e6
+                if stock_data.get('sector'):
+                    stock.sector = stock_data['sector']
+            
+            # Save weekly snapshot for historical backtesting
+            if save_snapshot:
+                db.add(FundamentalsSnapshot(
+                    snapshot_date=today, ticker=db_ticker,
+                    market_cap=stock_data.get('market_cap'),
+                    pe=stock_data.get('pe'), pb=stock_data.get('pb'), ps=stock_data.get('ps'),
+                    p_fcf=stock_data.get('p_fcf'), ev_ebitda=stock_data.get('ev_ebitda'),
+                    roe=stock_data.get('roe'), roa=stock_data.get('roa'),
+                    roic=stock_data.get('roic'), fcfroe=stock_data.get('fcfroe'),
+                    dividend_yield=stock_data.get('dividend_yield'),
+                ))
+                snapshots_saved += 1
+            
+            updated += 1
+        
+        db.commit()
+        
+        # Compute rankings using TradingView data
+        from services.ranking_cache import compute_all_rankings_tv
+        rankings_result = compute_all_rankings_tv(db)
+        
+        elapsed = time.time() - start_time
+        
+        return {
+            "status": "SUCCESS",
+            "stocks_updated": updated,
+            "snapshots_saved": snapshots_saved,
+            "source": "tradingview",
+            "duration_seconds": round(elapsed, 2),
+            "rankings": rankings_result
+        }
+        
+    except Exception as e:
+        logger.error(f"TradingView sync failed: {e}")
+        return {"status": "ERROR", "message": str(e)}
+
 
 def sync_job(is_retry: bool = False):
-    """Job to sync all stock data (fundamentals + prices) using Avanza."""
+    """Job to sync all stock data (fundamentals + prices)."""
     global _sync_retry_count
     
     if is_retry:
         logger.info(f"Starting RETRY sync (attempt {_sync_retry_count + 1}/{_MAX_RETRIES})")
     else:
-        logger.info("Starting scheduled Avanza sync")
-        _sync_retry_count = 0  # Reset retry count for new scheduled sync
+        logger.info(f"Starting scheduled sync (source: {DATA_SOURCE})")
+        _sync_retry_count = 0
     
     db = SessionLocal()
     sync_success = False
     
     try:
-        from services.avanza_fetcher_v2 import avanza_sync
-        from services.stock_validator import mark_stocks_with_fundamentals_active
-        from services.alerting import (
-            check_and_create_alerts, resolve_old_alerts, 
-            send_alert_email, get_unnotified_critical_alerts, mark_alerts_notified
-        )
-        from config.settings import get_settings
+        # Use TradingView or Avanza based on DATA_SOURCE
+        if DATA_SOURCE == 'tradingview':
+            result = asyncio.run(tradingview_sync(db))
+            if result.get('status') == 'ERROR':
+                logger.warning("TradingView failed, falling back to Avanza")
+                from services.avanza_fetcher_v2 import avanza_sync
+                result = asyncio.run(avanza_sync(db, region="sweden", market_cap="large"))
+        else:
+            from services.avanza_fetcher_v2 import avanza_sync
+            result = asyncio.run(avanza_sync(db, region="sweden", market_cap="large"))
         
-        result = asyncio.run(avanza_sync(db, region="sweden", market_cap="large"))
         logger.info(f"Sync complete: {result}")
         sync_success = True
-        _sync_retry_count = 0  # Reset on success
+        _sync_retry_count = 0
         
         # Clear backtest cache - results are stale after new data
         from models import BacktestResult

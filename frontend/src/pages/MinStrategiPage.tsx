@@ -7,11 +7,32 @@ import { useRebalanceDates, queryKeys } from '../api/hooks';
 import { toaster } from '../components/toaster';
 
 const STRATEGIES = [
-  { key: 'sammansatt_momentum', label: 'Momentum', color: '#4299E1', rebalance: 'quarterly', desc: 'Kvartalsvis' },
-  { key: 'trendande_varde', label: 'Värde', color: '#48BB78', rebalance: 'annual', desc: 'Årsvis' },
-  { key: 'trendande_utdelning', label: 'Utdelning', color: '#9F7AEA', rebalance: 'annual', desc: 'Årsvis' },
-  { key: 'trendande_kvalitet', label: 'Kvalitet', color: '#ED8936', rebalance: 'annual', desc: 'Årsvis' },
+  { key: 'sammansatt_momentum', label: 'Momentum', color: '#4299E1', rebalance: 'quarterly', desc: 'Kvartalsvis', recommendedMonths: [3, 6, 9, 12], tip: 'Kvartalsslut (mars, juni, sep, dec) har historiskt starkast momentumeffekt' },
+  { key: 'trendande_varde', label: 'Värde', color: '#48BB78', rebalance: 'annual', desc: 'Årsvis', recommendedMonths: [3, 9], tip: 'Mars eller september rekommenderas (före rapportsäsong)' },
+  { key: 'trendande_utdelning', label: 'Utdelning', color: '#9F7AEA', rebalance: 'annual', desc: 'Årsvis', recommendedMonths: [3], tip: 'Mars rekommenderas (efter utdelningsbesked)' },
+  { key: 'trendande_kvalitet', label: 'Kvalitet', color: '#ED8936', rebalance: 'annual', desc: 'Årsvis', recommendedMonths: [3, 9], tip: 'Mars eller september rekommenderas (före rapportsäsong)' },
 ];
+
+// Check if we're within 2 days of 15th or last day of month (high volume period)
+const isHighVolumePeriod = () => {
+  const now = new Date();
+  const day = now.getDate();
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return (day >= 14 && day <= 17) || (day >= lastDay - 1 || day <= 2);
+};
+
+// Calculate next rebalance date from user's start date
+const calculateNextRebalance = (startDate: string, frequency: 'quarterly' | 'annual'): string => {
+  const start = new Date(startDate);
+  const now = new Date();
+  const monthsInterval = frequency === 'quarterly' ? 3 : 12;
+  
+  let next = new Date(start);
+  while (next <= now) {
+    next.setMonth(next.getMonth() + monthsInterval);
+  }
+  return next.toISOString().split('T')[0];
+};
 
 type Holding = { ticker: string; shares: number; avgPrice: number };
 type Action = { type: 'SELL' | 'BUY' | 'HOLD'; ticker: string; name: string; strategy: string; strategyColor: string; value: number; reason: string; rank?: number; targetValue?: number };
@@ -30,15 +51,23 @@ const STORAGE_KEYS = {
   holdings: 'myHoldings',
   settings: 'rebalanceSettings',
   momentumHoldings: 'momentumHoldings',
+  strategyStartDates: 'strategyStartDates',
 };
 
 export default function MinStrategiPage() {
   const [tab, setTab] = useState<'strategier' | 'portfolj' | 'rebalansering'>('strategier');
+  const [tipsOpen, setTipsOpen] = useState(false);
   
   // Strategy state
   const [selected, setSelected] = useState<string[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.strategies);
     return saved ? JSON.parse(saved) : ['sammansatt_momentum'];
+  });
+  
+  // User-set start dates per strategy
+  const [startDates, setStartDates] = useState<Record<string, string>>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.strategyStartDates);
+    return saved ? JSON.parse(saved) : {};
   });
   
   // Portfolio state
@@ -152,6 +181,7 @@ export default function MinStrategiPage() {
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.strategies, JSON.stringify(selected)); }, [selected]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.momentumHoldings, JSON.stringify(momentumHoldings)); }, [momentumHoldings]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.strategyStartDates, JSON.stringify(startDates)); }, [startDates]);
   useEffect(() => { if (investAmount) localStorage.setItem('investAmount', investAmount); }, [investAmount]);
   useEffect(() => { localStorage.setItem('boughtTickers', JSON.stringify([...boughtTickers])); }, [boughtTickers]);
 
@@ -603,6 +633,49 @@ END:VCALENDAR`;
             </SimpleGrid>
           </Box>
 
+          {/* Collapsible Tips Section */}
+          {selected.length > 0 && (
+            <Box bg="bg.subtle" borderRadius="8px" borderColor="border" borderWidth="1px" overflow="hidden">
+              <Box
+                as="button"
+                w="100%"
+                p="12px 16px"
+                display="flex"
+                justifyContent="space-between"
+                alignItems="center"
+                onClick={() => setTipsOpen(!tipsOpen)}
+                _hover={{ bg: 'bg.muted' }}
+                transition="background 150ms"
+              >
+                <HStack gap="8px">
+                  <Text color="brand.fg">ⓘ</Text>
+                  <Text fontSize="sm" fontWeight="medium" color="fg">Ombalanseringstips</Text>
+                </HStack>
+                <Text color="fg.muted" fontSize="sm">{tipsOpen ? '▲' : '▼'}</Text>
+              </Box>
+              {tipsOpen && (
+                <VStack align="stretch" gap="8px" p="16px" pt="8px" borderTop="1px solid" borderColor="border">
+                  <HStack gap="8px" align="start">
+                    <Text color="fg.muted">•</Text>
+                    <Text fontSize="sm" color="fg.muted">Undvik att handla 1-2 dagar efter den 15:e och sista varje månad (hög volym när listor uppdateras)</Text>
+                  </HStack>
+                  <HStack gap="8px" align="start">
+                    <Text color="fg.muted">•</Text>
+                    <Text fontSize="sm" color="fg.muted">Bästa tid på dagen: Lunch eller eftermiddag (lägre spread och volatilitet)</Text>
+                  </HStack>
+                  <HStack gap="8px" align="start">
+                    <Text color="fg.muted">•</Text>
+                    <Text fontSize="sm" color="fg.muted">Kvartalsslut (mars, juni, sep, dec) har historiskt starkare momentumeffekt pga "window dressing"</Text>
+                  </HStack>
+                  <HStack gap="8px" align="start">
+                    <Text color="fg.muted">•</Text>
+                    <Text fontSize="sm" color="fg.muted">Exakt dag spelar mindre roll - det viktiga är att vara konsekvent med din egen cykel</Text>
+                  </HStack>
+                </VStack>
+              )}
+            </Box>
+          )}
+
           {/* Investment Calculator - Progressive disclosure: only show when strategies selected */}
           {selected.length > 0 && (
             <Box bg="bg.subtle" borderRadius="8px" p="16px" borderColor="border" borderWidth="1px">
@@ -629,6 +702,19 @@ END:VCALENDAR`;
             </Box>
           )}
 
+          {/* High Volume Warning Banner */}
+          {selected.length > 0 && isHighVolumePeriod() && (
+            <Box bg="warning/10" borderColor="warning" borderWidth="1px" borderRadius="8px" p="12px">
+              <HStack gap="8px">
+                <Text color="warning" fontWeight="bold">⚠</Text>
+                <VStack align="start" gap="2px">
+                  <Text fontSize="sm" fontWeight="medium" color="fg">Hög handelsvolym just nu</Text>
+                  <Text fontSize="xs" color="fg.muted">Börslabbets listor uppdaterades nyligen. Överväg att vänta 1-2 dagar för bättre priser och lägre spread.</Text>
+                </VStack>
+              </HStack>
+            </Box>
+          )}
+
           {/* Rebalance Dates & Reminders */}
           {selected.length > 0 && (
             <Box bg="bg.subtle" borderRadius="8px" p="16px" borderColor="border" borderWidth="1px">
@@ -638,27 +724,50 @@ END:VCALENDAR`;
                   Exportera kalender
                 </Button>
               </Flex>
-              <VStack gap="8px" align="stretch" mb="12px">
+              <VStack gap="12px" align="stretch" mb="12px">
                 {STRATEGIES.filter(s => selected.includes(s.key)).map(s => {
-                  const nextDate = rebalanceDates[s.key];
+                  const userStartDate = startDates[s.key];
+                  const nextDate = userStartDate 
+                    ? calculateNextRebalance(userStartDate, s.rebalance as 'quarterly' | 'annual')
+                    : rebalanceDates[s.key];
                   const daysUntil = nextDate ? Math.ceil((new Date(nextDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+                  const recommendedMonthsStr = s.recommendedMonths.map(m => ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'][m - 1]).join(', ');
                   return (
-                    <Flex key={s.key} p="10px" bg="bg.muted" borderRadius="6px" justify="space-between" align="center">
-                      <HStack gap="8px">
-                        <Box w="8px" h="8px" borderRadius="full" bg={s.color} />
-                        <Text fontSize="sm" fontWeight="medium" color="fg">{s.label}</Text>
-                      </HStack>
-                      <HStack gap="8px">
-                        {nextDate && (
-                          <>
-                            <Text fontSize="sm" color="fg.muted">{new Date(nextDate).toLocaleDateString('sv-SE')}</Text>
-                            <Text fontSize="xs" px="6px" py="2px" borderRadius="4px" bg={daysUntil && daysUntil <= 7 ? 'warning/20' : 'bg.subtle'} color={daysUntil && daysUntil <= 7 ? 'warning' : 'fg.muted'}>
-                              {daysUntil} dagar
-                            </Text>
-                          </>
-                        )}
-                      </HStack>
-                    </Flex>
+                    <Box key={s.key} p="12px" bg="bg.muted" borderRadius="6px">
+                      <Flex justify="space-between" align="center" mb="8px">
+                        <HStack gap="8px">
+                          <Box w="8px" h="8px" borderRadius="full" bg={s.color} />
+                          <Text fontSize="sm" fontWeight="medium" color="fg">{s.label}</Text>
+                          <Text fontSize="xs" color="fg.muted">({s.desc})</Text>
+                        </HStack>
+                        <HStack gap="8px">
+                          {nextDate && (
+                            <>
+                              <Text fontSize="sm" color="fg.muted">{new Date(nextDate).toLocaleDateString('sv-SE')}</Text>
+                              <Text fontSize="xs" px="6px" py="2px" borderRadius="4px" bg={daysUntil && daysUntil <= 7 ? 'warning/20' : 'bg.subtle'} color={daysUntil && daysUntil <= 7 ? 'warning' : 'fg.muted'}>
+                                {daysUntil} dagar
+                              </Text>
+                            </>
+                          )}
+                        </HStack>
+                      </Flex>
+                      <Flex gap="12px" align="center" flexWrap="wrap">
+                        <HStack gap="6px">
+                          <Text fontSize="xs" color="fg.muted">Startdatum:</Text>
+                          <Input
+                            type="date"
+                            size="xs"
+                            w="130px"
+                            bg="bg.subtle"
+                            borderColor="border"
+                            value={userStartDate || ''}
+                            onChange={e => setStartDates(prev => ({ ...prev, [s.key]: e.target.value }))}
+                          />
+                        </HStack>
+                        <Text fontSize="xs" color="fg.subtle">Rekommenderat: {recommendedMonthsStr}</Text>
+                      </Flex>
+                      <Text fontSize="xs" color="fg.subtle" mt="6px">{s.tip}</Text>
+                    </Box>
                   );
                 })}
               </VStack>

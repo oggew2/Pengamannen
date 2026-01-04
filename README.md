@@ -10,9 +10,10 @@ A quantitative Swedish stock strategy platform implementing Börslabbet's proven
 - **Trendande Utdelning** - Dividend yield with momentum filter
 - **Trendande Kvalitet** - ROE/ROA/ROIC/FCFROE quality composite
 
-### Data Pipeline
-- **Avanza API** - Free Swedish stock data (fundamentals + prices)
-- **Daily sync** - Automated data refresh (~51 seconds)
+## Data Pipeline
+- **TradingView Scanner API** - Primary data source for fundamentals + momentum (<2s sync)
+- **Avanza API** - Fallback for fundamentals, historical prices for backtesting
+- **Daily sync** - Automated data refresh
 - **Pre-computed rankings** - Instant API responses from DB cache
 - **Historical backtesting** - Test strategies on 10+ years of data
 
@@ -51,7 +52,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed technical documentation.
 
 ### Data Flow
 ```
-Avanza API → avanza_sync() → Database → Pre-compute rankings → API cache
+TradingView API → tradingview_sync() → Database → Pre-compute rankings → API cache
                                                                     ↓
                                               User request → Instant response
 ```
@@ -59,7 +60,8 @@ Avanza API → avanza_sync() → Database → Pre-compute rankings → API cache
 ### Key Components
 | Component | Purpose |
 |-----------|---------|
-| `avanza_fetcher_v2.py` | Fetch data from Avanza API |
+| `tradingview_fetcher.py` | Fetch data from TradingView Scanner API |
+| `avanza_fetcher_v2.py` | Fetch historical prices from Avanza API |
 | `ranking.py` | Strategy scoring calculations |
 | `ranking_cache.py` | Pre-compute and cache rankings |
 | `smart_cache.py` | SQLite-based API response cache |
@@ -125,7 +127,8 @@ Historical Swedish stock data from [Swedish House of Finance](https://data.house
 
 | Operation | Time |
 |-----------|------|
-| Full sync (fundamentals + prices + rankings) | ~51 seconds |
+| Full sync (TradingView) | ~2 seconds |
+| Full sync (Avanza fallback) | ~51 seconds |
 | Strategy API (cached) | <50ms |
 | Backtest (1 year) | ~2 seconds |
 
@@ -134,6 +137,7 @@ Historical Swedish stock data from [Swedish House of Finance](https://data.house
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | `sqlite:///./app.db` | Database connection |
+| `DATA_SOURCE` | `tradingview` | Data source: `tradingview` or `avanza` |
 | `DATA_SYNC_ENABLED` | `true` | Enable scheduled sync |
 | `DATA_SYNC_HOUR` | `6` | Hour (UTC) for daily sync |
 

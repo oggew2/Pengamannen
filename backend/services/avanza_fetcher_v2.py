@@ -204,19 +204,25 @@ class AvanzaDirectFetcher:
                 equity_per_share = key_indicators.get('equityPerShare', {}).get('value')
                 
                 # Calculate derived fields
-                p_fcf = None
+                # Note: p_fcf uses Operating CF (not true FCF) - renamed for clarity
+                p_ocf = None
                 if market_cap and operating_cash_flow and operating_cash_flow > 0:
-                    p_fcf = market_cap / operating_cash_flow
+                    p_ocf = market_cap / operating_cash_flow
                 
                 # Total Equity = Market Cap / P/B
                 total_equity = None
                 if market_cap and pb_ratio and pb_ratio > 0:
                     total_equity = market_cap / pb_ratio
                 
-                # FCFROE = Operating Cash Flow / Total Equity
+                # FCFROE uses Operating CF (not true FCF)
                 fcfroe = None
                 if operating_cash_flow and total_equity and total_equity > 0:
                     fcfroe = operating_cash_flow / total_equity
+                
+                # EV/EBITDA calculation from EV/EBIT and Net Debt/EBITDA
+                # Formula: EBITDA = M / (R2*(1-d) - R1) where d = D&A/EBITDA ratio
+                ev_ebit_ratio = key_indicators.get('evEbitRatio')
+                ev_ebitda = None  # Will be calculated from analysis endpoint
                 
                 # Net Income ≈ Market Cap / P/E
                 net_income = None
@@ -250,8 +256,9 @@ class AvanzaDirectFetcher:
                     'pe': pe_ratio,
                     'pb': pb_ratio,
                     'ps': key_indicators.get('priceSalesRatio'),
-                    'p_fcf': p_fcf,
-                    'ev_ebitda': key_indicators.get('evEbitRatio'),
+                    'p_fcf': p_ocf,  # Note: This is P/OCF, not true P/FCF
+                    'ev_ebit': ev_ebit_ratio,  # Raw EV/EBIT from Avanza
+                    'ev_ebitda': ev_ebitda,  # Calculated EV/EBITDA (set later)
                     'dividend_yield': key_indicators.get('directYield'),
                     'roe': key_indicators.get('returnOnEquity'),
                     'roa': key_indicators.get('returnOnTotalAssets'),
@@ -313,6 +320,109 @@ class AvanzaDirectFetcher:
             smart_cache.set(endpoint, params, failed_result, ttl_hours=1)
             logger.error(f"Avanza stock data error for {stock_id}: {e}")
             return None
+
+    def get_analysis_data(self, stock_id: str) -> Optional[Dict]:
+        """Get analysis data from Avanza including Net Debt/EBITDA ratio."""
+        try:
+            url = f"https://www.avanza.se/_api/market-guide/stock/{stock_id}/analysis"
+            response = self.session.get(url, timeout=15)
+            self.calls_made += 1
+            
+            if response.status_code == 200:
+                return response.json()
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching analysis data for {stock_id}: {e}")
+            return None
+
+    def calculate_ev_ebitda(self, stock_id: str, market_cap: float, ev_ebit: float, sector: str = None) -> Optional[float]:
+        """
+        Calculate EV/EBITDA from EV/EBIT and Net Debt/EBITDA ratio.
+        
+        Formula: EBITDA = M / (R2*(1-d) - R1)
+        Where:
+            M = Market Cap
+            R1 = Net Debt/EBITDA ratio
+            R2 = EV/EBIT ratio
+            d = D&A/EBITDA ratio (sector-dependent)
+        
+        Then: EV/EBITDA = (M + Net Debt) / EBITDA
+        """
+        if not market_cap or not ev_ebit:
+            return None
+        
+        # Get analysis data for Net Debt/EBITDA ratio
+        analysis = self.get_analysis_data(stock_id)
+        if not analysis:
+            return None
+        
+        # Extract Net Debt/EBITDA from TTM data
+        ratios = analysis.get('companyKeyRatiosByQuarterTTM', {})
+        net_debt_ebitda_data = ratios.get('netDebtEbitdaRatio', [])
+        
+        net_debt_ebitda = None
+        for item in net_debt_ebitda_data:
+            if isinstance(item, dict) and item.get('value') is not None:
+                net_debt_ebitda = item['value']
+        
+        if net_debt_ebitda is None:
+            # Fallback: try yearly data
+            ratios = analysis.get('companyKeyRatiosByYear', {})
+            net_debt_ebitda_data = ratios.get('netDebtEbitdaRatio', [])
+            for item in net_debt_ebitda_data:
+                if isinstance(item, dict) and item.get('value') is not None:
+                    net_debt_ebitda = item['value']
+        
+        if net_debt_ebitda is None:
+            return None
+        
+        # D&A/EBITDA ratio varies by sector (typical range 0.30-0.50)
+        # Default to 0.40, can be tuned per sector
+        da_ratio = 0.40
+        if sector:
+            sector_lower = sector.lower()
+            if any(s in sector_lower for s in ['stål', 'metall', 'gruv', 'steel', 'mining', 'basmetall']):
+                da_ratio = 0.45  # Capital-intensive
+            elif any(s in sector_lower for s in ['tech', 'it', 'software', 'saas']):
+                da_ratio = 0.30  # Less capital-intensive
+            elif any(s in sector_lower for s in ['fastighet', 'real estate']):
+                da_ratio = 0.50  # High depreciation
+            elif any(s in sector_lower for s in ['telekom', 'telecom', 'nätleverantör']):
+                da_ratio = 0.45  # Infrastructure-heavy
+            elif any(s in sector_lower for s in ['sjukvård', 'healthcare', 'vård']):
+                da_ratio = 0.52  # Healthcare has high D&A
+            elif any(s in sector_lower for s in ['e-handel', 'retail', 'butik']):
+                da_ratio = 0.35  # Lower D&A
+        
+        # Calculate EBITDA using the formula
+        denominator = ev_ebit * (1 - da_ratio) - net_debt_ebitda
+        if denominator <= 0:
+            return None
+        
+        ebitda = market_cap / denominator
+        net_debt = net_debt_ebitda * ebitda
+        ev = market_cap + net_debt
+        ev_ebitda = ev / ebitda
+        
+        return round(ev_ebitda, 2)
+
+    def get_stock_overview_with_ev_ebitda(self, stock_id: str, force_refresh: bool = False) -> Optional[Dict]:
+        """Get stock overview with calculated EV/EBITDA."""
+        result = self.get_stock_overview(stock_id, force_refresh)
+        if not result or not result.get('fetch_success'):
+            return result
+        
+        # Calculate EV/EBITDA if we have the required data
+        market_cap = result.get('market_cap')
+        ev_ebit = result.get('ev_ebit')
+        sector = result.get('sector')
+        
+        if market_cap and ev_ebit:
+            ev_ebitda = self.calculate_ev_ebitda(stock_id, market_cap, ev_ebit, sector)
+            if ev_ebitda:
+                result['ev_ebitda'] = ev_ebitda
+        
+        return result
     
     def get_complete_stock_data(self, ticker: str, include_history: bool = True) -> Dict:
         """Get complete stock data including historical prices from Avanza."""

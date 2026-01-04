@@ -106,6 +106,15 @@ class Fundamentals(Base):
     gross_margin = Column(Float)
     asset_turnover = Column(Float)
     fetched_date = Column(Date)
+    # TradingView pre-calculated momentum
+    perf_1m = Column(Float)
+    perf_3m = Column(Float)
+    perf_6m = Column(Float)
+    perf_12m = Column(Float)
+    # TradingView pre-calculated F-Score
+    piotroski_f_score = Column(Integer)
+    # Data source tracking
+    data_source = Column(String, default='avanza')
 
 class StrategySignal(Base):
     __tablename__ = "strategy_signals"
