@@ -155,13 +155,34 @@ export function AllocationCalculator() {
           {(() => {
             const adjSummary = getAdjustedSummary();
             const hasAdj = Object.keys(shareAdjustments).length > 0;
+            const isOverspent = hasAdj && (adjSummary?.remaining || 0) < 0;
             return (
+            <>
           <HStack gap="24px" flexWrap="wrap">
-            <Box><Text fontSize="xs" color="fg.muted">Investerat</Text><Text fontWeight="semibold" color={hasAdj ? 'blue.400' : undefined}>{formatSEK(adjSummary?.total || result.summary.total_invested)}</Text></Box>
-            <Box><Text fontSize="xs" color="fg.muted">Kvar</Text><Text fontWeight="semibold" color={hasAdj && (adjSummary?.remaining || 0) < 0 ? 'red.400' : hasAdj ? 'blue.400' : undefined}>{formatSEK(adjSummary?.remaining ?? result.summary.cash_remaining)}</Text></Box>
-            <Box><Text fontSize="xs" color="fg.muted">Utnyttjande</Text><Text fontWeight="semibold">{(adjSummary?.utilization || result.summary.utilization).toFixed(1)}%</Text></Box>
-            {hasAdj && <Button size="xs" variant="outline" onClick={() => setShareAdjustments({})}>Återställ antal</Button>}
+            <Box><Text fontSize="xs" color="fg.muted">Investerat</Text><Text fontWeight="semibold" color={isOverspent ? 'red.400' : hasAdj ? 'blue.400' : undefined}>{formatSEK(adjSummary?.total || result.summary.total_invested)}</Text></Box>
+            <Box><Text fontSize="xs" color="fg.muted">Kvar</Text><Text fontWeight="semibold" color={isOverspent ? 'red.400' : hasAdj ? 'blue.400' : undefined}>{formatSEK(adjSummary?.remaining ?? result.summary.cash_remaining)}</Text></Box>
+            <Box><Text fontSize="xs" color="fg.muted">Utnyttjande</Text><Text fontWeight="semibold" color={isOverspent ? 'red.400' : undefined}>{(adjSummary?.utilization || result.summary.utilization).toFixed(1)}%</Text></Box>
+            <Box><Text fontSize="xs" color="fg.muted">Max avvikelse</Text><Text fontWeight="semibold" color={result.summary.max_deviation > 5 ? 'red.400' : result.summary.max_deviation > 2 ? 'yellow.400' : 'green.400'}>{result.summary.max_deviation}%</Text></Box>
+            {hasAdj && <Button size="xs" variant="outline" onClick={() => setShareAdjustments({})}>Återställ</Button>}
           </HStack>
+          {isOverspent && (
+            <Box bg="red.900/30" borderColor="red.500" borderWidth="1px" borderRadius="md" p="8px">
+              <Text fontSize="sm" color="red.400" fontWeight="medium">⚠️ Överskrider budget med {formatSEK(Math.abs(adjSummary?.remaining || 0))}</Text>
+            </Box>
+          )}
+          {result.optimal_amounts && result.optimal_amounts.length > 0 && result.summary.max_deviation > 1 && (
+            <Box bg="green.900/20" borderColor="green.500" borderWidth="1px" borderRadius="md" p="8px">
+              <Text fontSize="xs" color="green.400" fontWeight="medium" mb="4px">Optimala belopp för jämnare fördelning:</Text>
+              <HStack gap="8px" flexWrap="wrap">
+                {result.optimal_amounts.map((opt: {amount: number; max_deviation: number}) => (
+                  <Button key={opt.amount} size="xs" variant="outline" colorScheme="green" onClick={() => { setAmount(String(opt.amount)); setShareAdjustments({}); }}>
+                    {formatSEK(opt.amount)} ({opt.max_deviation}%)
+                  </Button>
+                ))}
+              </HStack>
+            </Box>
+          )}
+            </>
             );
           })()}
 

@@ -729,9 +729,51 @@ def calculate_allocation(investment_amount: float, stocks: list, target_count: i
             "utilization": round((total_invested / investment_amount) * 100, 1) if investment_amount > 0 else 0,
             "stocks_included": stocks_included,
             "stocks_skipped": len(allocations) - stocks_included,
+            "max_deviation": round(max(abs(a['deviation']) for a in allocations if a['included']) if stocks_included > 0 else 0, 1),
         },
         "warnings": warnings,
+        "optimal_amounts": _find_optimal_amounts([a['price'] for a in allocations if a['included']], investment_amount, target_count),
     }
+
+
+def _find_optimal_amounts(prices: list, base_amount: float, target_count: int = 10) -> list:
+    """Find nearby investment amounts with lower deviation."""
+    prices = [p for p in prices if p > 0]
+    if not prices or len(prices) < 2:
+        return []
+    
+    results = []
+    # Test amounts that are multiples of share counts
+    for shares in range(1, 30):
+        for price in prices[:5]:  # Use top 5 prices
+            amt = shares * price * target_count
+            if amt >= base_amount * 0.8 and amt <= base_amount * 1.5:
+                target_per = amt / target_count
+                max_dev = 0
+                total = 0
+                for p in prices:
+                    s = int(target_per // p)
+                    if s > 0:
+                        actual = s * p
+                        total += actual
+                        dev = abs((actual / amt * 100) - (100 / target_count))
+                        max_dev = max(max_dev, dev)
+                    else:
+                        max_dev = 100
+                        break
+                if max_dev < 100:
+                    results.append({'amount': int(amt), 'max_deviation': round(max_dev, 1)})
+    
+    # Dedupe and sort
+    seen = set()
+    unique = []
+    for r in sorted(results, key=lambda x: (x['max_deviation'], abs(x['amount'] - base_amount))):
+        if r['amount'] not in seen:
+            seen.add(r['amount'])
+            unique.append(r)
+        if len(unique) >= 3:
+            break
+    return unique
 
 
 def calculate_rebalance_with_banding(

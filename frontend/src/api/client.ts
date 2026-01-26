@@ -83,9 +83,11 @@ export interface AllocationResponse {
     utilization: number;
     stocks_included: number;
     stocks_skipped: number;
+    max_deviation: number;
   };
   warnings: string[];
   substitutes?: Array<{ rank: number; ticker: string; name: string; price: number }>;
+  optimal_amounts?: Array<{ amount: number; max_deviation: number }>;
 }
 
 // Rebalance (banding) types
