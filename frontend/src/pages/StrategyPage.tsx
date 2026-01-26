@@ -2,9 +2,9 @@ import { useState, useMemo, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Box, Flex, Text, Button, HStack, VStack, Skeleton } from '@chakra-ui/react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { useQueries } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { useStrategies, useStrategyRankings, useBacktest, queryKeys } from '../api/hooks';
+import { useStrategies, useBacktest, queryKeys } from '../api/hooks';
 import { Pagination } from '../components/Pagination';
 import { DataIntegrityBanner } from '../components/DataIntegrityBanner';
 import { AllocationCalculator } from '../components/AllocationCalculator';
@@ -38,10 +38,19 @@ export function StrategyPage() {
     : type === 'dividend' ? 'trendande_utdelning'
     : type === 'quality' ? 'trendande_kvalitet' : '';
 
-  // TanStack Query hooks - select top 40 to reduce re-renders
-  const { data: stocks = [], isLoading: rankingsLoading, isError: rankingsError } = useStrategyRankings(apiName, {
-    select: (data) => data.slice(0, 40),
+  // Use Nordic endpoint for momentum, old endpoint for others
+  const isMomentum = type === 'momentum';
+  const { data: nordicData, isLoading: nordicLoading, isError: nordicError } = useQuery({
+    queryKey: ['nordic', 'momentum'],
+    queryFn: () => api.getNordicMomentum(),
+    enabled: isMomentum,
+    select: (data) => data.rankings.slice(0, 40),
   });
+  
+  const stocks = isMomentum ? (nordicData || []) : [];
+  const rankingsLoading = isMomentum ? nordicLoading : false;
+  const rankingsError = isMomentum ? nordicError : false;
+  
   const { data: strategies = [] } = useStrategies();
   
   // Backtest params

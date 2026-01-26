@@ -35,6 +35,7 @@ export const api = {
   getStrategies: () => fetchJson<StrategyMeta[]>('/strategies'),
   getStrategyRankings: (name: string) => fetchJson<RankedStock[]>(`/strategies/${name}`),
   getStrategyTop10: (name: string) => fetchJson<RankedStock[]>(`/strategies/${name}/top10`),
+  getNordicMomentum: () => fetchJson<{ rankings: RankedStock[] }>('/strategies/nordic/momentum'),
   getPortfolio: () => fetchJson<PortfolioResponse>('/portfolio/sverige'),
   getRebalanceDates: () => fetchJson<RebalanceDate[]>('/portfolio/rebalance-dates'),
   getStock: (ticker: string) => fetchJson<StockDetail>(`/stocks/${encodeURIComponent(ticker)}`),
