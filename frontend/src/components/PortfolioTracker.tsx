@@ -299,7 +299,10 @@ export function PortfolioTracker() {
   return (
     <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="20px">
       <HStack justify="space-between" mb="16px">
-        <Text fontSize="lg" fontWeight="semibold">Min Portfölj</Text>
+        <HStack gap="8px">
+          <Text fontSize="lg" fontWeight="semibold">Min Portfölj</Text>
+          {holdings.length > 0 && <Text fontSize="xs" color="green.400" title="Synkad till ditt konto">☁️</Text>}
+        </HStack>
         {holdings.length > 0 && (
           <HStack gap="8px">
             <Input
