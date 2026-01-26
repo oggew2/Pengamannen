@@ -176,7 +176,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 # Auth middleware - protect all API routes except auth endpoints and health
 class AuthMiddleware(BaseHTTPMiddleware):
-    OPEN_PATHS = {"/v1/auth/login", "/v1/auth/register", "/v1/auth/logout", "/v1/auth/me", "/v1/health", "/health", "/", "/favicon.ico", "/v1/strategies"}
+    OPEN_PATHS = {"/v1/auth/login", "/v1/auth/register", "/v1/auth/logout", "/v1/auth/me", "/v1/health", "/health", "/", "/favicon.ico", "/v1/strategies", "/v1/data/status/detailed", "/v1/data/sync-history"}
     OPEN_PREFIXES = ("/v1/strategies/nordic/",)  # All Nordic momentum endpoints
     
     async def dispatch(self, request: Request, call_next):
@@ -2158,11 +2158,52 @@ async def trigger_data_sync(
 
 @v1_router.get("/data/status/detailed")
 def get_detailed_data_status(db: Session = Depends(get_db)):
-    """Get detailed data status with freshness summary."""
-    from services.data_transparency import DataTransparencyService
+    """Get detailed data status with freshness for Nordic momentum (TradingView)."""
+    from models import StrategySignal, SyncLog
+    from datetime import timedelta
     
-    transparency = DataTransparencyService()
-    return transparency.get_detailed_data_status(db)
+    now = datetime.now()
+    
+    # Check Nordic momentum freshness (TradingView data)
+    nordic_signals = db.query(StrategySignal).filter(
+        StrategySignal.strategy_name == 'nordic_sammansatt_momentum'
+    ).all()
+    
+    nordic_date = nordic_signals[0].calculated_date if nordic_signals else None
+    nordic_age_days = (now.date() - nordic_date).days if nordic_date else 999
+    
+    # Get last sync
+    last_sync = db.query(SyncLog).filter(SyncLog.success == True).order_by(SyncLog.timestamp.desc()).first()
+    
+    # Determine status
+    if nordic_age_days <= 1:
+        status, msg = 'FRESH', 'Data uppdaterad idag'
+    elif nordic_age_days <= 3:
+        status, msg = 'RECENT', f'Data {nordic_age_days} dagar gammal'
+    else:
+        status, msg = 'STALE', f'Data {nordic_age_days} dagar gammal - behöver uppdateras'
+    
+    return {
+        'system_status': status,
+        'system_message': msg,
+        'can_run_strategies': True,
+        'last_checked': now.isoformat(),
+        'data_source': 'TradingView',
+        'nordic_momentum': {
+            'stocks_count': len(nordic_signals),
+            'last_updated': nordic_date.isoformat() if nordic_date else None,
+            'age_days': nordic_age_days
+        },
+        'last_sync': {
+            'timestamp': last_sync.timestamp.isoformat() if last_sync else None,
+            'duration_seconds': last_sync.duration_seconds if last_sync else None
+        },
+        'summary': {
+            'total_stocks': len(nordic_signals),
+            'fresh_count': len(nordic_signals) if nordic_age_days <= 1 else 0,
+            'fresh_percentage': 100 if nordic_age_days <= 1 else 0
+        }
+    }
 
 @v1_router.post("/data/refresh-stock/{ticker}")
 async def refresh_single_stock(ticker: str, db: Session = Depends(get_db)):

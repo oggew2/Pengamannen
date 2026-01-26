@@ -719,6 +719,13 @@ def calculate_allocation(investment_amount: float, stocks: list, target_count: i
     cash_remaining = investment_amount - total_invested
     stocks_included = sum(1 for a in allocations if a['included'] and a['shares'] > 0)
     
+    # Calculate Avanza transaction costs (0.25% min 1 SEK, max 99 SEK per trade)
+    total_commission = 0
+    for a in allocations:
+        if a['included'] and a['shares'] > 0:
+            commission = max(1, min(99, a['actual_amount'] * 0.0025))
+            total_commission += commission
+    
     return {
         "investment_amount": investment_amount,
         "target_per_stock": round(target_amount, 2),
@@ -730,6 +737,7 @@ def calculate_allocation(investment_amount: float, stocks: list, target_count: i
             "stocks_included": stocks_included,
             "stocks_skipped": len(allocations) - stocks_included,
             "max_deviation": round(max(abs(a['deviation']) for a in allocations if a['included']) if stocks_included > 0 else 0, 1),
+            "estimated_commission": round(total_commission, 0),
         },
         "warnings": warnings,
         "optimal_amounts": _find_optimal_amounts([a['price'] for a in allocations if a['included']], investment_amount, target_count),
