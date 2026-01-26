@@ -263,15 +263,28 @@ export function AllocationCalculator() {
                       </Text>
                     </Box>
                     <Box as="td" py="8px" px="4px" textAlign="center">
-                      <Button 
-                        size="xs" 
-                        variant={a.too_expensive ? (forceInclude.has(a.ticker) ? 'solid' : 'outline') : isExcluded ? 'outline' : 'solid'} 
-                        colorScheme={a.too_expensive ? 'orange' : isExcluded ? 'gray' : 'green'} 
-                        onClick={() => toggleStock(a.ticker, a.too_expensive)}
-                        title={a.too_expensive ? 'Klicka för att köpa 1 aktie ändå' : 'Klicka för att exkludera'}
-                      >
-                        {a.too_expensive ? (forceInclude.has(a.ticker) ? '1st' : '⚠️') : isExcluded ? '✗' : '✓'}
-                      </Button>
+                      {a.too_expensive ? (
+                        <Button 
+                          size="xs" 
+                          variant={forceInclude.has(a.ticker) ? 'solid' : 'outline'} 
+                          colorScheme="orange"
+                          onClick={() => toggleStock(a.ticker, true)}
+                          title="Klicka för att köpa 1 aktie ändå"
+                        >
+                          {forceInclude.has(a.ticker) ? '1st' : '⚠️'}
+                        </Button>
+                      ) : isExcluded ? (
+                        <Button size="xs" variant="outline" colorScheme="gray" onClick={() => toggleStock(a.ticker, false)}>
+                          ✗
+                        </Button>
+                      ) : (
+                        <HStack gap="1px" justify="center">
+                          <Text color="green.400" fontWeight="bold">✓</Text>
+                          <Button size="xs" variant="ghost" colorScheme="red" onClick={() => toggleStock(a.ticker, false)} title="Exkludera">
+                            ✕
+                          </Button>
+                        </HStack>
+                      )}
                     </Box>
                   </Box>
                   );
