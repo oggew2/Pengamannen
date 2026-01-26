@@ -182,8 +182,8 @@ export function StrategyPage() {
           <HStack gap="8px">
             <Text fontSize="lg" fontWeight="semibold" color="fg">Rankings</Text>
             {computedAt && (
-              <Text fontSize="xs" color="fg.muted" title={new Date(computedAt).toLocaleString('sv-SE')}>
-                • Live data
+              <Text fontSize="xs" color="fg.muted">
+                • {new Date(computedAt).toLocaleString('sv-SE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </Text>
             )}
             <HStack gap="4px">
