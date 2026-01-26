@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
-import { Box, Text, Button, VStack, HStack } from '@chakra-ui/react';
+import { useState, useEffect, useMemo } from 'react';
+import { Box, Text, Button, VStack, HStack, SimpleGrid } from '@chakra-ui/react';
 import { api, type RebalanceResponse } from '../api/client';
+import { useRebalanceDates } from '../api/hooks';
 
 interface LockedHolding {
   ticker: string;
@@ -23,6 +24,47 @@ interface RebalanceStock {
 
 const STORAGE_KEY = 'borslabbet_locked_holdings';
 
+// Quarterly momentum rebalance months (mid-month ~15th)
+const REBALANCE_MONTHS = [3, 6, 9, 12];
+
+function getNextRebalanceDate(): Date {
+  const now = new Date();
+  for (let offset = 0; offset < 12; offset++) {
+    const check = new Date(now.getFullYear(), now.getMonth() + offset, 15);
+    if (REBALANCE_MONTHS.includes(check.getMonth() + 1) && check > now) {
+      return check;
+    }
+  }
+  return new Date(now.getFullYear() + 1, 2, 15); // March next year
+}
+
+function isHighVolumeWarning(): boolean {
+  const now = new Date();
+  const day = now.getDate();
+  const month = now.getMonth() + 1;
+  // High volume: first/last week of month, or near quarterly rebalance
+  return day <= 5 || day >= 25 || REBALANCE_MONTHS.includes(month);
+}
+
+function generateICS(nextDate: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const formatDate = (d: Date) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  const uid = `momentum-rebalance-${formatDate(nextDate)}@borslabbet`;
+  const now = new Date();
+  return `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Borslabbet//Momentum Rebalance//SV
+BEGIN:VEVENT
+UID:${uid}
+DTSTAMP:${formatDate(now)}T000000Z
+DTSTART:${formatDate(nextDate)}
+DTEND:${formatDate(nextDate)}
+SUMMARY:📊 Momentum Ombalansering
+DESCRIPTION:Dags att kolla din Sammansatt Momentum-portfölj!
+END:VEVENT
+END:VCALENDAR`;
+}
+
 export function PortfolioTracker() {
   const [holdings, setHoldings] = useState<LockedHolding[]>([]);
   const [rebalanceData, setRebalanceData] = useState<{
@@ -30,11 +72,26 @@ export function PortfolioTracker() {
     holds: RebalanceStock[];
     buys: RebalanceStock[];
     summary: string;
+    costs?: { courtage: number; spread: number; total: number };
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
+  
+  // Next rebalance countdown
+  const { data: rebalanceDates } = useRebalanceDates();
+  const nextRebalance = useMemo(() => {
+    const momentum = rebalanceDates?.find(d => d.strategy_name === 'sammansatt_momentum');
+    return momentum ? new Date(momentum.next_date) : getNextRebalanceDate();
+  }, [rebalanceDates]);
+  
+  const daysUntil = useMemo(() => {
+    const diff = nextRebalance.getTime() - Date.now();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  }, [nextRebalance]);
+  
+  const showVolumeWarning = isHighVolumeWarning();
 
   // Load holdings from localStorage (and listen for changes)
   useEffect(() => {
@@ -124,7 +181,15 @@ export function PortfolioTracker() {
         ? '✓ Ingen ombalansering behövs'
         : `${sells.length} att sälja, ${buys.length} att köpa`;
 
-      setRebalanceData({ sells, holds, buys, summary });
+      // Calculate transaction costs (Avanza: 0.069% min 1kr, spread ~0.3%)
+      const sellValue = sells.reduce((sum, s) => sum + s.value, 0);
+      const buyValue = buys.reduce((sum, b) => sum + b.value, 0);
+      const totalTurnover = sellValue + buyValue;
+      const courtage = Math.max(totalTurnover * 0.00069, (sells.length + buys.length));
+      const spread = totalTurnover * 0.003;
+      const costs = { courtage: Math.round(courtage), spread: Math.round(spread), total: Math.round(courtage + spread) };
+
+      setRebalanceData({ sells, holds, buys, summary, costs });
       setLastChecked(new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
       console.error('Rebalance check failed:', err);
@@ -161,6 +226,17 @@ export function PortfolioTracker() {
     return `${formatted} ${currency} (≈SEK)`;
   };
   const formatSEK = (v: number) => new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(v) + ' kr';
+  
+  const downloadCalendar = () => {
+    const ics = generateICS(nextRebalance);
+    const blob = new Blob([ics], { type: 'text/calendar' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `momentum-rebalance-${nextRebalance.toISOString().slice(0, 10)}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
   const formatDate = (d: string) => new Date(d).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
 
   const totalValue = holdings.reduce((sum, h) => sum + (h.shares * h.buyPrice), 0);
@@ -180,6 +256,34 @@ export function PortfolioTracker() {
           </HStack>
         )}
       </HStack>
+
+      {/* Next Rebalance Countdown */}
+      <SimpleGrid columns={{ base: 1, md: 2 }} gap="12px" mb="16px">
+        <Box bg="bg" borderRadius="8px" p="12px" borderWidth="1px" borderColor="border">
+          <HStack justify="space-between">
+            <Box>
+              <Text fontSize="xs" color="fg.muted">Nästa ombalansering</Text>
+              <HStack gap="8px" align="baseline">
+                <Text fontSize="xl" fontWeight="bold" color={daysUntil <= 7 ? 'orange.400' : 'fg'}>
+                  {daysUntil} dagar
+                </Text>
+                <Text fontSize="sm" color="fg.muted">
+                  ({nextRebalance.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' })})
+                </Text>
+              </HStack>
+            </Box>
+            <Button size="xs" variant="ghost" colorPalette="gray" onClick={downloadCalendar} title="Lägg till i kalender">
+              📅
+            </Button>
+          </HStack>
+        </Box>
+        {showVolumeWarning && (
+          <Box bg="orange.900/20" borderRadius="8px" p="12px" borderWidth="1px" borderColor="orange.500">
+            <Text fontSize="xs" color="orange.400" fontWeight="semibold">⚠️ Hög volymperiod</Text>
+            <Text fontSize="xs" color="fg.muted">Spreaden kan vara högre. Undvik öppning/stängning.</Text>
+          </Box>
+        )}
+      </SimpleGrid>
 
       {holdings.length === 0 ? (
         <Text color="fg.muted" textAlign="center" py="20px">
@@ -289,6 +393,29 @@ export function PortfolioTracker() {
                       <Text>{b.shares} st = {formatPrice(b.value, b.currency)}</Text>
                     </HStack>
                   ))}
+                </Box>
+              )}
+
+              {/* Transaction Costs */}
+              {rebalanceData.costs && rebalanceData.costs.total > 0 && (
+                <Box bg="bg" borderRadius="md" p="12px" borderWidth="1px" borderColor="border">
+                  <Text fontSize="xs" color="fg.muted" fontWeight="semibold" mb="8px">💰 Uppskattad kostnad</Text>
+                  <HStack justify="space-between" fontSize="sm">
+                    <HStack gap="16px">
+                      <Box>
+                        <Text fontSize="xs" color="fg.muted">Courtage</Text>
+                        <Text>{formatSEK(rebalanceData.costs.courtage)}</Text>
+                      </Box>
+                      <Box>
+                        <Text fontSize="xs" color="fg.muted">Spread (~0.3%)</Text>
+                        <Text>{formatSEK(rebalanceData.costs.spread)}</Text>
+                      </Box>
+                    </HStack>
+                    <Box textAlign="right">
+                      <Text fontSize="xs" color="fg.muted">Totalt</Text>
+                      <Text fontWeight="semibold">{formatSEK(rebalanceData.costs.total)}</Text>
+                    </Box>
+                  </HStack>
                 </Box>
               )}
             </VStack>
