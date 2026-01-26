@@ -483,7 +483,7 @@ def compute_nordic_momentum(db=None) -> dict:
     
     return {
         'strategy': 'nordic_sammansatt_momentum',
-        'computed_date': date.today().isoformat(),
+        'computed_at': datetime.now().isoformat(),
         'total_universe': len(stocks),
         'after_filters': len(df_quality),
         'rankings': results,

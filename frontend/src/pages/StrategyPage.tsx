@@ -39,14 +39,14 @@ export function StrategyPage() {
 
   // Use Nordic endpoint for momentum, old endpoint for others
   const isMomentum = type === 'momentum';
-  const { data: nordicData, isLoading: nordicLoading, isError: nordicError } = useQuery({
+  const { data: nordicResponse, isLoading: nordicLoading, isError: nordicError } = useQuery({
     queryKey: ['nordic', 'momentum'],
     queryFn: () => api.getNordicMomentum(),
     enabled: isMomentum,
-    select: (data) => data.rankings.slice(0, 40),
   });
   
-  const stocks = isMomentum ? (nordicData || []) : [];
+  const stocks = isMomentum ? (nordicResponse?.rankings?.slice(0, 40) || []) : [];
+  const computedAt = nordicResponse?.computed_at;
   const rankingsLoading = isMomentum ? nordicLoading : false;
   const rankingsError = isMomentum ? nordicError : false;
   
@@ -200,6 +200,11 @@ export function StrategyPage() {
         <Flex justify="space-between" align="center" mb="16px">
           <HStack gap="8px">
             <Text fontSize="lg" fontWeight="semibold" color="fg">Rankings</Text>
+            {computedAt && (
+              <Text fontSize="xs" color="fg.muted" title={new Date(computedAt).toLocaleString('sv-SE')}>
+                • Live data
+              </Text>
+            )}
             <HStack gap="4px">
               {['1-10', '11-20', '21-30', '31-40'].map((range, idx) => (
                 <Button key={range} size="xs" variant={rankingsPage === idx + 1 ? 'solid' : 'outline'} onClick={() => setRankingsPage(idx + 1)}>
