@@ -91,6 +91,20 @@ export function AllocationCalculator() {
 
   const formatSEK = (v: number) => new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', maximumFractionDigits: 0 }).format(v);
 
+  const copyToClipboard = () => {
+    let text = '';
+    if (result) {
+      text = result.allocations.filter(a => a.included || (shareAdjustments[a.ticker] || 0) > 0)
+        .map(a => { const adj = getAdjustedAllocation(a); return `${a.ticker}\t${adj.shares}\t${formatSEK(adj.amount)}`; }).join('\n');
+    } else if (rebalanceResult) {
+      const lines = [];
+      if (rebalanceResult.sell.length) lines.push('SÄLJ:', ...rebalanceResult.sell.map(s => `${s.ticker}\t${s.shares}`));
+      if (rebalanceResult.buy.length) lines.push('KÖP:', ...rebalanceResult.buy.map(b => `${b.ticker}\t${b.shares}`));
+      text = lines.join('\n');
+    }
+    navigator.clipboard.writeText(text);
+  };
+
   // Calculate adjusted totals
   const getAdjustedSummary = () => {
     if (!result) return null;
@@ -163,6 +177,7 @@ export function AllocationCalculator() {
             <Box><Text fontSize="xs" color="fg.muted">Kvar</Text><Text fontWeight="semibold" color={isOverspent ? 'red.400' : hasAdj ? 'blue.400' : undefined}>{formatSEK(adjSummary?.remaining ?? result.summary.cash_remaining)}</Text></Box>
             <Box><Text fontSize="xs" color="fg.muted">Utnyttjande</Text><Text fontWeight="semibold" color={isOverspent ? 'red.400' : undefined}>{(adjSummary?.utilization || result.summary.utilization).toFixed(1)}%</Text></Box>
             <Box><Text fontSize="xs" color="fg.muted">Max avvikelse</Text><Text fontWeight="semibold" color={result.summary.max_deviation > 5 ? 'red.400' : result.summary.max_deviation > 2 ? 'yellow.400' : 'green.400'}>{result.summary.max_deviation}%</Text></Box>
+            <Button size="xs" variant="outline" onClick={copyToClipboard}>📋 Kopiera</Button>
             {hasAdj && <Button size="xs" variant="outline" onClick={() => setShareAdjustments({})}>Återställ</Button>}
           </HStack>
           {isOverspent && (
@@ -277,6 +292,7 @@ export function AllocationCalculator() {
             <Box><Text fontSize="xs" color="fg.muted">Köp</Text><Text fontWeight="semibold" color="green.400">{rebalanceResult.summary.stocks_bought}</Text></Box>
             <Box><Text fontSize="xs" color="fg.muted">Portföljvärde</Text><Text fontWeight="semibold">{formatSEK(rebalanceResult.summary.final_portfolio_value)}</Text></Box>
             <Box><Text fontSize="xs" color="fg.muted">Kvar</Text><Text fontWeight="semibold">{formatSEK(rebalanceResult.summary.cash_remaining)}</Text></Box>
+            <Button size="xs" variant="outline" onClick={copyToClipboard}>📋 Kopiera</Button>
           </HStack>
 
           {/* Sell section */}
