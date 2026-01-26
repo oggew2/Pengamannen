@@ -160,11 +160,12 @@ class SavedCombination(Base):
 
 class UserPortfolio(Base):
     """Track user's actual portfolio holdings over time."""
-    __tablename__ = "user_portfolios_v2"
+    __tablename__ = "user_portfolios"
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
     name = Column(String, default="Default")
     description = Column(Text)
+    holdings = Column(Text)  # JSON string of holdings
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
