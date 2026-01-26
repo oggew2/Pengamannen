@@ -78,6 +78,7 @@ export function PortfolioTracker() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
+  const [executedTrades, setExecutedTrades] = useState<{ sells: string[]; buys: string[] }>({ sells: [], buys: [] });
   
   // Next rebalance countdown
   const { data: rebalanceDates } = useRebalanceDates();
@@ -227,6 +228,38 @@ export function PortfolioTracker() {
   };
   const formatSEK = (v: number) => new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(v) + ' kr';
   
+  const toggleExecuted = (type: 'sells' | 'buys', ticker: string) => {
+    setExecutedTrades(prev => ({
+      ...prev,
+      [type]: prev[type].includes(ticker)
+        ? prev[type].filter(t => t !== ticker)
+        : [...prev[type], ticker]
+    }));
+  };
+
+  const saveExecutedTrades = () => {
+    if (!rebalanceData) return;
+    // Remove sold stocks, add bought stocks to holdings
+    const newHoldings = holdings
+      .filter(h => !executedTrades.sells.includes(h.ticker))
+      .concat(
+        rebalanceData.buys
+          .filter(b => executedTrades.buys.includes(b.ticker))
+          .map(b => ({
+            ticker: b.ticker,
+            shares: b.shares,
+            buyPrice: b.value / b.shares,
+            buyDate: new Date().toISOString(),
+            rankAtPurchase: b.currentRank || 0
+          }))
+      );
+    setHoldings(newHoldings);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newHoldings));
+    setExecutedTrades({ sells: [], buys: [] });
+    setRebalanceData(null);
+    window.dispatchEvent(new Event('portfolio-locked-in'));
+  };
+  
   const downloadCalendar = () => {
     const ics = generateICS(nextRebalance);
     const blob = new Blob([ics], { type: 'text/calendar' });
@@ -329,95 +362,130 @@ export function PortfolioTracker() {
           {/* Rebalance results */}
           {rebalanceData && (
             <VStack align="stretch" gap="12px" mt="8px">
+              {/* Summary boxes */}
+              <SimpleGrid columns={3} gap="8px">
+                <Box p="12px" bg="blue.900/20" borderRadius="6px" textAlign="center">
+                  <Text fontSize="2xl" fontWeight="bold" color="blue.400">{rebalanceData.holds.length}</Text>
+                  <Text fontSize="xs" color="fg.muted">Behåll</Text>
+                </Box>
+                <Box p="12px" bg="red.900/20" borderRadius="6px" textAlign="center">
+                  <Text fontSize="2xl" fontWeight="bold" color="red.400">{rebalanceData.sells.length}</Text>
+                  <Text fontSize="xs" color="fg.muted">Sälj</Text>
+                </Box>
+                <Box p="12px" bg="green.900/20" borderRadius="6px" textAlign="center">
+                  <Text fontSize="2xl" fontWeight="bold" color="green.400">{rebalanceData.buys.length}</Text>
+                  <Text fontSize="xs" color="fg.muted">Köp</Text>
+                </Box>
+              </SimpleGrid>
+
               <HStack justify="space-between" flexWrap="wrap" gap="8px">
-                <HStack gap="8px">
-                  <Text fontWeight="semibold">{rebalanceData.summary}</Text>
-                  {lastChecked && <Text fontSize="xs" color="fg.muted">({lastChecked})</Text>}
-                </HStack>
-                {(rebalanceData.sells.length > 0 || rebalanceData.buys.length > 0) && (
-                  <Button size="xs" variant="outline" colorPalette="gray" onClick={copyTrades}>
-                    {copied ? '✓ Kopierat!' : '📋 Kopiera trades'}
-                  </Button>
-                )}
+                <Text fontSize="xs" color="fg.muted">{lastChecked && `Kontrollerat ${lastChecked}`}</Text>
+                <Button size="xs" variant="outline" colorPalette="gray" onClick={copyTrades}>
+                  {copied ? '✓ Kopierat!' : '📋 Kopiera'}
+                </Button>
               </HStack>
 
-              {/* Sells */}
+              {/* Sells - clickable */}
               {rebalanceData.sells.length > 0 && (
                 <Box bg="red.900/20" borderColor="red.500" borderWidth="1px" borderRadius="md" p="12px">
-                  <Text fontSize="sm" color="red.400" fontWeight="semibold" mb="8px">
-                    🔴 SÄLJ ({rebalanceData.sells.length})
-                  </Text>
-                  {rebalanceData.sells.map(s => (
-                    <HStack key={s.ticker} justify="space-between" fontSize="sm" mb="4px">
-                      <Box>
-                        <Text fontWeight="medium">{s.ticker}</Text>
-                        <Text fontSize="xs" color="red.300">{s.reason}</Text>
+                  <Text fontSize="sm" color="red.400" fontWeight="semibold" mb="8px">SÄLJ</Text>
+                  <VStack gap="4px" align="stretch">
+                    {rebalanceData.sells.map(s => (
+                      <Box
+                        key={s.ticker}
+                        p="8px"
+                        bg={executedTrades.sells.includes(s.ticker) ? 'green.900/30' : 'bg'}
+                        borderRadius="4px"
+                        cursor="pointer"
+                        onClick={() => toggleExecuted('sells', s.ticker)}
+                      >
+                        <HStack justify="space-between" fontSize="sm">
+                          <HStack gap="8px">
+                            <Text color={executedTrades.sells.includes(s.ticker) ? 'green.400' : 'red.400'}>
+                              {executedTrades.sells.includes(s.ticker) ? '✓' : '•'}
+                            </Text>
+                            <Text fontWeight="medium">{s.ticker}</Text>
+                            <Text fontSize="xs" color="fg.muted">{s.reason}</Text>
+                          </HStack>
+                          <Text color="fg.muted">{s.shares} st</Text>
+                        </HStack>
                       </Box>
-                      <Text>{s.shares} st = {formatPrice(s.value, s.currency)}</Text>
-                    </HStack>
-                  ))}
+                    ))}
+                  </VStack>
                 </Box>
               )}
 
               {/* Holds */}
               {rebalanceData.holds.length > 0 && (
                 <Box bg="blue.900/20" borderColor="blue.500" borderWidth="1px" borderRadius="md" p="12px">
-                  <Text fontSize="sm" color="blue.400" fontWeight="semibold" mb="8px">
-                    🔵 BEHÅLL ({rebalanceData.holds.length})
-                  </Text>
+                  <Text fontSize="sm" color="blue.400" fontWeight="semibold" mb="8px">BEHÅLL</Text>
                   <HStack gap="8px" flexWrap="wrap">
                     {rebalanceData.holds.map(h => (
-                      <Box key={h.ticker} fontSize="sm">
-                        <Text fontWeight="medium" display="inline">{h.ticker}</Text>
-                        <Text fontSize="xs" color="fg.muted" display="inline" ml="4px">
-                          #{h.previousRank}→#{h.currentRank}
-                        </Text>
+                      <Box key={h.ticker} px="8px" py="4px" bg="bg" borderRadius="4px">
+                        <Text fontSize="sm" fontWeight="medium" display="inline">{h.ticker}</Text>
+                        <Text fontSize="xs" color="fg.muted" display="inline" ml="4px">#{h.currentRank}</Text>
                       </Box>
                     ))}
                   </HStack>
                 </Box>
               )}
 
-              {/* Buys */}
+              {/* Buys - clickable with Avanza links */}
               {rebalanceData.buys.length > 0 && (
                 <Box bg="green.900/20" borderColor="green.500" borderWidth="1px" borderRadius="md" p="12px">
-                  <Text fontSize="sm" color="green.400" fontWeight="semibold" mb="8px">
-                    🟢 KÖP ({rebalanceData.buys.length})
-                  </Text>
-                  {rebalanceData.buys.map(b => (
-                    <HStack key={b.ticker} justify="space-between" fontSize="sm" mb="4px">
-                      <Box>
-                        <Text fontWeight="medium">{b.ticker}</Text>
-                        <Text fontSize="xs" color="green.300">{b.reason}</Text>
+                  <Text fontSize="sm" color="green.400" fontWeight="semibold" mb="8px">KÖP</Text>
+                  <VStack gap="4px" align="stretch">
+                    {rebalanceData.buys.map(b => (
+                      <Box
+                        key={b.ticker}
+                        p="8px"
+                        bg={executedTrades.buys.includes(b.ticker) ? 'green.900/30' : 'bg'}
+                        borderRadius="4px"
+                        cursor="pointer"
+                        onClick={() => toggleExecuted('buys', b.ticker)}
+                      >
+                        <HStack justify="space-between" fontSize="sm">
+                          <HStack gap="8px">
+                            <Text color={executedTrades.buys.includes(b.ticker) ? 'green.400' : 'green.300'}>
+                              {executedTrades.buys.includes(b.ticker) ? '✓' : '+'}
+                            </Text>
+                            <a
+                              href={`https://www.avanza.se/aktier/om-aktien.html?query=${b.ticker}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                            >
+                              <Text fontWeight="medium" color="green.300" textDecoration="underline">{b.ticker}</Text>
+                            </a>
+                            <Text fontSize="xs" color="fg.muted">#{b.currentRank}</Text>
+                          </HStack>
+                          <Text color="fg.muted">{b.shares} st</Text>
+                        </HStack>
                       </Box>
-                      <Text>{b.shares} st = {formatPrice(b.value, b.currency)}</Text>
-                    </HStack>
-                  ))}
+                    ))}
+                  </VStack>
+                  <Text fontSize="xs" color="fg.muted" mt="8px">Klicka för att markera • Ticker öppnar Avanza</Text>
                 </Box>
               )}
 
-              {/* Transaction Costs */}
-              {rebalanceData.costs && rebalanceData.costs.total > 0 && (
-                <Box bg="bg" borderRadius="md" p="12px" borderWidth="1px" borderColor="border">
-                  <Text fontSize="xs" color="fg.muted" fontWeight="semibold" mb="8px">💰 Uppskattad kostnad</Text>
-                  <HStack justify="space-between" fontSize="sm">
-                    <HStack gap="16px">
-                      <Box>
-                        <Text fontSize="xs" color="fg.muted">Courtage</Text>
-                        <Text>{formatSEK(rebalanceData.costs.courtage)}</Text>
-                      </Box>
-                      <Box>
-                        <Text fontSize="xs" color="fg.muted">Spread (~0.3%)</Text>
-                        <Text>{formatSEK(rebalanceData.costs.spread)}</Text>
-                      </Box>
+              {/* Transaction Costs + Save Button */}
+              <Box bg="bg" borderRadius="md" p="12px" borderWidth="1px" borderColor="border">
+                <HStack justify="space-between" flexWrap="wrap" gap="12px">
+                  {rebalanceData.costs && rebalanceData.costs.total > 0 && (
+                    <HStack gap="16px" fontSize="sm">
+                      <Text color="fg.muted">
+                        Kostnad: {formatSEK(rebalanceData.costs.total)} 
+                        <Text as="span" fontSize="xs"> (courtage + spread)</Text>
+                      </Text>
                     </HStack>
-                    <Box textAlign="right">
-                      <Text fontSize="xs" color="fg.muted">Totalt</Text>
-                      <Text fontWeight="semibold">{formatSEK(rebalanceData.costs.total)}</Text>
-                    </Box>
-                  </HStack>
-                </Box>
-              )}
+                  )}
+                  {(executedTrades.sells.length > 0 || executedTrades.buys.length > 0) && (
+                    <Button size="sm" colorPalette="green" onClick={saveExecutedTrades}>
+                      ✓ Spara {executedTrades.sells.length + executedTrades.buys.length} genomförda
+                    </Button>
+                  )}
+                </HStack>
+              </Box>
             </VStack>
           )}
         </VStack>
