@@ -363,3 +363,518 @@ def compute_all_rankings_tv(db) -> dict:
     
     db.commit()
     return {"computed_date": today.isoformat(), "strategies": results, "source": "tradingview"}
+
+
+def compute_nordic_momentum(db=None) -> dict:
+    """
+    Compute Nordic Sammansatt Momentum rankings directly from TradingView.
+    Does not require database - fetches fresh data from all Nordic markets.
+    
+    Returns:
+        dict with rankings and metadata
+    """
+    from services.tradingview_fetcher import TradingViewFetcher
+    from services.ranking import filter_financial_companies, calculate_momentum_score_from_tv, get_fscore_from_tv
+    
+    logger.info("Computing Nordic Sammansatt Momentum...")
+    
+    # Fetch Nordic stocks with 2B SEK threshold
+    fetcher = TradingViewFetcher()
+    stocks = fetcher.fetch_nordic(min_market_cap_sek=2e9)
+    
+    if not stocks:
+        logger.error("No Nordic stocks fetched")
+        return {"error": "No data available"}
+    
+    # Build DataFrame
+    df = pd.DataFrame(stocks)
+    
+    # Filter out Finance sector
+    df = df[df['sector'] != 'Finance']
+    logger.info(f"After Finance filter: {len(df)} stocks")
+    
+    # Calculate momentum score
+    df['momentum'] = (
+        df['perf_3m'].fillna(0) + 
+        df['perf_6m'].fillna(0) + 
+        df['perf_12m'].fillna(0)
+    ) / 3
+    
+    # Apply F-Score filter (>= 5, matching Börslabbet)
+    df_quality = df[df['piotroski_f_score'].fillna(0) >= 5]
+    logger.info(f"After F-Score >= 5 filter: {len(df_quality)} stocks")
+    
+    # If too few stocks pass F-Score filter, use all
+    if len(df_quality) < 20:
+        logger.warning("Too few stocks pass F-Score filter, using all non-financial stocks")
+        df_quality = df
+    
+    # Rank by momentum
+    df_ranked = df_quality.sort_values('momentum', ascending=False)
+    
+    # Get top 10
+    top10 = df_ranked.head(10)
+    
+    results = []
+    for rank, (_, row) in enumerate(top10.iterrows(), 1):
+        results.append({
+            'rank': rank,
+            'ticker': row['ticker'],
+            'name': row['name'],
+            'market': row['market'],
+            'currency': row['currency'],
+            'market_cap_sek': row['market_cap_sek'],
+            'momentum': row['momentum'],
+            'perf_3m': row['perf_3m'],
+            'perf_6m': row['perf_6m'],
+            'perf_12m': row['perf_12m'],
+            'f_score': row.get('piotroski_f_score'),
+            'sector': row['sector'],
+        })
+    
+    # Save to database if provided
+    if db:
+        from models import StrategySignal
+        today = date.today()
+        
+        # Clear old Nordic momentum signals
+        db.query(StrategySignal).filter(
+            StrategySignal.strategy_name == 'nordic_sammansatt_momentum'
+        ).delete()
+        
+        # Insert new signals
+        for r in results:
+            signal = StrategySignal(
+                strategy_name='nordic_sammansatt_momentum',
+                ticker=r['ticker'],
+                rank=r['rank'],
+                score=float(r['momentum']),
+                calculated_date=today
+            )
+            db.add(signal)
+        db.commit()
+        logger.info(f"Saved Nordic momentum rankings to database")
+    
+    return {
+        'strategy': 'nordic_sammansatt_momentum',
+        'computed_date': date.today().isoformat(),
+        'total_universe': len(stocks),
+        'after_filters': len(df_quality),
+        'rankings': results,
+        'by_market': {m: sum(1 for r in results if r['market'] == m) for m in ['sweden', 'finland', 'norway', 'denmark']}
+    }
+
+
+def compute_nordic_momentum_banded(db, current_holdings: list[str] = None) -> dict:
+    """
+    Compute Nordic momentum with banding logic.
+    
+    Banding rules (from Börslabbet):
+    - Buy: Top 10 stocks by momentum
+    - Sell: Only when stock falls below rank 20
+    - Replace sold stocks with highest-ranked not in portfolio
+    
+    Args:
+        db: Database session
+        current_holdings: List of tickers currently held (if None, loads from DB)
+    
+    Returns:
+        dict with recommendations (hold/buy/sell) and full rankings
+    """
+    from services.tradingview_fetcher import TradingViewFetcher
+    from models import BandingHolding
+    
+    BUY_THRESHOLD = 10   # Buy top 10
+    SELL_THRESHOLD = 20  # Sell when below rank 20
+    
+    logger.info("Computing Nordic momentum with banding...")
+    
+    # Fetch fresh rankings
+    fetcher = TradingViewFetcher()
+    stocks = fetcher.fetch_nordic(min_market_cap_sek=2e9)
+    
+    if not stocks:
+        return {"error": "No data available"}
+    
+    # Build DataFrame and apply filters
+    df = pd.DataFrame(stocks)
+    df = df[df['sector'] != 'Finance']
+    df['momentum'] = (df['perf_3m'].fillna(0) + df['perf_6m'].fillna(0) + df['perf_12m'].fillna(0)) / 3
+    df_quality = df[df['piotroski_f_score'].fillna(0) >= 5]
+    
+    if len(df_quality) < 20:
+        df_quality = df
+    
+    # Rank all stocks
+    df_ranked = df_quality.sort_values('momentum', ascending=False).reset_index(drop=True)
+    df_ranked['rank'] = range(1, len(df_ranked) + 1)
+    
+    # Get current holdings from DB if not provided
+    if current_holdings is None and db:
+        active_holdings = db.query(BandingHolding).filter(
+            BandingHolding.strategy == 'nordic_sammansatt_momentum',
+            BandingHolding.is_active == True
+        ).all()
+        current_holdings = [h.ticker for h in active_holdings]
+    
+    current_holdings = current_holdings or []
+    today = date.today()
+    
+    # Determine actions
+    hold = []
+    sell = []
+    buy = []
+    
+    # Check current holdings
+    for ticker in current_holdings:
+        row = df_ranked[df_ranked['ticker'] == ticker]
+        if row.empty:
+            # Stock no longer in universe - sell
+            sell.append({'ticker': ticker, 'reason': 'not_in_universe', 'rank': None})
+        else:
+            rank = int(row['rank'].iloc[0])
+            if rank > SELL_THRESHOLD:
+                sell.append({'ticker': ticker, 'reason': 'below_threshold', 'rank': rank})
+            else:
+                hold.append({'ticker': ticker, 'rank': rank})
+    
+    # Calculate how many slots to fill
+    slots_to_fill = BUY_THRESHOLD - len(hold)
+    
+    # Find candidates to buy (top ranked not already held)
+    held_tickers = set(h['ticker'] for h in hold)
+    for _, row in df_ranked.iterrows():
+        if slots_to_fill <= 0:
+            break
+        if row['ticker'] not in held_tickers:
+            buy.append({
+                'ticker': row['ticker'],
+                'name': row['name'],
+                'rank': int(row['rank']),
+                'momentum': row['momentum'],
+                'market': row['market'],
+                'currency': row['currency'],
+            })
+            slots_to_fill -= 1
+    
+    # Update database if provided
+    if db:
+        # Mark sold holdings as inactive
+        for s in sell:
+            holding = db.query(BandingHolding).filter(
+                BandingHolding.strategy == 'nordic_sammansatt_momentum',
+                BandingHolding.ticker == s['ticker'],
+                BandingHolding.is_active == True
+            ).first()
+            if holding:
+                holding.is_active = False
+                holding.exit_date = today
+                holding.exit_rank = s['rank']
+        
+        # Update ranks for held stocks
+        for h in hold:
+            holding = db.query(BandingHolding).filter(
+                BandingHolding.strategy == 'nordic_sammansatt_momentum',
+                BandingHolding.ticker == h['ticker'],
+                BandingHolding.is_active == True
+            ).first()
+            if holding:
+                holding.current_rank = h['rank']
+                holding.last_updated = today
+        
+        # Add new holdings
+        for b in buy:
+            new_holding = BandingHolding(
+                strategy='nordic_sammansatt_momentum',
+                ticker=b['ticker'],
+                entry_rank=b['rank'],
+                entry_date=today,
+                current_rank=b['rank'],
+                last_updated=today,
+                is_active=True
+            )
+            db.add(new_holding)
+        
+        db.commit()
+        logger.info(f"Banding updated: hold={len(hold)}, sell={len(sell)}, buy={len(buy)}")
+    
+    # Build full rankings for reference
+    top20 = []
+    for _, row in df_ranked.head(20).iterrows():
+        top20.append({
+            'rank': int(row['rank']),
+            'ticker': row['ticker'],
+            'name': row['name'],
+            'momentum': row['momentum'],
+            'market': row['market'],
+        })
+    
+    return {
+        'strategy': 'nordic_sammansatt_momentum',
+        'computed_date': today.isoformat(),
+        'banding': {
+            'buy_threshold': BUY_THRESHOLD,
+            'sell_threshold': SELL_THRESHOLD,
+        },
+        'recommendations': {
+            'hold': hold,
+            'sell': sell,
+            'buy': buy,
+        },
+        'portfolio': [h['ticker'] for h in hold] + [b['ticker'] for b in buy],
+        'top20_rankings': top20,
+    }
+
+
+def calculate_allocation(investment_amount: float, stocks: list, target_count: int = 10) -> dict:
+    """
+    Calculate equal-weight portfolio allocation with smart rounding.
+    
+    Algorithm:
+    1. Target 10% per stock (investment / 10)
+    2. Calculate shares = floor(target_amount / price)
+    3. If stock too expensive (price > target), flag it
+    4. Distribute remaining cash to stocks furthest below target
+    
+    Args:
+        investment_amount: Total SEK to invest
+        stocks: List of dicts with ticker, name, price, momentum, etc.
+        target_count: Number of stocks (default 10)
+    
+    Returns:
+        dict with allocations, warnings, and summary
+    """
+    if not stocks or investment_amount <= 0:
+        return {"error": "Invalid input"}
+    
+    target_weight = 1.0 / target_count  # 10% each
+    target_amount = investment_amount * target_weight
+    
+    allocations = []
+    warnings = []
+    
+    for i, stock in enumerate(stocks[:target_count]):
+        price = stock.get('price') or stock.get('close') or 0
+        
+        if price <= 0:
+            warnings.append(f"{stock['ticker']}: No price data")
+            continue
+        
+        # Check if stock is too expensive
+        if price > target_amount:
+            shares = 0
+            too_expensive = True
+            warnings.append(f"{stock['ticker']}: Price {price:.0f} SEK > target {target_amount:.0f} SEK")
+        else:
+            shares = int(target_amount // price)  # Floor division
+            too_expensive = False
+        
+        actual_amount = shares * price
+        actual_weight = actual_amount / investment_amount if investment_amount > 0 else 0
+        deviation = actual_weight - target_weight
+        
+        allocations.append({
+            "rank": i + 1,
+            "ticker": stock['ticker'],
+            "name": stock.get('name', ''),
+            "price": price,
+            "shares": shares,
+            "target_amount": round(target_amount, 2),
+            "actual_amount": round(actual_amount, 2),
+            "target_weight": round(target_weight * 100, 1),
+            "actual_weight": round(actual_weight * 100, 1),
+            "deviation": round(deviation * 100, 1),
+            "too_expensive": too_expensive,
+            "included": not too_expensive,
+        })
+    
+    # Calculate totals
+    total_invested = sum(a['actual_amount'] for a in allocations if a['included'])
+    cash_remaining = investment_amount - total_invested
+    
+    # Distribute remaining cash (greedy: add to most underweight stocks)
+    if cash_remaining > 0:
+        # Sort by deviation (most negative first = most underweight)
+        for alloc in sorted(allocations, key=lambda x: x['deviation']):
+            if not alloc['included'] or alloc['price'] <= 0:
+                continue
+            
+            # How many more shares can we buy?
+            extra_shares = int(cash_remaining // alloc['price'])
+            if extra_shares > 0:
+                alloc['shares'] += extra_shares
+                added = extra_shares * alloc['price']
+                alloc['actual_amount'] += added
+                alloc['actual_weight'] = round((alloc['actual_amount'] / investment_amount) * 100, 1)
+                alloc['deviation'] = round(alloc['actual_weight'] - alloc['target_weight'], 1)
+                cash_remaining -= added
+                
+            if cash_remaining < min(a['price'] for a in allocations if a['included'] and a['price'] > 0):
+                break
+    
+    # Recalculate totals
+    total_invested = sum(a['actual_amount'] for a in allocations if a['included'])
+    cash_remaining = investment_amount - total_invested
+    stocks_included = sum(1 for a in allocations if a['included'] and a['shares'] > 0)
+    
+    return {
+        "investment_amount": investment_amount,
+        "target_per_stock": round(target_amount, 2),
+        "allocations": allocations,
+        "summary": {
+            "total_invested": round(total_invested, 2),
+            "cash_remaining": round(cash_remaining, 2),
+            "utilization": round((total_invested / investment_amount) * 100, 1) if investment_amount > 0 else 0,
+            "stocks_included": stocks_included,
+            "stocks_skipped": len(allocations) - stocks_included,
+        },
+        "warnings": warnings,
+    }
+
+
+def calculate_rebalance_with_banding(
+    current_holdings: list,
+    new_investment: float,
+    ranked_stocks: list,
+    price_lookup: dict,
+    buy_threshold: int = 10,
+    sell_threshold: int = 20,
+) -> dict:
+    """
+    Calculate rebalancing trades using banding logic.
+    
+    Banding rules (from Börslabbet):
+    - HOLD: Stocks still in top 20
+    - SELL: Stocks that fell below rank 20 (or not in universe)
+    - BUY: Fill to 10 stocks from top-ranked not already held
+    
+    Args:
+        current_holdings: List of {ticker, shares, avg_price?}
+        new_investment: Additional cash to invest (can be 0)
+        ranked_stocks: List of stocks ranked by momentum
+        price_lookup: Dict of ticker -> current price
+        buy_threshold: Target portfolio size (default 10)
+        sell_threshold: Sell when rank exceeds this (default 20)
+    
+    Returns:
+        dict with hold/sell/buy recommendations and share counts
+    """
+    # Build rank lookup
+    rank_lookup = {s['ticker']: i + 1 for i, s in enumerate(ranked_stocks)}
+    
+    # Analyze current holdings
+    hold = []
+    sell = []
+    current_value = 0
+    
+    for h in current_holdings:
+        ticker = h['ticker']
+        shares = h.get('shares', 0)
+        price = price_lookup.get(ticker, 0)
+        value = shares * price
+        rank = rank_lookup.get(ticker)
+        
+        if rank is None:
+            # Stock not in universe - sell
+            sell.append({
+                'ticker': ticker,
+                'shares': shares,
+                'price': price,
+                'value': value,
+                'reason': 'not_in_universe',
+                'rank': None,
+            })
+        elif rank > sell_threshold:
+            # Below threshold - sell
+            sell.append({
+                'ticker': ticker,
+                'shares': shares,
+                'price': price,
+                'value': value,
+                'reason': 'below_threshold',
+                'rank': rank,
+            })
+        else:
+            # Keep
+            hold.append({
+                'ticker': ticker,
+                'shares': shares,
+                'price': price,
+                'value': value,
+                'rank': rank,
+            })
+            current_value += value
+    
+    # Calculate available cash
+    sell_proceeds = sum(s['value'] for s in sell)
+    total_cash = new_investment + sell_proceeds
+    
+    # How many slots to fill?
+    slots_to_fill = buy_threshold - len(hold)
+    
+    # Find stocks to buy
+    held_tickers = set(h['ticker'] for h in hold)
+    buy = []
+    
+    if slots_to_fill > 0 and total_cash > 0:
+        # Target value per new stock
+        target_per_stock = total_cash / slots_to_fill if slots_to_fill > 0 else 0
+        
+        for stock in ranked_stocks:
+            if slots_to_fill <= 0:
+                break
+            if stock['ticker'] in held_tickers:
+                continue
+            
+            price = price_lookup.get(stock['ticker'], 0)
+            if price <= 0:
+                continue
+            
+            # Calculate shares to buy
+            shares = int(target_per_stock // price) if target_per_stock > 0 else 0
+            if shares > 0:
+                value = shares * price
+                buy.append({
+                    'ticker': stock['ticker'],
+                    'name': stock.get('name', ''),
+                    'rank': rank_lookup.get(stock['ticker']),
+                    'price': price,
+                    'shares': shares,
+                    'value': value,
+                })
+                total_cash -= value
+                slots_to_fill -= 1
+    
+    # Calculate final portfolio
+    final_portfolio = []
+    total_value = current_value + sum(b['value'] for b in buy)
+    
+    for h in hold:
+        weight = (h['value'] / total_value * 100) if total_value > 0 else 0
+        final_portfolio.append({**h, 'action': 'HOLD', 'weight': round(weight, 1)})
+    
+    for b in buy:
+        weight = (b['value'] / total_value * 100) if total_value > 0 else 0
+        final_portfolio.append({**b, 'action': 'BUY', 'weight': round(weight, 1)})
+    
+    final_portfolio.sort(key=lambda x: x.get('rank') or 999)
+    
+    return {
+        'mode': 'banding',
+        'current_holdings_count': len(current_holdings),
+        'hold': hold,
+        'sell': sell,
+        'buy': buy,
+        'final_portfolio': final_portfolio,
+        'summary': {
+            'stocks_held': len(hold),
+            'stocks_sold': len(sell),
+            'stocks_bought': len(buy),
+            'sell_proceeds': round(sell_proceeds, 2),
+            'new_investment': round(new_investment, 2),
+            'total_cash_used': round(sum(b['value'] for b in buy), 2),
+            'cash_remaining': round(total_cash, 2),
+            'final_portfolio_value': round(total_value, 2),
+            'final_stock_count': len(final_portfolio),
+        },
+    }

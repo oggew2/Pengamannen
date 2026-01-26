@@ -7,6 +7,7 @@ import { api } from '../api/client';
 import { useStrategies, useStrategyRankings, useBacktest, queryKeys } from '../api/hooks';
 import { Pagination } from '../components/Pagination';
 import { DataIntegrityBanner } from '../components/DataIntegrityBanner';
+import { AllocationCalculator } from '../components/AllocationCalculator';
 import type { StrategyMeta } from '../types';
 
 const STRATEGY_INFO: Record<string, { description: string; rules: string[] }> = {
@@ -243,6 +244,9 @@ export function StrategyPage() {
           </Box>
         </Box>
       </Box>
+
+      {/* Allocation Calculator - only for momentum */}
+      {type === 'momentum' && <AllocationCalculator />}
 
       {/* Full Rankings */}
       {stocks.length > 10 && (() => {

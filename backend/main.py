@@ -176,13 +176,18 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 # Auth middleware - protect all API routes except auth endpoints and health
 class AuthMiddleware(BaseHTTPMiddleware):
-    OPEN_PATHS = {"/v1/auth/login", "/v1/auth/register", "/v1/auth/logout", "/v1/auth/me", "/v1/health", "/health", "/", "/favicon.ico"}
+    OPEN_PATHS = {"/v1/auth/login", "/v1/auth/register", "/v1/auth/logout", "/v1/auth/me", "/v1/health", "/health", "/", "/favicon.ico", "/v1/strategies"}
+    OPEN_PREFIXES = ("/v1/strategies/nordic/",)  # All Nordic momentum endpoints
     
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         
         # Allow open paths and static assets
         if path in self.OPEN_PATHS or path.startswith("/assets") or not path.startswith("/v1"):
+            return await call_next(request)
+        
+        # Allow open prefixes (Nordic momentum endpoints)
+        if any(path.startswith(prefix) for prefix in self.OPEN_PREFIXES):
             return await call_next(request)
         
         # Check auth cookie
@@ -481,6 +486,235 @@ def get_alerts_history(
     """Get historical data alerts."""
     from services.alerting import get_alert_history
     return get_alert_history(db, limit=limit, include_resolved=include_resolved)
+
+
+# =============================================================================
+# NORDIC STRATEGIES
+# =============================================================================
+
+@v1_router.get("/strategies/nordic/momentum")
+def get_nordic_momentum(response: Response, db: Session = Depends(get_db)):
+    """
+    Get Nordic Sammansatt Momentum rankings.
+    
+    Fetches fresh data from TradingView for Sweden, Finland, Norway, Denmark.
+    Applies 2B SEK market cap filter, excludes Finance sector, F-Score > 3.
+    
+    Returns top 10 stocks ranked by composite momentum (avg of 3M, 6M, 12M returns).
+    """
+    logger.info("GET /strategies/nordic/momentum")
+    
+    from services.ranking_cache import compute_nordic_momentum
+    
+    try:
+        result = compute_nordic_momentum(db)
+        
+        if 'error' in result:
+            raise HTTPException(status_code=500, detail=result['error'])
+        
+        # Cache for 5 minutes (data is fetched fresh each time)
+        response.headers["Cache-Control"] = "public, max-age=300"
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Nordic momentum error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@v1_router.get("/strategies/nordic/universe")
+def get_nordic_universe(response: Response):
+    """
+    Get the full Nordic stock universe (before strategy filters).
+    
+    Returns all stocks from Sweden, Finland, Norway, Denmark above 2B SEK market cap.
+    """
+    logger.info("GET /strategies/nordic/universe")
+    
+    from services.tradingview_fetcher import TradingViewFetcher
+    
+    try:
+        fetcher = TradingViewFetcher()
+        stocks = fetcher.fetch_nordic(min_market_cap_sek=2e9)
+        
+        # Summarize by market
+        by_market = {}
+        for s in stocks:
+            m = s.get('market', 'unknown')
+            by_market[m] = by_market.get(m, 0) + 1
+        
+        response.headers["Cache-Control"] = "public, max-age=300"
+        
+        return {
+            "total": len(stocks),
+            "by_market": by_market,
+            "stocks": [
+                {
+                    "ticker": s['ticker'],
+                    "name": s['name'],
+                    "market": s['market'],
+                    "market_cap_sek": s['market_cap_sek'],
+                    "sector": s['sector'],
+                }
+                for s in sorted(stocks, key=lambda x: x.get('market_cap_sek', 0), reverse=True)
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Nordic universe error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@v1_router.get("/strategies/nordic/momentum/banded")
+def get_nordic_momentum_banded(response: Response, db: Session = Depends(get_db)):
+    """
+    Get Nordic momentum with banding recommendations.
+    
+    Banding rules (from Börslabbet):
+    - Buy: Top 10 stocks by momentum
+    - Sell: Only when stock falls below rank 20
+    - This reduces turnover while maintaining returns
+    
+    Returns current portfolio state and recommended actions (hold/buy/sell).
+    """
+    logger.info("GET /strategies/nordic/momentum/banded")
+    
+    from services.ranking_cache import compute_nordic_momentum_banded
+    
+    try:
+        result = compute_nordic_momentum_banded(db)
+        
+        if 'error' in result:
+            raise HTTPException(status_code=500, detail=result['error'])
+        
+        response.headers["Cache-Control"] = "public, max-age=300"
+        return result
+        
+    except Exception as e:
+        logger.error(f"Nordic momentum banded error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@v1_router.post("/strategies/nordic/momentum/allocate")
+def allocate_nordic_momentum(
+    request: dict,
+    response: Response,
+):
+    """
+    Calculate portfolio allocation for Nordic momentum strategy.
+    
+    Input: {"amount": 100000, "excluded_tickers": ["TICKER1"]}
+    
+    Returns share counts for equal-weight allocation (~10% per stock).
+    Handles expensive stocks by flagging them and suggesting alternatives.
+    """
+    logger.info(f"POST /strategies/nordic/momentum/allocate: {request}")
+    
+    from services.ranking_cache import compute_nordic_momentum, calculate_allocation
+    
+    try:
+        amount = request.get('amount', 0)
+        excluded = set(request.get('excluded_tickers', []))
+        
+        if amount <= 0:
+            raise HTTPException(status_code=400, detail="Amount must be positive")
+        
+        # Get current rankings
+        result = compute_nordic_momentum(db=None)
+        if 'error' in result:
+            raise HTTPException(status_code=500, detail=result['error'])
+        
+        # Filter out excluded tickers and add price data
+        stocks = []
+        for r in result['rankings']:
+            if r['ticker'] not in excluded:
+                stocks.append({
+                    'ticker': r['ticker'],
+                    'name': r['name'],
+                    'price': r.get('price') or r.get('market_cap_sek', 0) / 1e6,  # Fallback
+                    'momentum': r['momentum'],
+                    'market': r['market'],
+                })
+        
+        # Get actual prices from TradingView
+        from services.tradingview_fetcher import TradingViewFetcher
+        fetcher = TradingViewFetcher()
+        all_stocks = fetcher.fetch_nordic(min_market_cap_sek=2e9)
+        price_lookup = {s['ticker']: s.get('close', 0) for s in all_stocks}
+        
+        for s in stocks:
+            s['price'] = price_lookup.get(s['ticker'], 0)
+        
+        # Calculate allocation
+        allocation = calculate_allocation(amount, stocks)
+        
+        response.headers["Cache-Control"] = "no-cache"
+        return allocation
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Allocation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@v1_router.post("/strategies/nordic/momentum/rebalance")
+def rebalance_nordic_momentum(request: dict, response: Response):
+    """
+    Calculate rebalancing trades using banding logic.
+    
+    Input: {
+        "holdings": [{"ticker": "BITTI", "shares": 100}, ...],
+        "new_investment": 50000
+    }
+    
+    Returns hold/sell/buy recommendations with share counts.
+    """
+    logger.info(f"POST /strategies/nordic/momentum/rebalance: {request}")
+    
+    from services.ranking_cache import calculate_rebalance_with_banding
+    from services.tradingview_fetcher import TradingViewFetcher
+    import pandas as pd
+    
+    try:
+        holdings = request.get('holdings', [])
+        new_investment = request.get('new_investment', 0)
+        
+        if not holdings and new_investment <= 0:
+            raise HTTPException(status_code=400, detail="Need holdings or new investment")
+        
+        # Fetch and rank all stocks (need full list for banding threshold check)
+        fetcher = TradingViewFetcher()
+        stocks = fetcher.fetch_nordic(min_market_cap_sek=2e9)
+        
+        if not stocks:
+            raise HTTPException(status_code=500, detail="No data available")
+        
+        df = pd.DataFrame(stocks)
+        df = df[df['sector'] != 'Finance']
+        df['momentum'] = (df['perf_3m'].fillna(0) + df['perf_6m'].fillna(0) + df['perf_12m'].fillna(0)) / 3
+        df = df[df['piotroski_f_score'].fillna(0) >= 5]
+        df = df.sort_values('momentum', ascending=False)
+        
+        # Build ranked list (all stocks, not just top 10)
+        ranked_stocks = [{'ticker': row['ticker'], 'name': row['name']} for _, row in df.iterrows()]
+        price_lookup = {s['ticker']: s.get('close', 0) for s in stocks}
+        
+        rebalance = calculate_rebalance_with_banding(
+            current_holdings=holdings,
+            new_investment=new_investment,
+            ranked_stocks=ranked_stocks,
+            price_lookup=price_lookup,
+        )
+        
+        response.headers["Cache-Control"] = "no-cache"
+        return rebalance
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Rebalance error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @v1_router.get("/strategies/{name}/validate")

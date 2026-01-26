@@ -12,10 +12,10 @@ import { tokens } from '../theme/tokens';
 
 const STRATEGY_ROUTES: Record<string, string> = {
   sammansatt_momentum: '/strategies/momentum',
-  trendande_varde: '/strategies/value',
-  trendande_utdelning: '/strategies/dividend',
-  trendande_kvalitet: '/strategies/quality',
 };
+
+// Only show momentum strategy
+const ALLOWED_STRATEGIES = ['sammansatt_momentum'];
 
 export function Dashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState('1Y');
@@ -137,7 +137,7 @@ export function Dashboard() {
 
       {/* Compact Strategy Row */}
       <HStack gap="12px" overflowX="auto" pb="4px">
-        {strategies.map((strategy: StrategyMeta) => {
+        {strategies.filter((s: StrategyMeta) => ALLOWED_STRATEGIES.includes(s.name)).map((strategy: StrategyMeta) => {
           const ytd = strategy.backtest_annual_return_pct || 0;
           return (
             <Link key={strategy.name} to={STRATEGY_ROUTES[strategy.name] || '/'}>

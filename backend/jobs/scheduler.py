@@ -209,6 +209,17 @@ def sync_job(is_retry: bool = False):
             # No issues - resolve any old alerts
             resolve_old_alerts(db)
             
+        # Sync Nordic momentum rankings
+        try:
+            from services.ranking_cache import compute_nordic_momentum
+            nordic_result = compute_nordic_momentum(db)
+            if nordic_result.get('error'):
+                logger.error(f"Nordic momentum sync failed: {nordic_result['error']}")
+            else:
+                logger.info(f"Nordic momentum synced: {len(nordic_result.get('rankings', []))} stocks")
+        except Exception as nordic_err:
+            logger.error(f"Nordic momentum sync error: {nordic_err}")
+        
         # CRITICAL FIX: Force memory cleanup after sync
         import gc
         gc.collect()

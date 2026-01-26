@@ -138,3 +138,37 @@ strategies:
 # - Core strategy logic: Unchanged since 2020-2021 (only universe threshold updated)
 # - Trading cost estimate: 0.5% per rebalance (down from ~2% pre-June 2023)
 # - Sources: 15+ official Börslabbet pages verified December 2025
+
+# =============================================================================
+# NORDIC STRATEGIES
+# =============================================================================
+# Börslabbet's Nordic portfolio covers Sweden, Finland, Norway, and Denmark
+# Uses same methodology as Swedish strategies but with broader universe
+
+nordic_universe:
+  markets: ["sweden", "finland", "norway", "denmark"]
+  minimum_market_cap_sek: 2_000_000_000  # Same 2B SEK threshold, converted via FX rates
+  exclude_sectors: ["Finance"]  # Banks, insurance, investment companies
+  note: "Market caps converted to SEK using daily FX rates"
+
+  nordic_sammansatt_momentum:
+    display_name: "Nordic Sammansatt Momentum"
+    description: "Highest momentum stocks across Nordic markets, filtered by F-Score"
+    category: "momentum"
+    universe: "nordic"  # Use Nordic universe (sweden, finland, norway, denmark)
+    rebalance_frequency: "quarterly"
+    rebalance_months: [3, 6, 9, 12]
+    position_count: 10
+    weight_method: "equal"
+    
+    # Same methodology as Swedish Sammansatt Momentum
+    metrics:
+      primary:
+        - name: "momentum_3m"
+        - name: "momentum_6m"
+        - name: "momentum_12m"
+    
+    quality_filters:
+      - type: "piotroskis_f_score"
+        action: "remove_lowest"
+        threshold: 5  # F-Score >= 5 (verified against Börslabbet Jan 2026)

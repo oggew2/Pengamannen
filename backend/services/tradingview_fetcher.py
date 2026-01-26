@@ -1,5 +1,5 @@
 """
-TradingView Scanner API fetcher for Swedish stocks.
+TradingView Scanner API fetcher for Swedish and Nordic stocks.
 WARNING: Check ToS compliance before commercial use.
 """
 import requests
@@ -8,6 +8,19 @@ from typing import Dict, List, Optional
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+# Nordic market configuration
+NORDIC_MARKETS = {
+    'sweden': {'url': 'https://scanner.tradingview.com/sweden/scan', 'currency': 'SEK', 'fx_rate': 1.0},
+    'finland': {'url': 'https://scanner.tradingview.com/finland/scan', 'currency': 'EUR', 'fx_rate': 11.5},
+    'norway': {'url': 'https://scanner.tradingview.com/norway/scan', 'currency': 'NOK', 'fx_rate': 0.85},
+    'denmark': {'url': 'https://scanner.tradingview.com/denmark/scan', 'currency': 'DKK', 'fx_rate': 1.55},
+}
+
+# Financial sectors to exclude (TradingView uses English names)
+# Börslabbet excludes banks, insurance, etc. but KEEPS Investmentbolag for momentum
+FINANCIAL_SECTORS_EXCLUDE = ['Finance']
+
 
 class TradingViewFetcher:
     """Fetch fundamentals + momentum from TradingView Scanner API."""
@@ -133,6 +146,7 @@ class TradingViewFetcher:
                 'ticker': ticker,
                 'db_ticker': ticker.replace('_', ' '),  # Space format to match stocks table
                 'name': row.get('description') or row.get('name'),
+                'close': row.get('close'),  # Current price
                 'market_cap': row.get('market_cap_basic'),
                 'sector': row.get('sector'),
                 'stock_type': row.get('type'),
@@ -196,6 +210,264 @@ class TradingViewFetcher:
             score += 1
         
         return score if score > 0 else None
+
+    def fetch_nordic(self, markets: List[str] = None, min_market_cap_sek: float = 2e9) -> List[Dict]:
+        """
+        Fetch stocks from multiple Nordic markets with currency conversion.
+        
+        Args:
+            markets: List of markets to fetch from (sweden, finland, norway, denmark)
+            min_market_cap_sek: Minimum market cap in SEK (converted from local currency)
+        
+        Returns:
+            List of stocks with market_cap_sek field added
+        
+        Raises:
+            ValueError: If no valid markets specified
+        """
+        if markets is None:
+            markets = ['sweden', 'finland', 'norway', 'denmark']
+        
+        # Validate markets
+        valid_markets = [m for m in markets if m in NORDIC_MARKETS]
+        if not valid_markets:
+            raise ValueError(f"No valid markets specified. Valid options: {list(NORDIC_MARKETS.keys())}")
+        
+        # Get current FX rates
+        fx_rates = get_fx_rates()
+        
+        all_stocks = []
+        fetch_errors = []
+        
+        for market in valid_markets:
+            config = NORDIC_MARKETS[market]
+            fx_rate = fx_rates.get(config['currency'], config['fx_rate'])
+            
+            # Validate FX rate is positive
+            if fx_rate <= 0:
+                logger.error(f"Invalid FX rate for {market}: {fx_rate}")
+                fetch_errors.append(market)
+                continue
+            
+            # Calculate local currency threshold
+            min_local = min_market_cap_sek / fx_rate
+            
+            try:
+                stocks = self._fetch_market(market, config['url'], min_local)
+            except Exception as e:
+                logger.error(f"Failed to fetch {market}: {e}")
+                fetch_errors.append(market)
+                continue
+            
+            if not stocks:
+                logger.warning(f"No stocks returned for {market}")
+            
+            # Add market info and convert market cap to SEK
+            for stock in stocks:
+                stock['market'] = market
+                stock['currency'] = config['currency']
+                stock['fx_rate'] = fx_rate
+                if stock.get('market_cap') and stock['market_cap'] > 0:
+                    stock['market_cap_sek'] = stock['market_cap'] * fx_rate
+                else:
+                    stock['market_cap_sek'] = 0
+            
+            all_stocks.extend(stocks)
+            logger.info(f"Fetched {len(stocks)} stocks from {market}")
+        
+        if fetch_errors:
+            logger.warning(f"Failed to fetch from markets: {fetch_errors}")
+        
+        if not all_stocks:
+            logger.error("No stocks fetched from any market")
+            return []
+        
+        # Deduplicate dual-listed stocks (keep highest market cap listing)
+        all_stocks = self._deduplicate_stocks(all_stocks)
+        
+        # Filter by SEK market cap threshold (double-check after conversion)
+        all_stocks = [s for s in all_stocks if s.get('market_cap_sek', 0) >= min_market_cap_sek]
+        
+        logger.info(f"Total Nordic stocks after dedup and filtering: {len(all_stocks)}")
+        return all_stocks
+
+    def _fetch_market(self, market: str, url: str, min_market_cap: float, retries: int = 2) -> List[Dict]:
+        """
+        Fetch stocks from a single market with retry logic.
+        
+        Args:
+            market: Market name
+            url: TradingView scanner URL
+            min_market_cap: Minimum market cap in local currency
+            retries: Number of retry attempts on failure
+        
+        Returns:
+            List of parsed stock data
+        """
+        payload = {
+            "filter": [
+                {"left": "market_cap_basic", "operation": "greater", "right": min_market_cap},
+            ],
+            "markets": [market],
+            "symbols": {"query": {"types": ["stock", "dr"]}},
+            "columns": self.COLUMNS,
+            "sort": {"sortBy": "market_cap_basic", "sortOrder": "desc"},
+            "range": [0, 500]
+        }
+        
+        last_error = None
+        for attempt in range(retries + 1):
+            try:
+                response = self.session.post(url, json=payload, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                
+                # Validate response structure
+                if 'data' not in data:
+                    logger.warning(f"Unexpected response structure for {market}: {list(data.keys())}")
+                    return []
+                
+                return self._parse_response(data)
+                
+            except requests.exceptions.Timeout:
+                last_error = f"Timeout after 30s"
+                logger.warning(f"Timeout fetching {market} (attempt {attempt + 1}/{retries + 1})")
+            except requests.exceptions.RequestException as e:
+                last_error = str(e)
+                logger.warning(f"Request error for {market} (attempt {attempt + 1}/{retries + 1}): {e}")
+            except Exception as e:
+                last_error = str(e)
+                logger.error(f"Unexpected error fetching {market}: {e}")
+                break  # Don't retry on unexpected errors
+            
+            # Wait before retry
+            if attempt < retries:
+                import time
+                time.sleep(1)
+        
+        logger.error(f"Failed to fetch {market} after {retries + 1} attempts: {last_error}")
+        return []
+
+    def _deduplicate_stocks(self, stocks: List[Dict]) -> List[Dict]:
+        """
+        Remove dual-listed stocks and multiple share classes.
+        
+        Rules:
+        1. Cross-listed stocks (same company on multiple exchanges): keep primary exchange
+        2. Multiple share classes (A/B): keep B shares (higher liquidity in Nordics)
+        
+        Primary exchange priority: norway > sweden > finland > denmark for Norwegian companies,
+        otherwise prefer the company's home market.
+        """
+        import re
+        
+        def normalize_name(name: str) -> str:
+            """Normalize company name for matching."""
+            name = name.lower().strip()
+            # Remove common suffixes
+            name = re.sub(r'\s+(ab|asa|oyj|a/s|ltd|plc|inc|corp|corporation|holding|group)\.?$', '', name)
+            name = re.sub(r'\s+(class|ser\.?)\s*[ab]$', '', name)
+            name = re.sub(r'\s+[ab]$', '', name)  # "SSAB B" -> "SSAB"
+            return name.strip()
+        
+        def get_share_class(ticker: str, name: str) -> str:
+            """Extract share class (A, B, or None)."""
+            # Check ticker first (SSAB_A, SSAB_B)
+            if ticker.endswith('_A') or ticker.endswith('-A'):
+                return 'A'
+            if ticker.endswith('_B') or ticker.endswith('-B'):
+                return 'B'
+            # Check name
+            name_upper = name.upper()
+            if ' A' in name_upper[-3:] or 'CLASS A' in name_upper or 'SER. A' in name_upper:
+                return 'A'
+            if ' B' in name_upper[-3:] or 'CLASS B' in name_upper or 'SER. B' in name_upper:
+                return 'B'
+            return None
+        
+        def is_preferred(new_stock, existing_stock) -> bool:
+            """Determine if new_stock should replace existing_stock."""
+            new_class = get_share_class(new_stock['ticker'], new_stock.get('name', ''))
+            old_class = get_share_class(existing_stock['ticker'], existing_stock.get('name', ''))
+            
+            # Prefer B shares over A shares
+            if new_class == 'B' and old_class == 'A':
+                return True
+            if new_class == 'A' and old_class == 'B':
+                return False
+            
+            # For cross-listings, prefer primary exchange (where ticker doesn't end in 'O')
+            # Swedish cross-listings of Norwegian stocks end in 'O' (e.g., AKERO for AKER)
+            new_is_secondary = new_stock['ticker'].endswith('O') and new_stock['market'] == 'sweden'
+            old_is_secondary = existing_stock['ticker'].endswith('O') and existing_stock['market'] == 'sweden'
+            
+            if old_is_secondary and not new_is_secondary:
+                return True
+            if new_is_secondary and not old_is_secondary:
+                return False
+            
+            # Prefer higher market cap as tiebreaker
+            return new_stock.get('market_cap_sek', 0) > existing_stock.get('market_cap_sek', 0)
+        
+        seen = {}  # normalized_name -> stock
+        
+        for stock in stocks:
+            name = stock.get('name', '')
+            norm_name = normalize_name(name)
+            
+            if norm_name in seen:
+                if is_preferred(stock, seen[norm_name]):
+                    seen[norm_name] = stock
+            else:
+                seen[norm_name] = stock
+        
+        return list(seen.values())
+
+
+def get_fx_rates() -> Dict[str, float]:
+    """
+    Fetch current FX rates for Nordic currencies to SEK.
+    Falls back to hardcoded rates if API fails.
+    
+    Returns rates as: 1 local currency = X SEK
+    """
+    # Reasonable default rates (updated Jan 2026)
+    default_rates = {'SEK': 1.0, 'EUR': 11.5, 'NOK': 0.92, 'DKK': 1.55}
+    
+    try:
+        # Use exchangerate-api.com (free tier)
+        response = requests.get(
+            'https://api.exchangerate-api.com/v4/latest/SEK',
+            timeout=10
+        )
+        if response.status_code == 200:
+            data = response.json()
+            rates = data.get('rates', {})
+            
+            # Validate rates are reasonable (within 50% of defaults)
+            fetched_rates = {
+                'SEK': 1.0,
+                'EUR': 1 / rates.get('EUR', 1/11.5),
+                'NOK': 1 / rates.get('NOK', 1/0.92),
+                'DKK': 1 / rates.get('DKK', 1/1.55),
+            }
+            
+            # Sanity check: rates should be within reasonable bounds
+            for currency, rate in fetched_rates.items():
+                if currency == 'SEK':
+                    continue
+                default = default_rates[currency]
+                if rate < default * 0.5 or rate > default * 2.0:
+                    logger.warning(f"FX rate for {currency} seems off: {rate:.4f} (default: {default})")
+                    return default_rates
+            
+            logger.info(f"FX rates fetched: EUR={fetched_rates['EUR']:.4f}, NOK={fetched_rates['NOK']:.4f}, DKK={fetched_rates['DKK']:.4f}")
+            return fetched_rates
+            
+    except Exception as e:
+        logger.warning(f"Failed to fetch FX rates, using defaults: {e}")
+    
+    return default_rates
 
 
 def fetch_omxs30_performance() -> dict:

@@ -30,23 +30,32 @@ VALID_STOCK_TYPES = ['stock', 'sdb']  # Regular stocks and Swedish Depository Re
 NORWEGIAN_SUFFIXES = ['O', 'OO']  # e.g., EQNRO, NHYO, MOBAOO
 
 # Financial sectors to exclude (nyckeltal don't apply well to these)
-# For value/dividend/quality strategies - exclude all financial sectors
+# Swedish names (from Avanza) and English names (from TradingView)
 FINANCIAL_SECTORS = [
+    # Swedish names (Avanza)
     'Traditionell Bankverksamhet',
     'Investmentbolag',
     'Försäkring',
     'Sparande & Investering',
     'Kapitalförvaltning',
     'Konsumentkredit',
+    # English names (TradingView) - "Finance" covers all financial companies
+    'Finance',
 ]
 
 # For momentum strategy - Börslabbet INCLUDES Investmentbolag
+# But TradingView's "Finance" sector includes everything, so we need to be more selective
+# We'll exclude Finance but note that this excludes Investmentbolag too
+# (TradingView doesn't distinguish between banks and investment companies)
 FINANCIAL_SECTORS_MOMENTUM = [
+    # Swedish names (Avanza)
     'Traditionell Bankverksamhet',
     'Försäkring',
     'Sparande & Investering',
     'Kapitalförvaltning',
     'Konsumentkredit',
+    # English names (TradingView)
+    'Finance',  # Note: This excludes Investmentbolag too, but necessary for Nordic
 ]
 
 

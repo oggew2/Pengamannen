@@ -46,7 +46,87 @@ export const api = {
   
   // Backtesting
   runBacktest: (req: BacktestRequest) => postJson<BacktestResult>('/backtesting/run', req),
+  
+  // Nordic allocation
+  calculateAllocation: (amount: number, excludedTickers?: string[]) => 
+    postJson<AllocationResponse>('/strategies/nordic/momentum/allocate', { amount, excluded_tickers: excludedTickers || [] }),
+  
+  // Nordic rebalance (banding mode)
+  calculateRebalance: (holdings: { ticker: string; shares: number }[], newInvestment: number) =>
+    postJson<RebalanceResponse>('/strategies/nordic/momentum/rebalance', { holdings, new_investment: newInvestment }),
 };
+
+// Allocation types
+export interface AllocationStock {
+  rank: number;
+  ticker: string;
+  name: string;
+  price: number;
+  shares: number;
+  target_amount: number;
+  actual_amount: number;
+  target_weight: number;
+  actual_weight: number;
+  deviation: number;
+  too_expensive: boolean;
+  included: boolean;
+}
+
+export interface AllocationResponse {
+  investment_amount: number;
+  target_per_stock: number;
+  allocations: AllocationStock[];
+  summary: {
+    total_invested: number;
+    cash_remaining: number;
+    utilization: number;
+    stocks_included: number;
+    stocks_skipped: number;
+  };
+  warnings: string[];
+}
+
+// Rebalance (banding) types
+export interface RebalanceHolding {
+  ticker: string;
+  shares: number;
+  price: number;
+  value: number;
+  rank: number | null;
+}
+
+export interface RebalanceSell extends RebalanceHolding {
+  reason: 'not_in_universe' | 'below_threshold';
+}
+
+export interface RebalanceBuy {
+  ticker: string;
+  name: string;
+  rank: number;
+  price: number;
+  shares: number;
+  value: number;
+}
+
+export interface RebalanceResponse {
+  mode: 'banding';
+  current_holdings_count: number;
+  hold: RebalanceHolding[];
+  sell: RebalanceSell[];
+  buy: RebalanceBuy[];
+  final_portfolio: Array<RebalanceHolding & { action: 'HOLD' | 'BUY'; weight: number }>;
+  summary: {
+    stocks_held: number;
+    stocks_sold: number;
+    stocks_bought: number;
+    sell_proceeds: number;
+    new_investment: number;
+    total_cash_used: number;
+    cash_remaining: number;
+    final_portfolio_value: number;
+    final_stock_count: number;
+  };
+}
 
 // Rebalancing types
 export interface RebalanceTrade {

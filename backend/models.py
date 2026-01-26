@@ -53,7 +53,9 @@ class Stock(Base):
     avanza_id = Column(String, index=True)  # Avanza stock ID for API calls
     market_cap_msek = Column(Float)
     sector = Column(String)
-    market = Column(String, default="stockholmsborsen")  # stockholmsborsen, first_north
+    market = Column(String, default="stockholmsborsen")  # stockholmsborsen, first_north, helsinki, oslo, copenhagen
+    country = Column(String, default="sweden")  # sweden, finland, norway, denmark
+    currency = Column(String, default="SEK")  # SEK, EUR, NOK, DKK
     stock_type = Column(String, default="stock")  # stock, etf_certificate, preference, sdb
     is_active = Column(Boolean, default=True)  # False if delisted or no longer on Avanza
     last_validated = Column(Date)  # Last time we verified stock exists on Avanza
@@ -351,3 +353,24 @@ class DataAlert(Base):
     resolved = Column(Boolean, default=False)
     resolved_at = Column(DateTime, nullable=True)
     notified = Column(Boolean, default=False)  # Email sent?
+
+
+class BandingHolding(Base):
+    """Track current holdings for banding strategy.
+    
+    Banding rules (from Börslabbet):
+    - Buy: Top 10 stocks by momentum
+    - Sell: Only when stock falls below rank 20
+    - This reduces turnover while maintaining returns
+    """
+    __tablename__ = "banding_holdings"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    strategy = Column(String, index=True)  # e.g., 'nordic_sammansatt_momentum'
+    ticker = Column(String, index=True)
+    entry_rank = Column(Integer)  # Rank when added
+    entry_date = Column(Date)
+    current_rank = Column(Integer)  # Updated daily
+    last_updated = Column(Date)
+    is_active = Column(Boolean, default=True)  # False when sold
+    exit_date = Column(Date, nullable=True)
+    exit_rank = Column(Integer, nullable=True)
