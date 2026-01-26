@@ -701,12 +701,16 @@ def calculate_allocation(investment_amount: float, stocks: list, target_count: i
         actual_weight = actual_amount / investment_amount if investment_amount > 0 else 0
         deviation = actual_weight - target_weight
         
+        currency = stock.get('currency', 'SEK')
+        price_local = stock.get('price_local', price)
+        
         allocations.append({
-            "rank": stock.get('original_rank', i + 1),  # Use original rank if available
+            "rank": stock.get('original_rank', i + 1),
             "ticker": stock['ticker'],
             "name": stock.get('name', ''),
-            "price": price,
-            "currency": stock.get('currency', 'SEK'),
+            "price": price,  # Always SEK for calculations
+            "price_local": price_local if currency != 'SEK' else None,  # Original currency price
+            "currency": currency,
             "shares": shares,
             "target_amount": round(target_amount, 2),
             "actual_amount": round(actual_amount, 2),
@@ -714,7 +718,7 @@ def calculate_allocation(investment_amount: float, stocks: list, target_count: i
             "actual_weight": round(actual_weight * 100, 1),
             "deviation": round(deviation * 100, 1),
             "too_expensive": too_expensive,
-            "included": shares > 0,  # Included if buying any shares
+            "included": shares > 0,
         })
     
     # Calculate totals

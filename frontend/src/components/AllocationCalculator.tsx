@@ -110,10 +110,14 @@ export function AllocationCalculator() {
   };
 
   const formatSEK = (v: number) => new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(v) + ' kr';
-  const formatPrice = (v: number, currency: string = 'SEK') => {
-    const formatted = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(v);
-    if (currency === 'SEK') return `${formatted} kr`;
-    return `${formatted} ${currency}`;
+  const formatPrice = (priceSek: number, currency: string = 'SEK', priceLocal?: number | null) => {
+    if (currency === 'SEK' || !priceLocal) {
+      return new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(priceSek) + ' kr';
+    }
+    // Show local price with SEK equivalent
+    const localFormatted = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(priceLocal);
+    const sekFormatted = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(priceSek);
+    return `${localFormatted} ${currency} (≈${sekFormatted} kr)`;
   };
 
   const copyToClipboard = () => {
@@ -268,7 +272,7 @@ export function AllocationCalculator() {
                   <Box as="tr" key={a.ticker} borderBottom="1px solid" borderColor="border" opacity={a.too_expensive && !forceInclude.has(a.ticker) || isExcluded ? 0.5 : 1}>
                     <Box as="td" py="8px" px="4px">{a.rank}</Box>
                     <Box as="td" py="8px" px="4px"><Text fontWeight="medium">{a.ticker}</Text><Text fontSize="xs" color="fg.muted">{a.name.slice(0, 20)}</Text></Box>
-                    <Box as="td" py="8px" px="4px" textAlign="right">{formatPrice(a.price, a.currency)}</Box>
+                    <Box as="td" py="8px" px="4px" textAlign="right" fontSize="xs">{formatPrice(a.price, a.currency, a.price_local)}</Box>
                     <Box as="td" py="6px" px="2px" textAlign="center">
                       <HStack gap="2px" justify="center">
                         <Button size="xs" variant="ghost" onClick={() => adjustShares(a.ticker, -1)} disabled={adj.shares <= 0}>−</Button>

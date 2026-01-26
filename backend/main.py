@@ -625,25 +625,26 @@ def allocate_nordic_momentum(
         if 'error' in result:
             raise HTTPException(status_code=500, detail=result['error'])
         
-        # Get actual prices from TradingView (in SEK)
+        # Get actual prices from TradingView
         from services.tradingview_fetcher import TradingViewFetcher
         fetcher = TradingViewFetcher()
         all_stocks = fetcher.fetch_nordic(min_market_cap_sek=2e9)
-        price_lookup = {s['ticker']: s.get('price_sek') or s.get('close', 0) for s in all_stocks}
-        currency_lookup = {s['ticker']: s.get('currency', 'SEK') for s in all_stocks}
+        stock_data = {s['ticker']: s for s in all_stocks}
         
         # Build stocks list (excluding user-excluded), preserving original rank
         stocks = []
         for i, r in enumerate(result['rankings'], start=1):
             if r['ticker'] not in excluded:
+                data = stock_data.get(r['ticker'], {})
                 stocks.append({
                     'ticker': r['ticker'],
                     'name': r['name'],
-                    'price_sek': price_lookup.get(r['ticker'], 0),
-                    'currency': currency_lookup.get(r['ticker'], 'SEK'),
+                    'price_sek': data.get('price_sek') or data.get('close', 0),
+                    'price_local': data.get('close', 0),  # Original currency price
+                    'currency': data.get('currency', 'SEK'),
                     'momentum': r['momentum'],
                     'market': r['market'],
-                    'original_rank': i,  # Preserve original momentum rank
+                    'original_rank': i,
                 })
         
         # Calculate allocation

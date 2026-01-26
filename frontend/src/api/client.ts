@@ -63,6 +63,7 @@ export interface AllocationStock {
   ticker: string;
   name: string;
   price: number;
+  price_local?: number | null;  // Original currency price for non-SEK
   currency?: string;
   shares: number;
   target_amount: number;
