@@ -1673,6 +1673,64 @@ def add_to_watchlist(request: Request, watchlist_id: int, ticker: str, notes: st
     return {"status": "added", "ticker": ticker}
 
 
+# Momentum Portfolio - persistent storage for locked-in holdings
+@v1_router.get("/user/momentum-portfolio")
+def get_momentum_portfolio(request: Request, db: Session = Depends(get_db)):
+    """Get user's saved momentum portfolio holdings."""
+    from services.auth import require_auth
+    import json
+    
+    user = require_auth(request, db)
+    
+    # Check for existing momentum portfolio
+    portfolio = db.query(UserPortfolio).filter(
+        UserPortfolio.user_id == str(user.id),
+        UserPortfolio.name == "momentum_locked"
+    ).first()
+    
+    if not portfolio or not portfolio.holdings:
+        return {"holdings": [], "updated_at": None}
+    
+    try:
+        holdings = json.loads(portfolio.holdings)
+    except:
+        holdings = []
+    
+    return {
+        "holdings": holdings,
+        "updated_at": portfolio.updated_at.isoformat() if portfolio.updated_at else None
+    }
+
+
+@v1_router.post("/user/momentum-portfolio")
+def save_momentum_portfolio(request: Request, body: dict, db: Session = Depends(get_db)):
+    """Save user's momentum portfolio holdings."""
+    from services.auth import require_auth
+    import json
+    
+    user = require_auth(request, db)
+    holdings = body.get("holdings", [])
+    
+    # Find or create momentum portfolio
+    portfolio = db.query(UserPortfolio).filter(
+        UserPortfolio.user_id == str(user.id),
+        UserPortfolio.name == "momentum_locked"
+    ).first()
+    
+    if not portfolio:
+        portfolio = UserPortfolio(
+            user_id=str(user.id),
+            name="momentum_locked",
+            description="Locked momentum portfolio for rebalancing"
+        )
+        db.add(portfolio)
+    
+    portfolio.holdings = json.dumps(holdings)
+    db.commit()
+    
+    return {"status": "saved", "count": len(holdings)}
+
+
 # Analytics & Visualization
 @v1_router.get("/analytics/sector-allocation")
 def get_sector_allocation(strategy: str = None, db: Session = Depends(get_db)):

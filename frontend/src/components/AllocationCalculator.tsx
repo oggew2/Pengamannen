@@ -208,14 +208,14 @@ export function AllocationCalculator() {
             <Box><Text fontSize="xs" color="fg.muted">Max avvikelse</Text><Text fontWeight="semibold" color={result.summary.max_deviation > 5 ? 'red.400' : result.summary.max_deviation > 2 ? 'yellow.400' : 'green.400'}>{result.summary.max_deviation}%</Text></Box>
             {result.summary.commission_start && <Box><Text fontSize="xs" color="fg.muted">Courtage (Avanza)</Text><Text fontWeight="semibold" fontSize="xs">{result.summary.commission_start} kr <Text as="span" color="fg.muted">(Start)</Text></Text><Text fontSize="xs" color="fg.muted">{result.summary.commission_mini} kr (Mini) · {result.summary.commission_small} kr (Small)</Text></Box>}
             <Button size="xs" variant="outline" colorPalette="gray" onClick={copyToClipboard}>📋 Kopiera</Button>
-            <Button size="xs" variant={lockedIn ? 'solid' : 'outline'} colorPalette={lockedIn ? 'green' : 'blue'} onClick={() => {
+            <Button size="xs" variant={lockedIn ? 'solid' : 'outline'} colorPalette={lockedIn ? 'green' : 'blue'} onClick={async () => {
               const allocations = result.allocations.filter(a => a.included || (shareAdjustments[a.ticker] || 0) > 0).map(a => ({
                 ticker: a.ticker,
                 shares: shareAdjustments[a.ticker] ?? a.shares,
                 price: a.price,
                 rank: a.rank
               }));
-              lockIn(allocations);
+              await lockIn(allocations);
               setLockedIn(true);
             }}>{lockedIn ? '✓ Inlåst' : '🔒 Lås in portfölj'}</Button>
             {hasAdj && <Button size="xs" variant="outline" colorPalette="gray" onClick={() => setShareAdjustments({})}>Återställ</Button>}

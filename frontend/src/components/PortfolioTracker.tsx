@@ -95,36 +95,54 @@ export function PortfolioTracker() {
   
   const showVolumeWarning = isHighVolumeWarning();
 
-  // Load holdings from localStorage (and listen for changes)
+  // Load holdings from database (with localStorage fallback)
   useEffect(() => {
-    const loadHoldings = () => {
+    const loadHoldings = async () => {
+      try {
+        // Try database first
+        const res = await fetch('/v1/user/momentum-portfolio', { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.holdings && data.holdings.length > 0) {
+            setHoldings(data.holdings);
+            // Sync to localStorage for offline access
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data.holdings));
+            return;
+          }
+        }
+      } catch { /* fallback to localStorage */ }
+      
+      // Fallback to localStorage
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         try {
           setHoldings(JSON.parse(saved));
         } catch { /* ignore */ }
-      } else {
-        setHoldings([]);
       }
     };
     
     loadHoldings();
-    
-    // Listen for storage changes (cross-tab)
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) loadHoldings();
-    };
-    window.addEventListener('storage', handleStorage);
     
     // Listen for custom event (same-tab lock-in)
     const handleLockIn = () => loadHoldings();
     window.addEventListener('portfolio-locked-in', handleLockIn);
     
     return () => {
-      window.removeEventListener('storage', handleStorage);
       window.removeEventListener('portfolio-locked-in', handleLockIn);
     };
   }, []);
+
+  // Save to database when holdings change
+  const saveToDatabase = async (newHoldings: LockedHolding[]) => {
+    try {
+      await fetch('/v1/user/momentum-portfolio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ holdings: newHoldings })
+      });
+    } catch { /* ignore - localStorage is backup */ }
+  };
 
   const clearHoldings = () => {
     if (!confirm('Vill du rensa din sparade portfölj?')) return;
@@ -133,6 +151,7 @@ export function PortfolioTracker() {
     setError(null);
     setLastChecked(null);
     localStorage.removeItem(STORAGE_KEY);
+    saveToDatabase([]);  // Clear from database too
   };
 
   const checkRebalance = async () => {
@@ -257,6 +276,7 @@ export function PortfolioTracker() {
       );
     setHoldings(newHoldings);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newHoldings));
+    saveToDatabase(newHoldings);  // Save to database
     setExecutedTrades({ sells: [], buys: [] });
     setRebalanceData(null);
     window.dispatchEvent(new Event('portfolio-locked-in'));
@@ -507,7 +527,7 @@ export function PortfolioTracker() {
 
 // Hook to lock in holdings from AllocationCalculator
 export function useLockInPortfolio() {
-  const lockIn = (allocations: Array<{ ticker: string; shares: number; price: number; rank: number }>) => {
+  const lockIn = async (allocations: Array<{ ticker: string; shares: number; price: number; rank: number }>) => {
     const holdings: LockedHolding[] = allocations
       .filter(a => a.shares > 0)
       .map(a => ({
@@ -518,6 +538,17 @@ export function useLockInPortfolio() {
         rankAtPurchase: a.rank
       }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(holdings));
+    
+    // Save to database
+    try {
+      await fetch('/v1/user/momentum-portfolio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ holdings })
+      });
+    } catch { /* localStorage is backup */ }
+    
     // Dispatch event for same-tab listeners
     window.dispatchEvent(new Event('portfolio-locked-in'));
     return holdings.length;
