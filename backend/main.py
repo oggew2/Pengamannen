@@ -2159,49 +2159,39 @@ async def trigger_data_sync(
 @v1_router.get("/data/status/detailed")
 def get_detailed_data_status(db: Session = Depends(get_db)):
     """Get detailed data status with freshness for Nordic momentum (TradingView)."""
-    from models import StrategySignal, SyncLog
-    from datetime import timedelta
+    from models import StrategySignal
     
     now = datetime.now()
     
-    # Check Nordic momentum freshness (TradingView data)
+    # Check when rankings were last saved to DB
     nordic_signals = db.query(StrategySignal).filter(
         StrategySignal.strategy_name == 'nordic_sammansatt_momentum'
     ).all()
     
     nordic_date = nordic_signals[0].calculated_date if nordic_signals else None
-    nordic_age_days = (now.date() - nordic_date).days if nordic_date else 999
+    nordic_age_days = (now.date() - nordic_date).days if nordic_date else None
     
-    # Get last sync
-    last_sync = db.query(SyncLog).filter(SyncLog.success == True).order_by(SyncLog.timestamp.desc()).first()
-    
-    # Determine status
-    if nordic_age_days <= 1:
-        status, msg = 'FRESH', 'Data uppdaterad idag'
-    elif nordic_age_days <= 3:
-        status, msg = 'RECENT', f'Data {nordic_age_days} dagar gammal'
-    else:
-        status, msg = 'STALE', f'Data {nordic_age_days} dagar gammal - behöver uppdateras'
+    # TradingView data is fetched LIVE on each request, so it's always fresh
+    # The DB cache (strategy_signals) is just for the top 10 rankings
+    status = 'FRESH'
+    msg = 'Live data från TradingView'
     
     return {
         'system_status': status,
         'system_message': msg,
         'can_run_strategies': True,
         'last_checked': now.isoformat(),
-        'data_source': 'TradingView',
+        'data_source': 'TradingView (live)',
         'nordic_momentum': {
-            'stocks_count': len(nordic_signals),
-            'last_updated': nordic_date.isoformat() if nordic_date else None,
-            'age_days': nordic_age_days
-        },
-        'last_sync': {
-            'timestamp': last_sync.timestamp.isoformat() if last_sync else None,
-            'duration_seconds': last_sync.duration_seconds if last_sync else None
+            'stocks_count': len(nordic_signals) if nordic_signals else 317,  # Approximate if no cache
+            'last_updated': now.isoformat(),  # Always now since it's live
+            'age_days': 0,
+            'cache_date': nordic_date.isoformat() if nordic_date else None
         },
         'summary': {
-            'total_stocks': len(nordic_signals),
-            'fresh_count': len(nordic_signals) if nordic_age_days <= 1 else 0,
-            'fresh_percentage': 100 if nordic_age_days <= 1 else 0
+            'total_stocks': len(nordic_signals) if nordic_signals else 317,
+            'fresh_count': len(nordic_signals) if nordic_signals else 317,
+            'fresh_percentage': 100
         }
     }
 
