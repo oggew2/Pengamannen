@@ -423,6 +423,8 @@ def compute_nordic_momentum(db=None) -> dict:
             'name': row['name'],
             'market': row['market'],
             'currency': row['currency'],
+            'price': row.get('price_sek') or row.get('close', 0),  # Price in SEK
+            'price_local': row.get('close', 0),  # Price in local currency
             'market_cap_sek': row['market_cap_sek'],
             'momentum': row['momentum'],
             'perf_3m': row['perf_3m'],
@@ -650,7 +652,7 @@ def calculate_allocation(investment_amount: float, stocks: list, target_count: i
     warnings = []
     
     for i, stock in enumerate(stocks[:target_count]):
-        price = stock.get('price') or stock.get('close') or 0
+        price = stock.get('price_sek') or stock.get('price') or stock.get('close') or 0
         
         if price <= 0:
             warnings.append(f"{stock['ticker']}: No price data")

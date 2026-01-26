@@ -271,6 +271,11 @@ class TradingViewFetcher:
                     stock['market_cap_sek'] = stock['market_cap'] * fx_rate
                 else:
                     stock['market_cap_sek'] = 0
+                # Convert price to SEK for allocation calculations
+                if stock.get('close') and stock['close'] > 0:
+                    stock['price_sek'] = stock['close'] * fx_rate
+                else:
+                    stock['price_sek'] = 0
             
             all_stocks.extend(stocks)
             logger.info(f"Fetched {len(stocks)} stocks from {market}")
