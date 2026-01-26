@@ -112,11 +112,11 @@ export function AllocationCalculator() {
   const formatSEK = (v: number) => new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(v) + ' kr';
   const formatPrice = (priceSek: number, currency: string = 'SEK', priceLocal?: number | null) => {
     if (currency === 'SEK' || !priceLocal) {
-      return new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(priceSek) + ' kr';
+      return new Intl.NumberFormat('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(priceSek) + ' kr';
     }
     // Show local price with SEK equivalent
-    const localFormatted = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(priceLocal);
-    const sekFormatted = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(priceSek);
+    const localFormatted = new Intl.NumberFormat('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(priceLocal);
+    const sekFormatted = new Intl.NumberFormat('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(priceSek);
     return `${localFormatted} ${currency} (≈${sekFormatted} kr)`;
   };
 
