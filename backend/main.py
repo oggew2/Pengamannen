@@ -648,9 +648,9 @@ def allocate_nordic_momentum(
         # Calculate allocation
         allocation = calculate_allocation(amount, stocks, force_include=force_include)
         
-        # Add substitutes (rank 11-15) for user to choose from
+        # Add substitutes (rank 11-20) for user to choose from
         substitutes = []
-        for i, r in enumerate(result['rankings'][10:15], start=11):
+        for i, r in enumerate(result['rankings'][10:20], start=11):
             if r['ticker'] not in excluded:
                 substitutes.append({
                     'rank': i,

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Box, Text, Button, VStack, HStack, Input, Textarea } from '@chakra-ui/react';
 import { api, type AllocationResponse, type AllocationStock, type RebalanceResponse } from '../api/client';
 import { useLockInPortfolio } from './PortfolioTracker';
@@ -18,6 +18,7 @@ export function AllocationCalculator() {
   const [shareAdjustments, setShareAdjustments] = useState<Record<string, number>>({});
   const [lockedIn, setLockedIn] = useState(false);
   const { lockIn } = useLockInPortfolio();
+  const hasCalculated = useRef(false);
 
   const parseHoldings = (text: string): { ticker: string; shares: number }[] => {
     return text.split('\n')
@@ -47,6 +48,7 @@ export function AllocationCalculator() {
         }
         const res = await api.calculateAllocation(numAmount, Array.from(excluded), Array.from(forceInclude));
         setResult(res);
+        hasCalculated.current = true;
       } else {
         const holdings = parseHoldings(holdingsText);
         const newInvestment = parseFloat(amount) || 0;
@@ -75,6 +77,20 @@ export function AllocationCalculator() {
       setExcluded(newExcluded);
     }
   };
+
+  // Auto-recalculate when exclusions change (after initial calculation)
+  useEffect(() => {
+    if (hasCalculated.current && mode === 'fresh' && result) {
+      const numAmount = parseFloat(amount);
+      if (!isNaN(numAmount) && numAmount > 0) {
+        setLoading(true);
+        api.calculateAllocation(numAmount, Array.from(excluded), Array.from(forceInclude))
+          .then(res => { setResult(res); setShareAdjustments({}); })
+          .catch(() => {})
+          .finally(() => setLoading(false));
+      }
+    }
+  }, [excluded, forceInclude]);
 
   const adjustShares = (ticker: string, delta: number) => {
     setShareAdjustments(prev => {
@@ -298,17 +314,38 @@ export function AllocationCalculator() {
             </Box>
           </Box>
           
-          {/* Substitutes */}
-          {result.substitutes && result.substitutes.length > 0 && (result.summary.stocks_skipped > 0 || excluded.size > 0) && (
-            <Box bg="blue.900/20" borderColor="blue.500" borderWidth="1px" borderRadius="md" p="12px">
-              <Text fontSize="sm" color="blue.400" fontWeight="medium" mb="8px">Ersättare (rank 11-15):</Text>
-              {result.substitutes.map((s: {rank: number; ticker: string; name: string; price: number}) => (
-                <HStack key={s.ticker} justify="space-between" fontSize="sm" mb="4px">
-                  <Text>#{s.rank} {s.ticker} <Text as="span" color="fg.muted">({s.name.slice(0, 15)})</Text></Text>
-                  <Text>{formatSEK(s.price)}</Text>
-                </HStack>
-              ))}
-              <Text fontSize="xs" color="fg.muted" mt="8px">Exkludera en aktie ovan för att inkludera ersättare</Text>
+          {/* Candidates (rank 11-20) - always visible, shadowed */}
+          {result.substitutes && result.substitutes.length > 0 && (
+            <Box 
+              bg="bg" 
+              borderRadius="md" 
+              p="12px" 
+              borderWidth="1px" 
+              borderColor="border"
+              opacity={0.6}
+              _hover={{ opacity: 0.9 }}
+              transition="opacity 0.2s"
+            >
+              <Text fontSize="xs" color="fg.muted" fontWeight="medium" mb="8px">
+                📋 Kandidater (rank 11-{10 + result.substitutes.length}) — exkludera ovan för att byta in
+              </Text>
+              <HStack gap="8px" flexWrap="wrap">
+                {result.substitutes.map((s: {rank: number; ticker: string; name: string; price: number}) => (
+                  <Box 
+                    key={s.ticker} 
+                    px="8px" 
+                    py="4px" 
+                    bg="bg.subtle" 
+                    borderRadius="4px"
+                    borderWidth="1px"
+                    borderColor="border"
+                    fontSize="xs"
+                  >
+                    <Text fontWeight="medium" display="inline">#{s.rank} {s.ticker}</Text>
+                    <Text color="fg.muted" display="inline" ml="4px">{formatSEK(s.price)}</Text>
+                  </Box>
+                ))}
+              </HStack>
             </Box>
           )}
           
