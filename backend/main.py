@@ -649,16 +649,19 @@ def allocate_nordic_momentum(
         # Calculate allocation
         allocation = calculate_allocation(amount, stocks, force_include=force_include)
         
-        # Add substitutes (rank 11-20) for user to choose from
+        # Add substitutes: next 10 stocks NOT already in allocation
+        allocated_tickers = {a['ticker'] for a in allocation.get('allocations', [])}
         substitutes = []
-        for i, r in enumerate(result['rankings'][10:20], start=11):
-            if r['ticker'] not in excluded:
+        for i, r in enumerate(result['rankings'], start=1):
+            if r['ticker'] not in excluded and r['ticker'] not in allocated_tickers:
                 substitutes.append({
                     'rank': i,
                     'ticker': r['ticker'],
                     'name': r['name'],
                     'price': price_lookup.get(r['ticker'], 0),
                 })
+                if len(substitutes) >= 10:
+                    break
         allocation['substitutes'] = substitutes
         
         response.headers["Cache-Control"] = "no-cache"
