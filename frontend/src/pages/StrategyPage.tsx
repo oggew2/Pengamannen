@@ -5,7 +5,6 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useStrategies, useBacktest, queryKeys } from '../api/hooks';
-import { Pagination } from '../components/Pagination';
 import { DataIntegrityBanner } from '../components/DataIntegrityBanner';
 import { AllocationCalculator } from '../components/AllocationCalculator';
 import type { StrategyMeta } from '../types';
@@ -199,15 +198,25 @@ export function StrategyPage() {
       {/* Current Holdings */}
       <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="8px" p="24px">
         <Flex justify="space-between" align="center" mb="16px">
-          <Text fontSize="lg" fontWeight="semibold" color="fg">Current Top 10</Text>
+          <HStack gap="8px">
+            <Text fontSize="lg" fontWeight="semibold" color="fg">Rankings</Text>
+            <HStack gap="4px">
+              {['1-10', '11-20', '21-30', '31-40'].map((range, idx) => (
+                <Button key={range} size="xs" variant={rankingsPage === idx + 1 ? 'solid' : 'outline'} onClick={() => setRankingsPage(idx + 1)}>
+                  {range}
+                </Button>
+              ))}
+            </HStack>
+          </HStack>
           <Button size="sm" variant="outline" borderColor="brand.500" color="brand.500" onClick={() => {
-            const csv = ['Rank,Ticker,Name,1M,3M,6M', ...stocks.slice(0, 10).map((s, i) => {
+            const start = (rankingsPage - 1) * 10;
+            const csv = ['Rank,Ticker,Name,1M,3M,6M', ...stocks.slice(start, start + 10).map((s) => {
               const d = stockDetails[s.ticker];
-              return `${i+1},${s.ticker},${s.name || ''},${d?.return_1m?.toFixed(4) || ''},${d?.return_3m?.toFixed(4) || ''},${d?.return_6m?.toFixed(4) || ''}`;
+              return `${s.rank},${s.ticker},${s.name || ''},${d?.return_1m?.toFixed(4) || ''},${d?.return_3m?.toFixed(4) || ''},${d?.return_6m?.toFixed(4) || ''}`;
             })].join('\n');
             const blob = new Blob([csv], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
-            const a = document.createElement('a'); a.href = url; a.download = `${apiName}_top10.csv`; a.click();
+            const a = document.createElement('a'); a.href = url; a.download = `${apiName}_${rankingsPage * 10 - 9}-${rankingsPage * 10}.csv`; a.click();
           }}>
             Export CSV
           </Button>
@@ -226,11 +235,11 @@ export function StrategyPage() {
               </Box>
             </Box>
             <Box as="tbody">
-              {stocks.slice(0, 10).map((stock, i) => {
+              {stocks.slice((rankingsPage - 1) * 10, rankingsPage * 10).map((stock) => {
                 const details = stockDetails[stock.ticker];
                 return (
                   <Box as="tr" key={stock.ticker} borderTop="1px solid" borderColor="border">
-                    <Box as="td" p="12px" color="fg.muted">{i + 1}</Box>
+                    <Box as="td" p="12px" color="fg.muted">{stock.rank}</Box>
                     <Box as="td" p="12px">
                       <Link to={`/stock/${stock.ticker}`}>
                         <Text color="brand.500" fontWeight="medium" fontFamily="mono">{stock.ticker.replace('.ST', '')}</Text>
@@ -256,57 +265,6 @@ export function StrategyPage() {
 
       {/* Allocation Calculator - only for momentum */}
       {type === 'momentum' && <AllocationCalculator />}
-
-      {/* Full Rankings */}
-      {stocks.length > 10 && (() => {
-        const PAGE_SIZE = 10;
-        const remainingStocks = stocks.slice(10);
-        const totalPages = Math.ceil(remainingStocks.length / PAGE_SIZE);
-        const pageStocks = remainingStocks.slice((rankingsPage - 1) * PAGE_SIZE, rankingsPage * PAGE_SIZE);
-        
-        return (
-          <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="8px" p="24px">
-            <Text fontSize="lg" fontWeight="semibold" color="fg" mb="16px">Full Rankings ({stocks.length} stocks)</Text>
-            <Box overflowX="auto">
-              <Box as="table" width="100%" fontSize="sm">
-                <Box as="thead" bg="border">
-                  <Box as="tr">
-                    <Box as="th" p="8px" textAlign="left" color="fg.muted" fontWeight="medium">#</Box>
-                    <Box as="th" p="8px" textAlign="left" color="fg.muted" fontWeight="medium">Ticker</Box>
-                    <Box as="th" p="8px" textAlign="left" color="fg.muted" fontWeight="medium">Name</Box>
-                    <Box as="th" p="8px" textAlign="right" color="fg.muted" fontWeight="medium">1M</Box>
-                    <Box as="th" p="8px" textAlign="right" color="fg.muted" fontWeight="medium">3M</Box>
-                  </Box>
-                </Box>
-                <Box as="tbody">
-                  {pageStocks.map((stock, i) => {
-                    const details = stockDetails[stock.ticker];
-                    const rank = 10 + (rankingsPage - 1) * PAGE_SIZE + i + 1;
-                    return (
-                      <Box as="tr" key={stock.ticker} borderTop="1px solid" borderColor="border">
-                        <Box as="td" p="8px" color="fg.subtle" fontSize="xs">{rank}</Box>
-                        <Box as="td" p="8px">
-                          <Link to={`/stock/${stock.ticker}`}>
-                            <Text color="fg.muted" fontSize="xs" fontFamily="mono">{stock.ticker.replace('.ST', '')}</Text>
-                          </Link>
-                        </Box>
-                        <Box as="td" p="8px" color="fg.subtle" fontSize="xs">{stock.name || '—'}</Box>
-                        <Box as="td" p="8px" textAlign="right" fontSize="xs" color={details?.return_1m && details.return_1m >= 0 ? 'success.500' : 'error.500'} fontFamily="mono">
-                          {formatPct(details?.return_1m ?? null)}
-                        </Box>
-                        <Box as="td" p="8px" textAlign="right" fontSize="xs" color={details?.return_3m && details.return_3m >= 0 ? 'success.500' : 'error.500'} fontFamily="mono">
-                          {formatPct(details?.return_3m ?? null)}
-                        </Box>
-                      </Box>
-                    );
-                  })}
-                </Box>
-              </Box>
-            </Box>
-            <Pagination page={rankingsPage} totalPages={totalPages} onPageChange={setRankingsPage} />
-          </Box>
-        );
-      })()}
 
       {/* Custom Portfolio Builder */}
       <CustomPortfolioBuilder />

@@ -412,11 +412,11 @@ def compute_nordic_momentum(db=None) -> dict:
     # Rank by momentum
     df_ranked = df_quality.sort_values('momentum', ascending=False)
     
-    # Get top 10
-    top10 = df_ranked.head(10)
+    # Get top 40 for display (top 10 for portfolio, 11-40 for reference)
+    top40 = df_ranked.head(40)
     
     results = []
-    for rank, (_, row) in enumerate(top10.iterrows(), 1):
+    for rank, (_, row) in enumerate(top40.iterrows(), 1):
         results.append({
             'rank': rank,
             'ticker': row['ticker'],
@@ -432,7 +432,7 @@ def compute_nordic_momentum(db=None) -> dict:
             'sector': row['sector'],
         })
     
-    # Save to database if provided
+    # Save top 10 to database if provided
     if db:
         from models import StrategySignal
         today = date.today()
@@ -442,8 +442,8 @@ def compute_nordic_momentum(db=None) -> dict:
             StrategySignal.strategy_name == 'nordic_sammansatt_momentum'
         ).delete()
         
-        # Insert new signals
-        for r in results:
+        # Insert new signals (only top 10)
+        for r in results[:10]:
             signal = StrategySignal(
                 strategy_name='nordic_sammansatt_momentum',
                 ticker=r['ticker'],
