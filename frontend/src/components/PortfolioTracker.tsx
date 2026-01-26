@@ -162,10 +162,10 @@ export function PortfolioTracker() {
         <Text fontSize="lg" fontWeight="semibold">Min Portfölj</Text>
         {holdings.length > 0 && (
           <HStack gap="8px">
-            <Button size="xs" variant="outline" color="blue.400" borderColor="blue.400" _hover={{ bg: 'blue.900/30' }} onClick={checkRebalance} loading={loading}>
+            <Button size="xs" variant="outline" colorPalette="blue" onClick={checkRebalance} loading={loading}>
               🔄 Kolla ombalansering
             </Button>
-            <Button size="xs" variant="ghost" color="red.400" _hover={{ bg: 'red.900/30' }} onClick={clearHoldings}>
+            <Button size="xs" variant="ghost" colorPalette="red" onClick={clearHoldings}>
               Rensa
             </Button>
           </HStack>
@@ -222,7 +222,7 @@ export function PortfolioTracker() {
                   {lastChecked && <Text fontSize="xs" color="fg.muted">({lastChecked})</Text>}
                 </HStack>
                 {(rebalanceData.sells.length > 0 || rebalanceData.buys.length > 0) && (
-                  <Button size="xs" variant="outline" color="fg.muted" borderColor="border" _hover={{ bg: 'bg.muted' }} onClick={copyTrades}>
+                  <Button size="xs" variant="outline" colorPalette="gray" onClick={copyTrades}>
                     {copied ? '✓ Kopierat!' : '📋 Kopiera trades'}
                   </Button>
                 )}

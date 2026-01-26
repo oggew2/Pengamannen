@@ -61,6 +61,53 @@ const config = defineConfig({
         'border.muted': { value: '{colors.gray.500}' },
         'border.subtle': { value: '{colors.gray.400}' },
         
+        // Color palettes for buttons (colorPalette prop)
+        blue: {
+          solid: { value: '#3b82f6' },
+          contrast: { value: 'white' },
+          fg: { value: '#60a5fa' },
+          muted: { value: 'rgba(59, 130, 246, 0.2)' },
+          subtle: { value: 'rgba(59, 130, 246, 0.1)' },
+          emphasized: { value: '#2563eb' },
+          focusRing: { value: '#3b82f6' },
+        },
+        green: {
+          solid: { value: '#10b981' },
+          contrast: { value: 'white' },
+          fg: { value: '#34d399' },
+          muted: { value: 'rgba(16, 185, 129, 0.2)' },
+          subtle: { value: 'rgba(16, 185, 129, 0.1)' },
+          emphasized: { value: '#059669' },
+          focusRing: { value: '#10b981' },
+        },
+        red: {
+          solid: { value: '#ef4444' },
+          contrast: { value: 'white' },
+          fg: { value: '#f87171' },
+          muted: { value: 'rgba(239, 68, 68, 0.2)' },
+          subtle: { value: 'rgba(239, 68, 68, 0.1)' },
+          emphasized: { value: '#dc2626' },
+          focusRing: { value: '#ef4444' },
+        },
+        orange: {
+          solid: { value: '#f97316' },
+          contrast: { value: 'white' },
+          fg: { value: '#fb923c' },
+          muted: { value: 'rgba(249, 115, 22, 0.2)' },
+          subtle: { value: 'rgba(249, 115, 22, 0.1)' },
+          emphasized: { value: '#ea580c' },
+          focusRing: { value: '#f97316' },
+        },
+        gray: {
+          solid: { value: '{colors.gray.500}' },
+          contrast: { value: 'white' },
+          fg: { value: '{colors.gray.200}' },
+          muted: { value: 'rgba(107, 114, 128, 0.2)' },
+          subtle: { value: 'rgba(107, 114, 128, 0.1)' },
+          emphasized: { value: '{colors.gray.600}' },
+          focusRing: { value: '{colors.gray.400}' },
+        },
+        
         // Brand color palette
         brand: {
           solid: { value: '{colors.brand.500}' },
