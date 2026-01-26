@@ -14,6 +14,7 @@ export function AllocationCalculator() {
   const [error, setError] = useState<string | null>(null);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [forceInclude, setForceInclude] = useState<Set<string>>(new Set());
+  const [shareAdjustments, setShareAdjustments] = useState<Record<string, number>>({});
 
   const parseHoldings = (text: string): { ticker: string; shares: number }[] => {
     return text.split('\n')
@@ -31,6 +32,7 @@ export function AllocationCalculator() {
     setError(null);
     setResult(null);
     setRebalanceResult(null);
+    setShareAdjustments({});
 
     try {
       if (mode === 'fresh') {
@@ -60,19 +62,48 @@ export function AllocationCalculator() {
 
   const toggleStock = (ticker: string, tooExpensive: boolean) => {
     if (tooExpensive) {
-      // Toggle force include for expensive stocks
       const newForce = new Set(forceInclude);
       newForce.has(ticker) ? newForce.delete(ticker) : newForce.add(ticker);
       setForceInclude(newForce);
     } else {
-      // Toggle exclude for normal stocks
       const newExcluded = new Set(excluded);
       newExcluded.has(ticker) ? newExcluded.delete(ticker) : newExcluded.add(ticker);
       setExcluded(newExcluded);
     }
   };
 
+  const adjustShares = (ticker: string, delta: number) => {
+    setShareAdjustments(prev => {
+      const current = prev[ticker] || 0;
+      const newVal = current + delta;
+      return { ...prev, [ticker]: newVal };
+    });
+  };
+
+  const getAdjustedAllocation = (a: AllocationStock) => {
+    const adj = shareAdjustments[a.ticker] || 0;
+    const shares = Math.max(0, a.shares + adj);
+    const amount = shares * a.price;
+    const investmentAmount = result?.investment_amount || 1;
+    const weight = (amount / investmentAmount) * 100;
+    return { shares, amount, weight };
+  };
+
   const formatSEK = (v: number) => new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', maximumFractionDigits: 0 }).format(v);
+
+  // Calculate adjusted totals
+  const getAdjustedSummary = () => {
+    if (!result) return null;
+    let total = 0;
+    result.allocations.forEach(a => {
+      if (a.included || (shareAdjustments[a.ticker] || 0) > 0) {
+        const { amount } = getAdjustedAllocation(a);
+        total += amount;
+      }
+    });
+    const remaining = result.investment_amount - total;
+    return { total, remaining, utilization: (total / result.investment_amount) * 100 };
+  };
 
   return (
     <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="20px">
@@ -121,11 +152,18 @@ export function AllocationCalculator() {
       {/* Fresh mode result */}
       {result && (
         <VStack align="stretch" gap="16px">
+          {(() => {
+            const adjSummary = getAdjustedSummary();
+            const hasAdj = Object.keys(shareAdjustments).length > 0;
+            return (
           <HStack gap="24px" flexWrap="wrap">
-            <Box><Text fontSize="xs" color="fg.muted">Investerat</Text><Text fontWeight="semibold">{formatSEK(result.summary.total_invested)}</Text></Box>
-            <Box><Text fontSize="xs" color="fg.muted">Kvar</Text><Text fontWeight="semibold">{formatSEK(result.summary.cash_remaining)}</Text></Box>
-            <Box><Text fontSize="xs" color="fg.muted">Utnyttjande</Text><Text fontWeight="semibold">{result.summary.utilization}%</Text></Box>
+            <Box><Text fontSize="xs" color="fg.muted">Investerat</Text><Text fontWeight="semibold" color={hasAdj ? 'blue.400' : undefined}>{formatSEK(adjSummary?.total || result.summary.total_invested)}</Text></Box>
+            <Box><Text fontSize="xs" color="fg.muted">Kvar</Text><Text fontWeight="semibold" color={hasAdj && (adjSummary?.remaining || 0) < 0 ? 'red.400' : hasAdj ? 'blue.400' : undefined}>{formatSEK(adjSummary?.remaining ?? result.summary.cash_remaining)}</Text></Box>
+            <Box><Text fontSize="xs" color="fg.muted">Utnyttjande</Text><Text fontWeight="semibold">{(adjSummary?.utilization || result.summary.utilization).toFixed(1)}%</Text></Box>
+            {hasAdj && <Button size="xs" variant="outline" onClick={() => setShareAdjustments({})}>Återställ antal</Button>}
           </HStack>
+            );
+          })()}
 
           {result.warnings.length > 0 && (
             <Box bg="yellow.900/20" borderColor="yellow.500" borderWidth="1px" borderRadius="md" p="12px">
@@ -141,36 +179,52 @@ export function AllocationCalculator() {
                   <Box as="th" textAlign="left" py="8px" px="4px" color="fg.muted">#</Box>
                   <Box as="th" textAlign="left" py="8px" px="4px" color="fg.muted">Aktie</Box>
                   <Box as="th" textAlign="right" py="8px" px="4px" color="fg.muted">Pris</Box>
-                  <Box as="th" textAlign="right" py="8px" px="4px" color="fg.muted">Antal</Box>
+                  <Box as="th" textAlign="center" py="8px" px="4px" color="fg.muted">Antal</Box>
                   <Box as="th" textAlign="right" py="8px" px="4px" color="fg.muted">Belopp</Box>
                   <Box as="th" textAlign="right" py="8px" px="4px" color="fg.muted">Vikt</Box>
                   <Box as="th" textAlign="center" py="8px" px="4px" color="fg.muted">Inkl.</Box>
                 </Box>
               </Box>
               <Box as="tbody">
-                {result.allocations.map((a: AllocationStock) => (
-                  <Box as="tr" key={a.ticker} borderBottom="1px solid" borderColor="border" opacity={a.too_expensive || excluded.has(a.ticker) ? 0.5 : 1}>
+                {result.allocations.map((a: AllocationStock) => {
+                  const adj = getAdjustedAllocation(a);
+                  const deviation = adj.weight - a.target_weight;
+                  const isExcluded = excluded.has(a.ticker);
+                  const hasAdjustment = (shareAdjustments[a.ticker] || 0) !== 0;
+                  
+                  return (
+                  <Box as="tr" key={a.ticker} borderBottom="1px solid" borderColor="border" opacity={a.too_expensive && !forceInclude.has(a.ticker) || isExcluded ? 0.5 : 1}>
                     <Box as="td" py="8px" px="4px">{a.rank}</Box>
                     <Box as="td" py="8px" px="4px"><Text fontWeight="medium">{a.ticker}</Text><Text fontSize="xs" color="fg.muted">{a.name.slice(0, 20)}</Text></Box>
                     <Box as="td" py="8px" px="4px" textAlign="right">{formatSEK(a.price)}</Box>
-                    <Box as="td" py="8px" px="4px" textAlign="right" fontWeight="semibold">{a.shares}</Box>
-                    <Box as="td" py="8px" px="4px" textAlign="right">{formatSEK(a.actual_amount)}</Box>
+                    <Box as="td" py="6px" px="2px" textAlign="center">
+                      <HStack gap="2px" justify="center">
+                        <Button size="xs" variant="ghost" onClick={() => adjustShares(a.ticker, -1)} disabled={adj.shares <= 0}>−</Button>
+                        <Text fontWeight="semibold" minW="30px" textAlign="center" color={hasAdjustment ? 'blue.400' : undefined}>{adj.shares}</Text>
+                        <Button size="xs" variant="ghost" onClick={() => adjustShares(a.ticker, 1)}>+</Button>
+                      </HStack>
+                    </Box>
+                    <Box as="td" py="8px" px="4px" textAlign="right">{formatSEK(adj.amount)}</Box>
                     <Box as="td" py="8px" px="4px" textAlign="right">
-                      <Text color={Math.abs(a.deviation) < 1 ? 'green.400' : Math.abs(a.deviation) < 2 ? 'yellow.400' : 'red.400'}>{a.actual_weight}%</Text>
+                      <Text color={Math.abs(deviation) < 2 ? 'green.400' : Math.abs(deviation) < 5 ? 'yellow.400' : 'red.400'}>
+                        {adj.weight.toFixed(1)}%
+                        {Math.abs(deviation) >= 5 && <Text as="span" fontSize="xs"> ⚠️</Text>}
+                      </Text>
                     </Box>
                     <Box as="td" py="8px" px="4px" textAlign="center">
                       <Button 
                         size="xs" 
-                        variant={a.too_expensive ? (forceInclude.has(a.ticker) ? 'solid' : 'outline') : excluded.has(a.ticker) ? 'outline' : 'solid'} 
-                        colorScheme={a.too_expensive ? 'orange' : excluded.has(a.ticker) ? 'gray' : 'green'} 
+                        variant={a.too_expensive ? (forceInclude.has(a.ticker) ? 'solid' : 'outline') : isExcluded ? 'outline' : 'solid'} 
+                        colorScheme={a.too_expensive ? 'orange' : isExcluded ? 'gray' : 'green'} 
                         onClick={() => toggleStock(a.ticker, a.too_expensive)}
                         title={a.too_expensive ? 'Klicka för att köpa 1 aktie ändå' : 'Klicka för att exkludera'}
                       >
-                        {a.too_expensive ? (forceInclude.has(a.ticker) ? '1st' : '⚠️') : excluded.has(a.ticker) ? '✗' : '✓'}
+                        {a.too_expensive ? (forceInclude.has(a.ticker) ? '1st' : '⚠️') : isExcluded ? '✗' : '✓'}
                       </Button>
                     </Box>
                   </Box>
-                ))}
+                  );
+                })}
               </Box>
             </Box>
           </Box>
