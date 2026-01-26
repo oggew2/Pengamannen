@@ -13,6 +13,7 @@ export function AllocationCalculator() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const [forceInclude, setForceInclude] = useState<Set<string>>(new Set());
 
   const parseHoldings = (text: string): { ticker: string; shares: number }[] => {
     return text.split('\n')
@@ -38,7 +39,7 @@ export function AllocationCalculator() {
           setError('Ange ett giltigt belopp');
           return;
         }
-        const res = await api.calculateAllocation(numAmount, Array.from(excluded));
+        const res = await api.calculateAllocation(numAmount, Array.from(excluded), Array.from(forceInclude));
         setResult(res);
       } else {
         const holdings = parseHoldings(holdingsText);
@@ -57,10 +58,18 @@ export function AllocationCalculator() {
     }
   };
 
-  const toggleStock = (ticker: string) => {
-    const newExcluded = new Set(excluded);
-    newExcluded.has(ticker) ? newExcluded.delete(ticker) : newExcluded.add(ticker);
-    setExcluded(newExcluded);
+  const toggleStock = (ticker: string, tooExpensive: boolean) => {
+    if (tooExpensive) {
+      // Toggle force include for expensive stocks
+      const newForce = new Set(forceInclude);
+      newForce.has(ticker) ? newForce.delete(ticker) : newForce.add(ticker);
+      setForceInclude(newForce);
+    } else {
+      // Toggle exclude for normal stocks
+      const newExcluded = new Set(excluded);
+      newExcluded.has(ticker) ? newExcluded.delete(ticker) : newExcluded.add(ticker);
+      setExcluded(newExcluded);
+    }
   };
 
   const formatSEK = (v: number) => new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', maximumFractionDigits: 0 }).format(v);
@@ -150,8 +159,14 @@ export function AllocationCalculator() {
                       <Text color={Math.abs(a.deviation) < 1 ? 'green.400' : Math.abs(a.deviation) < 2 ? 'yellow.400' : 'red.400'}>{a.actual_weight}%</Text>
                     </Box>
                     <Box as="td" py="8px" px="4px" textAlign="center">
-                      <Button size="xs" variant={a.too_expensive ? 'outline' : excluded.has(a.ticker) ? 'outline' : 'solid'} colorScheme={a.too_expensive ? 'red' : excluded.has(a.ticker) ? 'gray' : 'green'} onClick={() => !a.too_expensive && toggleStock(a.ticker)} disabled={a.too_expensive}>
-                        {a.too_expensive ? '⚠️' : excluded.has(a.ticker) ? '✗' : '✓'}
+                      <Button 
+                        size="xs" 
+                        variant={a.too_expensive ? (forceInclude.has(a.ticker) ? 'solid' : 'outline') : excluded.has(a.ticker) ? 'outline' : 'solid'} 
+                        colorScheme={a.too_expensive ? 'orange' : excluded.has(a.ticker) ? 'gray' : 'green'} 
+                        onClick={() => toggleStock(a.ticker, a.too_expensive)}
+                        title={a.too_expensive ? 'Klicka för att köpa 1 aktie ändå' : 'Klicka för att exkludera'}
+                      >
+                        {a.too_expensive ? (forceInclude.has(a.ticker) ? '1st' : '⚠️') : excluded.has(a.ticker) ? '✗' : '✓'}
                       </Button>
                     </Box>
                   </Box>

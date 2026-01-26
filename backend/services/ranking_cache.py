@@ -626,20 +626,15 @@ def compute_nordic_momentum_banded(db, current_holdings: list[str] = None) -> di
     }
 
 
-def calculate_allocation(investment_amount: float, stocks: list, target_count: int = 10) -> dict:
+def calculate_allocation(investment_amount: float, stocks: list, target_count: int = 10, force_include: set = None) -> dict:
     """
     Calculate equal-weight portfolio allocation with smart rounding.
-    
-    Algorithm:
-    1. Target 10% per stock (investment / 10)
-    2. Calculate shares = floor(target_amount / price)
-    3. If stock too expensive (price > target), flag it
-    4. Distribute remaining cash to stocks furthest below target
     
     Args:
         investment_amount: Total SEK to invest
         stocks: List of dicts with ticker, name, price, momentum, etc.
         target_count: Number of stocks (default 10)
+        force_include: Set of tickers to include even if too expensive (buy 1 share)
     
     Returns:
         dict with allocations, warnings, and summary
@@ -647,6 +642,7 @@ def calculate_allocation(investment_amount: float, stocks: list, target_count: i
     if not stocks or investment_amount <= 0:
         return {"error": "Invalid input"}
     
+    force_include = force_include or set()
     target_weight = 1.0 / target_count  # 10% each
     target_amount = investment_amount * target_weight
     
@@ -662,9 +658,15 @@ def calculate_allocation(investment_amount: float, stocks: list, target_count: i
         
         # Check if stock is too expensive
         if price > target_amount:
-            shares = 0
-            too_expensive = True
-            warnings.append(f"{stock['ticker']}: Price {price:.0f} SEK > target {target_amount:.0f} SEK")
+            if stock['ticker'] in force_include:
+                # User wants to buy 1 share anyway
+                shares = 1
+                too_expensive = True
+                warnings.append(f"{stock['ticker']}: Forced 1 share @ {price:.0f} SEK (over target)")
+            else:
+                shares = 0
+                too_expensive = True
+                warnings.append(f"{stock['ticker']}: Price {price:.0f} SEK > target {target_amount:.0f} SEK")
         else:
             shares = int(target_amount // price)  # Floor division
             too_expensive = False
@@ -685,7 +687,7 @@ def calculate_allocation(investment_amount: float, stocks: list, target_count: i
             "actual_weight": round(actual_weight * 100, 1),
             "deviation": round(deviation * 100, 1),
             "too_expensive": too_expensive,
-            "included": not too_expensive,
+            "included": shares > 0,  # Included if buying any shares
         })
     
     # Calculate totals

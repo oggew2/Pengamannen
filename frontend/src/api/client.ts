@@ -49,8 +49,8 @@ export const api = {
   runBacktest: (req: BacktestRequest) => postJson<BacktestResult>('/backtesting/run', req),
   
   // Nordic allocation
-  calculateAllocation: (amount: number, excludedTickers?: string[]) => 
-    postJson<AllocationResponse>('/strategies/nordic/momentum/allocate', { amount, excluded_tickers: excludedTickers || [] }),
+  calculateAllocation: (amount: number, excludedTickers?: string[], forceIncludeTickers?: string[]) => 
+    postJson<AllocationResponse>('/strategies/nordic/momentum/allocate', { amount, excluded_tickers: excludedTickers || [], force_include_tickers: forceIncludeTickers || [] }),
   
   // Nordic rebalance (banding mode)
   calculateRebalance: (holdings: { ticker: string; shares: number }[], newInvestment: number) =>

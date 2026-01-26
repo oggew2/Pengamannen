@@ -603,7 +603,7 @@ def allocate_nordic_momentum(
     """
     Calculate portfolio allocation for Nordic momentum strategy.
     
-    Input: {"amount": 100000, "excluded_tickers": ["TICKER1"]}
+    Input: {"amount": 100000, "excluded_tickers": ["TICKER1"], "force_include_tickers": ["EXPENSIVE1"]}
     
     Returns share counts for equal-weight allocation (~10% per stock).
     Handles expensive stocks by flagging them and suggesting alternatives.
@@ -615,6 +615,7 @@ def allocate_nordic_momentum(
     try:
         amount = request.get('amount', 0)
         excluded = set(request.get('excluded_tickers', []))
+        force_include = set(request.get('force_include_tickers', []))
         
         if amount <= 0:
             raise HTTPException(status_code=400, detail="Amount must be positive")
@@ -646,7 +647,7 @@ def allocate_nordic_momentum(
             s['price'] = price_lookup.get(s['ticker'], 0)
         
         # Calculate allocation
-        allocation = calculate_allocation(amount, stocks)
+        allocation = calculate_allocation(amount, stocks, force_include=force_include)
         
         response.headers["Cache-Control"] = "no-cache"
         return allocation
