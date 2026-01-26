@@ -920,6 +920,25 @@ def calculate_rebalance_with_banding(
     held_tickers = set(h['ticker'] for h in hold)
     buy = []
     
+    # If portfolio is full but we have new cash, add to existing holdings
+    if slots_to_fill <= 0 and new_investment > 0 and len(hold) > 0:
+        target_per_stock = new_investment / len(hold)
+        for h in hold:
+            price = h['price']
+            if price <= 0:
+                continue
+            extra_shares = int(target_per_stock // price)
+            if extra_shares > 0:
+                buy.append({
+                    'ticker': h['ticker'],
+                    'name': h.get('name', ''),
+                    'rank': h.get('rank'),
+                    'price': price,
+                    'shares': extra_shares,
+                    'value': extra_shares * price,
+                    'currency': h.get('currency', 'SEK'),
+                })
+    
     if slots_to_fill > 0 and total_cash > 0:
         # Target value per new stock
         target_per_stock = total_cash / slots_to_fill if slots_to_fill > 0 else 0
