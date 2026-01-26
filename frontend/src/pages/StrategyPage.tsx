@@ -2,9 +2,9 @@ import { useState, useMemo, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Box, Flex, Text, Button, HStack, VStack, Skeleton } from '@chakra-ui/react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { useStrategies, useBacktest, queryKeys } from '../api/hooks';
+import { useStrategies, useBacktest } from '../api/hooks';
 import { DataIntegrityBanner } from '../components/DataIntegrityBanner';
 import { AllocationCalculator } from '../components/AllocationCalculator';
 import type { StrategyMeta } from '../types';
@@ -59,26 +59,7 @@ export function StrategyPage() {
 
   const strategy = strategies.find((s: StrategyMeta) => s.name === apiName) || null;
 
-  // Fetch stock details for all 40 stocks
-  const stockQueries = useQueries({
-    queries: stocks.map(stock => ({
-      queryKey: queryKeys.stocks.detail(stock.ticker),
-      queryFn: () => api.getStock(stock.ticker),
-      enabled: !!stock.ticker,
-    })),
-  });
-
-  // Build stock details map
-  const stockDetails = useMemo(() => {
-    const details: Record<string, { return_1m: number | null; return_3m: number | null; return_6m: number | null }> = {};
-    stocks.forEach((stock, i) => {
-      const data = stockQueries[i]?.data;
-      if (data) {
-        details[stock.ticker] = { return_1m: data.return_1m, return_3m: data.return_3m, return_6m: data.return_6m };
-      }
-    });
-    return details;
-  }, [stocks, stockQueries]);
+  // For momentum, we already have performance data from TradingView - no need to fetch stock details
 
   // Build chart data from backtest
   const chartData = useMemo(() => {
@@ -97,7 +78,6 @@ export function StrategyPage() {
   } : null;
 
   const info = STRATEGY_INFO[apiName];
-  const formatPct = (v: number | null) => v != null ? `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%` : '—';
 
   if (rankingsError) {
     return (
@@ -215,9 +195,8 @@ export function StrategyPage() {
           </HStack>
           <Button size="sm" variant="outline" borderColor="brand.500" color="brand.500" onClick={() => {
             const start = (rankingsPage - 1) * 10;
-            const csv = ['Rank,Ticker,Name,1M,3M,6M', ...stocks.slice(start, start + 10).map((s) => {
-              const d = stockDetails[s.ticker];
-              return `${s.rank},${s.ticker},${s.name || ''},${d?.return_1m?.toFixed(4) || ''},${d?.return_3m?.toFixed(4) || ''},${d?.return_6m?.toFixed(4) || ''}`;
+            const csv = ['Rank,Ticker,Name,3M,6M,12M', ...stocks.slice(start, start + 10).map((s: any) => {
+              return `${s.rank},${s.ticker},${s.name || ''},${s.perf_3m?.toFixed(1) || ''},${s.perf_6m?.toFixed(1) || ''},${s.perf_12m?.toFixed(1) || ''}`;
             })].join('\n');
             const blob = new Blob([csv], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
@@ -234,31 +213,28 @@ export function StrategyPage() {
                 <Box as="th" p="12px" textAlign="left" color="fg.muted" fontWeight="medium">#</Box>
                 <Box as="th" p="12px" textAlign="left" color="fg.muted" fontWeight="medium">Ticker</Box>
                 <Box as="th" p="12px" textAlign="left" color="fg.muted" fontWeight="medium">Name</Box>
-                <Box as="th" p="12px" textAlign="right" color="fg.muted" fontWeight="medium">1M</Box>
                 <Box as="th" p="12px" textAlign="right" color="fg.muted" fontWeight="medium">3M</Box>
                 <Box as="th" p="12px" textAlign="right" color="fg.muted" fontWeight="medium">6M</Box>
+                <Box as="th" p="12px" textAlign="right" color="fg.muted" fontWeight="medium">12M</Box>
               </Box>
             </Box>
             <Box as="tbody">
-              {stocks.slice((rankingsPage - 1) * 10, rankingsPage * 10).map((stock) => {
-                const details = stockDetails[stock.ticker];
+              {stocks.slice((rankingsPage - 1) * 10, rankingsPage * 10).map((stock: any) => {
                 return (
                   <Box as="tr" key={stock.ticker} borderTop="1px solid" borderColor="border">
                     <Box as="td" p="12px" color="fg.muted">{stock.rank}</Box>
                     <Box as="td" p="12px">
-                      <Link to={`/stock/${stock.ticker}`}>
-                        <Text color="brand.500" fontWeight="medium" fontFamily="mono">{stock.ticker.replace('.ST', '')}</Text>
-                      </Link>
+                      <Text color="brand.500" fontWeight="medium" fontFamily="mono">{stock.ticker}</Text>
                     </Box>
                     <Box as="td" p="12px" color="fg.muted">{stock.name || '—'}</Box>
-                    <Box as="td" p="12px" textAlign="right" color={details?.return_1m && details.return_1m >= 0 ? 'success.500' : 'error.500'} fontFamily="mono">
-                      {formatPct(details?.return_1m ?? null)}
+                    <Box as="td" p="12px" textAlign="right" color={stock.perf_3m >= 0 ? 'success.500' : 'error.500'} fontFamily="mono">
+                      {stock.perf_3m != null ? `${stock.perf_3m >= 0 ? '+' : ''}${stock.perf_3m.toFixed(1)}%` : '—'}
                     </Box>
-                    <Box as="td" p="12px" textAlign="right" color={details?.return_3m && details.return_3m >= 0 ? 'success.500' : 'error.500'} fontFamily="mono">
-                      {formatPct(details?.return_3m ?? null)}
+                    <Box as="td" p="12px" textAlign="right" color={stock.perf_6m >= 0 ? 'success.500' : 'error.500'} fontFamily="mono">
+                      {stock.perf_6m != null ? `${stock.perf_6m >= 0 ? '+' : ''}${stock.perf_6m.toFixed(1)}%` : '—'}
                     </Box>
-                    <Box as="td" p="12px" textAlign="right" color={details?.return_6m && details.return_6m >= 0 ? 'success.500' : 'error.500'} fontFamily="mono">
-                      {formatPct(details?.return_6m ?? null)}
+                    <Box as="td" p="12px" textAlign="right" color={stock.perf_12m >= 0 ? 'success.500' : 'error.500'} fontFamily="mono">
+                      {stock.perf_12m != null ? `${stock.perf_12m >= 0 ? '+' : ''}${stock.perf_12m.toFixed(1)}%` : '—'}
                     </Box>
                   </Box>
                 );
