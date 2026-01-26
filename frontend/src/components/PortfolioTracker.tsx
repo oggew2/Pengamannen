@@ -211,6 +211,7 @@ export function PortfolioTracker() {
       const spread = totalTurnover * 0.003;
       const costs = { courtage: Math.round(courtage), spread: Math.round(spread), total: Math.round(courtage + spread) };
 
+      console.log('Rebalance result:', { sells: sells.length, holds: holds.length, buys: buys.length });
       setRebalanceData({ sells, holds, buys, summary, costs });
       setLastChecked(new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
