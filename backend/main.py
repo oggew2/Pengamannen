@@ -625,29 +625,38 @@ def allocate_nordic_momentum(
         if 'error' in result:
             raise HTTPException(status_code=500, detail=result['error'])
         
-        # Filter out excluded tickers and add price data
-        stocks = []
-        for r in result['rankings']:
-            if r['ticker'] not in excluded:
-                stocks.append({
-                    'ticker': r['ticker'],
-                    'name': r['name'],
-                    'price': r.get('price') or r.get('market_cap_sek', 0) / 1e6,  # Fallback
-                    'momentum': r['momentum'],
-                    'market': r['market'],
-                })
-        
         # Get actual prices from TradingView
         from services.tradingview_fetcher import TradingViewFetcher
         fetcher = TradingViewFetcher()
         all_stocks = fetcher.fetch_nordic(min_market_cap_sek=2e9)
         price_lookup = {s['ticker']: s.get('close', 0) for s in all_stocks}
         
-        for s in stocks:
-            s['price'] = price_lookup.get(s['ticker'], 0)
+        # Build stocks list (excluding user-excluded)
+        stocks = []
+        for r in result['rankings']:
+            if r['ticker'] not in excluded:
+                stocks.append({
+                    'ticker': r['ticker'],
+                    'name': r['name'],
+                    'price': price_lookup.get(r['ticker'], 0),
+                    'momentum': r['momentum'],
+                    'market': r['market'],
+                })
         
         # Calculate allocation
         allocation = calculate_allocation(amount, stocks, force_include=force_include)
+        
+        # Add substitutes (rank 11-15) for user to choose from
+        substitutes = []
+        for i, r in enumerate(result['rankings'][10:15], start=11):
+            if r['ticker'] not in excluded:
+                substitutes.append({
+                    'rank': i,
+                    'ticker': r['ticker'],
+                    'name': r['name'],
+                    'price': price_lookup.get(r['ticker'], 0),
+                })
+        allocation['substitutes'] = substitutes
         
         response.headers["Cache-Control"] = "no-cache"
         return allocation

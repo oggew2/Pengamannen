@@ -174,7 +174,22 @@ export function AllocationCalculator() {
               </Box>
             </Box>
           </Box>
-          {excluded.size > 0 && <Button size="sm" variant="outline" onClick={() => { setExcluded(new Set()); calculate(); }}>Återställ alla</Button>}
+          
+          {/* Substitutes */}
+          {result.substitutes && result.substitutes.length > 0 && (result.summary.stocks_skipped > 0 || excluded.size > 0) && (
+            <Box bg="blue.900/20" borderColor="blue.500" borderWidth="1px" borderRadius="md" p="12px">
+              <Text fontSize="sm" color="blue.400" fontWeight="medium" mb="8px">Ersättare (rank 11-15):</Text>
+              {result.substitutes.map((s: {rank: number; ticker: string; name: string; price: number}) => (
+                <HStack key={s.ticker} justify="space-between" fontSize="sm" mb="4px">
+                  <Text>#{s.rank} {s.ticker} <Text as="span" color="fg.muted">({s.name.slice(0, 15)})</Text></Text>
+                  <Text>{formatSEK(s.price)}</Text>
+                </HStack>
+              ))}
+              <Text fontSize="xs" color="fg.muted" mt="8px">Exkludera en aktie ovan för att inkludera ersättare</Text>
+            </Box>
+          )}
+          
+          {(excluded.size > 0 || forceInclude.size > 0) && <Button size="sm" variant="outline" onClick={() => { setExcluded(new Set()); setForceInclude(new Set()); }}>Återställ alla</Button>}
         </VStack>
       )}
 

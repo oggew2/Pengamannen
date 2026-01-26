@@ -85,6 +85,7 @@ export interface AllocationResponse {
     stocks_skipped: number;
   };
   warnings: string[];
+  substitutes?: Array<{ rank: number; ticker: string; name: string; price: number }>;
 }
 
 // Rebalance (banding) types
