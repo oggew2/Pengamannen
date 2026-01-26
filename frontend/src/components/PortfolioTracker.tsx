@@ -80,6 +80,7 @@ export function PortfolioTracker() {
   const [lastChecked, setLastChecked] = useState<string | null>(null);
   const [executedTrades, setExecutedTrades] = useState<{ sells: string[]; buys: string[] }>({ sells: [], buys: [] });
   const [newCapital, setNewCapital] = useState<string>('');
+  const [buyAdjustments, setBuyAdjustments] = useState<Record<string, number>>({});
   
   // Next rebalance countdown
   const { data: rebalanceDates } = useRebalanceDates();
@@ -213,6 +214,7 @@ export function PortfolioTracker() {
 
       console.log('Rebalance result:', { sells: sells.length, holds: holds.length, buys: buys.length });
       setRebalanceData({ sells, holds, buys, summary, costs });
+      setBuyAdjustments({});  // Reset adjustments
       setLastChecked(new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
       console.error('Rebalance check failed:', err);
@@ -259,26 +261,47 @@ export function PortfolioTracker() {
     }));
   };
 
+  const adjustBuyShares = (ticker: string, delta: number) => {
+    setBuyAdjustments(prev => {
+      const base = rebalanceData?.buys.find(b => b.ticker === ticker)?.shares || 0;
+      const current = prev[ticker] ?? base;
+      const newVal = Math.max(0, current + delta);
+      return { ...prev, [ticker]: newVal };
+    });
+  };
+
+  const getBuyShares = (ticker: string, original: number) => buyAdjustments[ticker] ?? original;
+
   const saveExecutedTrades = () => {
     if (!rebalanceData) return;
-    // Remove sold stocks, add bought stocks to holdings
-    const newHoldings = holdings
-      .filter(h => !executedTrades.sells.includes(h.ticker))
-      .concat(
-        rebalanceData.buys
-          .filter(b => executedTrades.buys.includes(b.ticker))
-          .map(b => ({
+    // Remove sold stocks, add/update bought stocks
+    let newHoldings = holdings.filter(h => !executedTrades.sells.includes(h.ticker));
+    
+    rebalanceData.buys
+      .filter(b => executedTrades.buys.includes(b.ticker))
+      .forEach(b => {
+        const shares = getBuyShares(b.ticker, b.shares);
+        const price = b.value / b.shares;
+        const existing = newHoldings.find(h => h.ticker === b.ticker);
+        if (existing) {
+          // Add to existing position
+          existing.shares += shares;
+        } else {
+          newHoldings.push({
             ticker: b.ticker,
-            shares: b.shares,
-            buyPrice: b.value / b.shares,
+            shares,
+            buyPrice: price,
             buyDate: new Date().toISOString(),
             rankAtPurchase: b.currentRank || 0
-          }))
-      );
+          });
+        }
+      });
+    
     setHoldings(newHoldings);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newHoldings));
-    saveToDatabase(newHoldings);  // Save to database
+    saveToDatabase(newHoldings);
     setExecutedTrades({ sells: [], buys: [] });
+    setBuyAdjustments({});
     setRebalanceData(null);
     window.dispatchEvent(new Event('portfolio-locked-in'));
   };
@@ -470,36 +493,42 @@ export function PortfolioTracker() {
                 <Box bg="green.900/20" borderColor="green.500" borderWidth="1px" borderRadius="md" p="12px">
                   <Text fontSize="sm" color="green.400" fontWeight="semibold" mb="8px">KÖP</Text>
                   <VStack gap="4px" align="stretch">
-                    {rebalanceData.buys.map(b => (
-                      <Box
-                        key={b.ticker}
-                        p="8px"
-                        bg={executedTrades.buys.includes(b.ticker) ? 'green.900/30' : 'bg'}
-                        borderRadius="4px"
-                        cursor="pointer"
-                        onClick={() => toggleExecuted('buys', b.ticker)}
-                      >
-                        <HStack justify="space-between" fontSize="sm">
-                          <HStack gap="8px">
-                            <Text color={executedTrades.buys.includes(b.ticker) ? 'green.400' : 'green.300'}>
-                              {executedTrades.buys.includes(b.ticker) ? '✓' : '+'}
-                            </Text>
-                            <a
-                              href={`https://www.avanza.se/aktier/om-aktien.html?query=${b.ticker}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={e => e.stopPropagation()}
-                            >
-                              <Text fontWeight="medium" color="green.300" textDecoration="underline">{b.ticker}</Text>
-                            </a>
-                            <Text fontSize="xs" color="fg.muted">#{b.currentRank}</Text>
+                    {rebalanceData.buys.map(b => {
+                      const shares = getBuyShares(b.ticker, b.shares);
+                      const price = b.value / b.shares;
+                      const value = shares * price;
+                      return (
+                        <Box key={b.ticker} p="8px" bg={executedTrades.buys.includes(b.ticker) ? 'green.900/30' : 'bg'} borderRadius="4px">
+                          <HStack justify="space-between" fontSize="sm">
+                            <HStack gap="8px">
+                              <Text
+                                color={executedTrades.buys.includes(b.ticker) ? 'green.400' : 'green.300'}
+                                cursor="pointer"
+                                onClick={() => toggleExecuted('buys', b.ticker)}
+                              >
+                                {executedTrades.buys.includes(b.ticker) ? '✓' : '+'}
+                              </Text>
+                              <a
+                                href={`https://www.avanza.se/aktier/om-aktien.html?query=${b.ticker}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <Text fontWeight="medium" color="green.300" textDecoration="underline">{b.ticker}</Text>
+                              </a>
+                              <Text fontSize="xs" color="fg.muted">#{b.currentRank}</Text>
+                            </HStack>
+                            <HStack gap="4px">
+                              <Button size="xs" variant="ghost" onClick={() => adjustBuyShares(b.ticker, -1)}>−</Button>
+                              <Text minW="50px" textAlign="center">{shares} st</Text>
+                              <Button size="xs" variant="ghost" onClick={() => adjustBuyShares(b.ticker, 1)}>+</Button>
+                              <Text color="fg.muted" minW="70px" textAlign="right">{formatSEK(value)}</Text>
+                            </HStack>
                           </HStack>
-                          <Text color="fg.muted">{b.shares} st = {formatSEK(b.value)}</Text>
-                        </HStack>
-                      </Box>
-                    ))}
+                        </Box>
+                      );
+                    })}
                   </VStack>
-                  <Text fontSize="xs" color="fg.muted" mt="8px">Klicka för att markera • Ticker öppnar Avanza</Text>
+                  <Text fontSize="xs" color="fg.muted" mt="8px">✓ markerar genomförd • +/− justerar antal</Text>
                 </Box>
               )}
 
