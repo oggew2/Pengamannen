@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/validation.py
+# hypothesis_version: 6.141.1
+
+[0.1, -1000, 100, 1000, 'all_fresh', 'close', 'dividend_yield', 'fundamentals_fresh', 'latest_price_date', 'payout_ratio', 'pe', 'prices_fresh', 'roa', 'roe', 'roic', 'ticker', 'warning']

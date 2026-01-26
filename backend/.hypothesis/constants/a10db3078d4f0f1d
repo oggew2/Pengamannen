@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/backtesting.py
+# hypothesis_version: 6.141.1
+
+[0.0, 0.0005, 0.001, 0.4, 1.0, 99.0, 100, 400, 2023, 25000, 50000, 100000, 500000, '%Y-%m', ':end_date', ':start_date', 'Insufficient data', 'OMXS30', 'annual', 'as_of_date', 'benchmark', 'category', 'close', 'date', 'details', 'dividend', 'dividend_yield', 'end_date', 'end_value', 'equity_curve', 'error', 'ev_ebitda', 'fcfroe', 'frequency', 'id', 'last', 'look_ahead_bias', 'market_cap', 'max_drawdown_pct', 'message', 'momentum', 'month', 'monthly_returns', 'months', 'name', 'object', 'p_fcf', 'payout_ratio', 'pb', 'pe', 'portfolio_values', 'ps', 'quality', 'quarterly', 'rebalance', 'rebalance_frequency', 'rebalance_month', 'rebalance_months', 'roa', 'roe', 'roic', 'sharpe', 'start_date', 'start_value', 'strategy_name', 'ticker', 'total_return_pct', 'transaction_cost_pct', 'type', 'value', 'warnings']

@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/dividends.py
+# hypothesis_version: 6.141.1
+
+[100, 365, 'amount', 'annual_income', 'by_stock', 'by_year', 'days_until_ex', 'div_per_share', 'ex_date', 'growth_rate', 'growth_rate_pct', 'monthly', 'monthly_average', 'payment_date', 'regular', 'shares', 'ticker', 'total_annual', 'type', 'years', 'years_of_data', 'yield_on_holdings']

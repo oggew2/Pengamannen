@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/custom_strategy.py
+# hypothesis_version: 6.141.1
+
+['12-Month Momentum', '3-Month Momentum', '6-Month Momentum', 'Dividend Yield', 'EV/EBITDA', 'FCF/Equity', 'Market Cap', 'P/B Ratio', 'P/E Ratio', 'P/FCF', 'P/S Ratio', 'Payout Ratio', 'Return on Assets', 'Return on Equity', 'between', 'bottom', 'category', 'description', 'direction', 'dividend', 'dividend_yield', 'eq', 'ev_ebitda', 'factor', 'factors', 'fcfroe', 'field', 'filters', 'gt', 'gte', 'higher_better', 'id', 'lower_better', 'lt', 'lte', 'market_cap', 'momentum', 'momentum_', 'momentum_12m', 'momentum_3m', 'momentum_6m', 'name', 'operator', 'operators', 'p_fcf', 'payout_ratio', 'pb', 'pe', 'position_count', 'ps', 'quality', 'quarterly', 'rank', 'rebalance_frequency', 'roa', 'roe', 'roic', 'score', 'size', 'ticker', 'value', 'weight']

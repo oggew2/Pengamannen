@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/memory_monitor.py
+# hypothesis_version: 6.141.1
+
+[100, 500, 1024, 2800, 3000, 3200, 3500, 'CRITICAL', 'OK', 'WARNING', '_config', 'action_needed', 'after_mb', 'available_mb', 'before_mb', 'freed_mb', 'percent', 'recommendations', 'rss_mb', 'status', 'success', 'total_mb', 'usage_mb', 'vms_mb']

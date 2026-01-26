@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/watchlist.py
+# hypothesis_version: 6.141.1
+
+['Default', 'ENTERED_TOP', 'EXITED_TOP', 'RANK_CHANGE', 'Watchlist not found', 'added_at', 'alert_enabled', 'count', 'created_at', 'current_rank', 'date', 'dropped', 'error', 'id', 'improved', 'items', 'message', 'name', 'notes', 'previous_rank', 'rank', 'rankings', 'score', 'strategy', 'threshold', 'ticker', 'type']

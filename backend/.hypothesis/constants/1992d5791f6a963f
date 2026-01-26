@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/export.py
+# hypothesis_version: 6.141.1
+
+[100000, '=== Equity Curve ===', 'CAGR %', 'Date', 'Final Value', 'Initial Capital', 'Max DD %', 'Max Drawdown %', 'Period', 'Portfolio', 'Rank', 'Return %', 'Score', 'Shares', 'Sharpe', 'Sharpe Ratio', 'Sortino Ratio', 'Strategy', 'Ticker', 'Total Return %', 'Value', 'Weight %', 'Win Rate %', 'Year', 'date', 'equity_curve', 'initial_capital', 'period', 'rank', 'score', 'shares', 'strategy', 'strategy_name', 'summary', 'ticker', 'value', 'year', 'yearly_returns']

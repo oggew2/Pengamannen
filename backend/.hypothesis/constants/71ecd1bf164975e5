@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/jobs/scheduler.py
+# hypothesis_version: 6.141.1
+
+[1000000.0, 2000000000.0, 500000, 2250000, '*/2', 'CRITICAL', 'DATA_SOURCE', 'ERROR', 'SUCCESS', 'Scheduler stopped', 'alert_email', 'alerts_created', 'app.db', 'biweekly_stock_scan', 'current_ratio', 'daily_reports', 'daily_sync', 'db_ticker', 'discovery', 'dividend_yield', 'duration_seconds', 'end', 'error', 'ev_ebitda', 'fcfroe', 'gross_margin', 'id', 'jobs', 'large', 'long_term_debt', 'market_cap', 'message', 'net_income', 'next_run', 'operating_cf', 'p_fcf', 'pb', 'pe', 'perf_12m', 'perf_1m', 'perf_3m', 'perf_6m', 'piotroski_f_score', 'ps', 'rankings', 'roa', 'roe', 'roic', 'running', 'sector', 'severity', 'shares_outstanding', 'smtp_from', 'smtp_host', 'smtp_password', 'smtp_port', 'smtp_user', 'snapshots_saved', 'source', 'start', 'status', 'stock', 'stocks_updated', 'success', 'sun', 'sweden', 'total_assets', 'tradingview']

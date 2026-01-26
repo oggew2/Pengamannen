@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/memory_optimizer.py
+# hypothesis_version: 6.141.1
+
+[0.5, 1.5, -2147483648, -32768, -128, 127, 255, 1024, 10000, 32767, 50000, 65535, 2147483647, 4294967295, 'category', 'date', 'datetime', 'float', 'float64', 'int16', 'int32', 'int64', 'int8', 'object', 'ticker', 'uint16', 'uint32', 'uint8']

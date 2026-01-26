@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/smart_cache.py
+# hypothesis_version: 6.141.1
+
+[168, 720, '_cache_metadata', '_value', 'age_category', 'age_minutes', 'avg_hits_per_entry', 'backtest', 'cache_efficiency', 'created_at', 'current_generation', 'expires_at', 'fresh', 'fresh_entries', 'fundamental', 'hit_count', 'is_expired', 'metric', 'old', 'old_entries', 'price', 'quote', 'ratio', 'recent', 'recent_entries', 'smart_cache.db', 'stale', 'stale_entries', 'sync_generation', 'total_entries', 'total_hits', 'valid_entries']

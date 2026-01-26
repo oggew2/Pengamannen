@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/cache.py
+# hypothesis_version: 6.141.1
+
+['args', 'expired_entries', 'kwargs', 'total_entries', 'valid_entries']

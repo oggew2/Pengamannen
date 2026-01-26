@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/portfolio_comparison.py
+# hypothesis_version: 6.141.1
+
+[0.0, '%Y-%m-%d', 'ERROR', 'Sammansatt Momentum', 'Trendande Kvalitet', 'Trendande Utdelning', 'Trendande Värde', 'Unknown', 'annual', 'buy', 'days_until_rebalance', 'display_name', 'drift_percentage', 'frequency', 'is_rebalance_due', 'keep', 'months', 'next_rebalance_date', 'next_rebalance_days', 'quarterly', 'recommendation', 'sammansatt_momentum', 'sell', 'strategy_comparisons', 'strategy_name', 'suggested_changes', 'summary', 'timestamp', 'total_strategies', 'trendande_kvalitet', 'trendande_utdelning', 'trendande_varde']

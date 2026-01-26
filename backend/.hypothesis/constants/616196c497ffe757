@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/csv_import.py
+# hypothesis_version: 6.141.1
+
+[',', '.', '0', ';', 'Antal', 'BUY', 'Buy', 'Courtage', 'Datum', 'Kurs', 'Köp', 'SELL', 'Sell', 'Sälj', 'Typ av transaktion', 'Värdepapper', 'date', 'fees', 'price', 'shares', 'ticker', 'type']

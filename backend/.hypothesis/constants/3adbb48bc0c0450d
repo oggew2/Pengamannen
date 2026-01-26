@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/ranking.py
+# hypothesis_version: 6.141.1
+
+[0.4, 3.0, 100, 2000, 50000, 100000, ':', 'Finance', 'Försäkring', 'Investmentbolag', 'Kapitalförvaltning', 'Konsumentkredit', 'O', 'OO', 'asset_turnover', 'bottom', 'category', 'close', 'current_ratio', 'date', 'dividend_yield', 'ev_ebitda', 'fcfroe', 'gross_margin', 'last', 'long_term_debt', 'market_cap', 'net_income', 'operating_cf', 'p_fcf', 'pb', 'pe', 'perf_12m', 'perf_3m', 'perf_6m', 'piotroski_f_score', 'position_count', 'preference', 'ps', 'rank', 'roa', 'roe', 'roic', 'score', 'sdb', 'sector', 'shares_outstanding', 'stock', 'stock_type', 'ticker', 'total_assets', 'unknown']

@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/user_portfolio.py
+# hypothesis_version: 6.141.1
+
+[100, 252, 365, 'BUY', 'No holdings', 'Portfolio not found', 'SELL', '[]', 'action', 'amount_sek', 'avg_price', 'cost_basis', 'current_price', 'data_points', 'date', 'end_date', 'error', 'gain_loss', 'gain_loss_pct', 'history', 'holdings', 'market_value', 'max_drawdown_pct', 'message', 'name', 'period_days', 'portfolio_id', 'portfolio_value', 'portfolio_values', 'price', 'shares', 'sharpe_ratio', 'start_date', 'target_holdings', 'ticker', 'total_buys', 'total_cost', 'total_gain_loss', 'total_return_pct', 'total_sells', 'total_value', 'trades', 'value', 'volatility_pct', 'weight']

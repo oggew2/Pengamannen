@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/portfolio.py
+# hypothesis_version: 6.141.1
+
+[1.0, 'annual', 'quarterly', 'rebalance_frequency', 'rebalance_month', 'rebalance_months', 'strategy', 'ticker', 'weight']

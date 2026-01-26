@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/config/settings.py
+# hypothesis_version: 6.141.1
+
+[587, 8000, '.env', '0.0.0.0', 'ignore', 'info', 'sqlite:///./app.db', 'strategies.yaml']

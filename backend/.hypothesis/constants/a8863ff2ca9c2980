@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/benchmark.py
+# hypothesis_version: 6.141.1
+
+[0.02, 100, 252, 'Insufficient data', 'alpha', 'alpha_pct', 'benchmark', 'benchmark_return_pct', 'beta', 'dates', 'error', 'excess_return_pct', 'information_ratio', 'periods', 'r_squared', 'relative', 'rolling_alpha', 'rolling_beta', 'strategy', 'strategy_return_pct', 'tracking_error_pct', 'win_rate_pct', 'window_days']

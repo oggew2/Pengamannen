@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/enhanced_backtesting.py
+# hypothesis_version: 6.141.1
+
+[0.0, 0.001, 1.0, -252, -126, 100, 252, 365, 100000, '_cache_metadata', 'annual', 'avg_data_years', 'backtesting', 'best_period_pct', 'best_year', 'close', 'data', 'data_coverage_pct', 'data_points', 'data_quality', 'date', 'error', 'fetched_at', 'final_value', 'holdings', 'is_expired', 'max_drawdown_pct', 'metrics', 'performance_summary', 'period', 'portfolio_history', 'positive_years', 'purpose', 'quarterly', 'rebalance_count', 'records', 'sharpe_ratio', 'stocks_with_data', 'strategy', 'ticker', 'top_momentum_score', 'top_momentum_stocks', 'total_return_pct', 'total_stocks', 'total_years', 'transaction_cost', 'universe_size', 'value', 'volatility_pct', 'win_rate_pct', 'worst_period_pct', 'worst_year', 'years']

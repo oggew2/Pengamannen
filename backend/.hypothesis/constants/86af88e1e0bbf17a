@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/db.py
+# hypothesis_version: 6.141.1
+
+['check_same_thread', 'connect', 'timeout']

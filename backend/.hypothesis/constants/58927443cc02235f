@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/transaction_costs.py
+# hypothesis_version: 6.141.1
+
+[0.0, 0.0005, 0.001, 0.0015, 0.002, 0.005, 0.5, 100, 'Avanza', 'DEGIRO', 'Interactive Brokers', 'Nordnet', 'action', 'annual_cost_pct', 'annual_costs', 'avanza', 'broker', 'broker_fee', 'cost_pct', 'cost_per_rebalance', 'degiro', 'estimated_value', 'id', 'interactive_brokers', 'is_round_trip', 'large_cap', 'max_fee', 'mid_cap', 'min_fee', 'name', 'nordnet', 'note', 'percentage', 'portfolio_value', 'rebalances_per_year', 'small_cap', 'spread_cost', 'ticker', 'total_broker_fees', 'total_cost', 'total_costs', 'total_spread_costs', 'total_trade_value', 'trade_value', 'trades', 'turnover_pct', 'value']
