@@ -913,31 +913,33 @@ def calculate_rebalance_with_banding(
     sell_proceeds = sum(s['value'] for s in sell)
     total_cash = new_investment + sell_proceeds
     
-    # How many slots to fill?
-    slots_to_fill = buy_threshold - len(hold)
-    
-    # Find stocks to buy
+    # Find stocks to buy - always buy current top 10 with new investment
     held_tickers = set(h['ticker'] for h in hold)
     buy = []
     
-    # If portfolio is full but we have new cash, add to existing holdings
-    if slots_to_fill <= 0 and new_investment > 0 and len(hold) > 0:
-        target_per_stock = new_investment / len(hold)
-        for h in hold:
-            price = h['price']
+    if new_investment > 0:
+        # Buy current top 10 with new money (equal weight)
+        top_10 = [s for s in ranked_stocks if rank_lookup.get(s['ticker'], 999) <= buy_threshold][:buy_threshold]
+        target_per_stock = new_investment / len(top_10) if top_10 else 0
+        
+        for stock in top_10:
+            price = price_lookup.get(stock['ticker'], 0)
             if price <= 0:
                 continue
-            extra_shares = int(target_per_stock // price)
-            if extra_shares > 0:
+            shares = int(target_per_stock // price)
+            if shares > 0:
                 buy.append({
-                    'ticker': h['ticker'],
-                    'name': h.get('name', ''),
-                    'rank': h.get('rank'),
+                    'ticker': stock['ticker'],
+                    'name': stock.get('name', ''),
+                    'rank': rank_lookup.get(stock['ticker']),
                     'price': price,
-                    'shares': extra_shares,
-                    'value': extra_shares * price,
-                    'currency': h.get('currency', 'SEK'),
+                    'shares': shares,
+                    'value': shares * price,
+                    'currency': currency_lookup.get(stock['ticker'], 'SEK'),
                 })
+    
+    # Also fill empty slots from sells (if any)
+    slots_to_fill = buy_threshold - len(hold) - len([b for b in buy if b['ticker'] not in held_tickers])
     
     if slots_to_fill > 0 and total_cash > 0:
         # Target value per new stock
