@@ -1,18 +1,15 @@
-const CACHE_NAME = 'borslabbet-v1';
-const API_CACHE = 'borslabbet-api-v1';
+const CACHE_NAME = 'borslabbet-v2';
+const API_CACHE = 'borslabbet-api-v2';
 
 const STATIC_ASSETS = [
   '/',
   '/index.html',
 ];
 
-const API_ROUTES = [
+// Only cache GET requests for these read-only endpoints
+const CACHEABLE_API_ROUTES = [
   '/v1/strategies',
-  '/v1/strategies/sammansatt_momentum',
-  '/v1/strategies/trendande_varde',
-  '/v1/strategies/trendande_utdelning',
-  '/v1/strategies/trendande_kvalitet',
-  '/v1/portfolio/sverige',
+  '/v1/portfolio/rebalance-dates',
 ];
 
 self.addEventListener('install', (event) => {
@@ -25,28 +22,29 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => 
-      Promise.all(keys.filter(k => k !== CACHE_NAME && k !== API_CACHE).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => !k.startsWith('borslabbet-')).map(k => caches.delete(k)))
     )
   );
   self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-  
-  // Skip caching for POST/PUT/DELETE requests
+  // Skip non-GET requests entirely - never cache POST/PUT/DELETE
   if (event.request.method !== 'GET') {
-    event.respondWith(fetch(event.request));
-    return;
+    return; // Let browser handle it normally
   }
   
-  // API requests: network first, cache fallback
-  if (url.pathname.startsWith('/api') || API_ROUTES.some(r => url.pathname.includes(r))) {
+  const url = new URL(event.request.url);
+  
+  // Only cache specific safe API routes
+  if (CACHEABLE_API_ROUTES.some(r => url.pathname.startsWith(r))) {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          const clone = response.clone();
-          caches.open(API_CACHE).then((cache) => cache.put(event.request, clone));
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(API_CACHE).then((cache) => cache.put(event.request, clone));
+          }
           return response;
         })
         .catch(() => caches.match(event.request))
@@ -55,7 +53,10 @@ self.addEventListener('fetch', (event) => {
   }
   
   // Static assets: cache first
-  event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
-  );
+  if (!url.pathname.startsWith('/v1/')) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => cached || fetch(event.request))
+    );
+  }
+  // All other /v1/ requests: let browser handle (no caching)
 });
