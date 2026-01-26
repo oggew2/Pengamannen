@@ -84,7 +84,9 @@ export interface AllocationResponse {
     stocks_included: number;
     stocks_skipped: number;
     max_deviation: number;
-    estimated_commission?: number;
+    commission_start?: number;
+    commission_mini?: number;
+    commission_small?: number;
   };
   warnings: string[];
   substitutes?: Array<{ rank: number; ticker: string; name: string; price: number }>;

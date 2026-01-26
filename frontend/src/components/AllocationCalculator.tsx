@@ -177,7 +177,7 @@ export function AllocationCalculator() {
             <Box><Text fontSize="xs" color="fg.muted">Kvar</Text><Text fontWeight="semibold" color={isOverspent ? 'red.400' : hasAdj ? 'blue.400' : undefined}>{formatSEK(adjSummary?.remaining ?? result.summary.cash_remaining)}</Text></Box>
             <Box><Text fontSize="xs" color="fg.muted">Utnyttjande</Text><Text fontWeight="semibold" color={isOverspent ? 'red.400' : undefined}>{(adjSummary?.utilization || result.summary.utilization).toFixed(1)}%</Text></Box>
             <Box><Text fontSize="xs" color="fg.muted">Max avvikelse</Text><Text fontWeight="semibold" color={result.summary.max_deviation > 5 ? 'red.400' : result.summary.max_deviation > 2 ? 'yellow.400' : 'green.400'}>{result.summary.max_deviation}%</Text></Box>
-            {result.summary.estimated_commission && <Box><Text fontSize="xs" color="fg.muted">Courtage (Avanza)</Text><Text fontWeight="semibold">~{result.summary.estimated_commission} kr</Text></Box>}
+            {result.summary.commission_start && <Box><Text fontSize="xs" color="fg.muted">Courtage (Avanza)</Text><Text fontWeight="semibold" fontSize="xs">{result.summary.commission_start} kr <Text as="span" color="fg.muted">(Start)</Text></Text><Text fontSize="xs" color="fg.muted">{result.summary.commission_mini} kr (Mini) · {result.summary.commission_small} kr (Small)</Text></Box>}
             <Button size="xs" variant="outline" onClick={copyToClipboard}>📋 Kopiera</Button>
             {hasAdj && <Button size="xs" variant="outline" onClick={() => setShareAdjustments({})}>Återställ</Button>}
           </HStack>
