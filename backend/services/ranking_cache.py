@@ -389,22 +389,18 @@ def compute_nordic_momentum(db=None) -> dict:
     # Build DataFrame
     df = pd.DataFrame(stocks)
     
-    # ========== BULLETPROOF FILTERS ==========
+    # ========== FILTERS (matching Börslabbet methodology) ==========
     
-    # 1. Finance sector (banks, investment companies, insurance, REITs)
+    # 1. Finance sector - excluded because financial metrics not comparable
+    #    (banks, investment companies, insurance, REITs)
     df = df[df['sector'] != 'Finance']
     logger.info(f"After Finance filter: {len(df)} stocks")
     
-    # 2. Depositary receipts (SDB/SDR) - foreign companies listed via receipts
-    df = df[~df['ticker'].str.contains('SDB|SDR', case=False, na=False)]
-    logger.info(f"After SDB/SDR filter: {len(df)} stocks")
-    
-    # 3. Preference shares (PREF, _C class) - different risk/return profile
+    # 2. Preference shares - different risk/return profile, fixed dividends
     df = df[~df['ticker'].str.contains('PREF', case=False, na=False)]
-    df = df[~df['ticker'].str.endswith('_C')]
     logger.info(f"After preference share filter: {len(df)} stocks")
     
-    # 4. Investment/capital companies by name pattern
+    # 3. Investment/capital companies that slipped through sector classification
     def is_investment_company(name):
         name_lower = name.lower()
         name_clean = name_lower.replace(' class a', '').replace(' class b', '').replace(' ser. a', '').replace(' ser. b', '').strip()
