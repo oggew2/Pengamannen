@@ -706,6 +706,7 @@ def calculate_allocation(investment_amount: float, stocks: list, target_count: i
             "ticker": stock['ticker'],
             "name": stock.get('name', ''),
             "price": price,
+            "currency": stock.get('currency', 'SEK'),
             "shares": shares,
             "target_amount": round(target_amount, 2),
             "actual_amount": round(actual_amount, 2),

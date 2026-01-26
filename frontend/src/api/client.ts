@@ -63,6 +63,7 @@ export interface AllocationStock {
   ticker: string;
   name: string;
   price: number;
+  currency?: string;
   shares: number;
   target_amount: number;
   actual_amount: number;

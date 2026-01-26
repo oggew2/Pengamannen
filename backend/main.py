@@ -630,6 +630,7 @@ def allocate_nordic_momentum(
         fetcher = TradingViewFetcher()
         all_stocks = fetcher.fetch_nordic(min_market_cap_sek=2e9)
         price_lookup = {s['ticker']: s.get('price_sek') or s.get('close', 0) for s in all_stocks}
+        currency_lookup = {s['ticker']: s.get('currency', 'SEK') for s in all_stocks}
         
         # Build stocks list (excluding user-excluded)
         stocks = []
@@ -639,6 +640,7 @@ def allocate_nordic_momentum(
                     'ticker': r['ticker'],
                     'name': r['name'],
                     'price_sek': price_lookup.get(r['ticker'], 0),
+                    'currency': currency_lookup.get(r['ticker'], 'SEK'),
                     'momentum': r['momentum'],
                     'market': r['market'],
                 })
