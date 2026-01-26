@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Box, Text, Button, VStack, HStack, SimpleGrid } from '@chakra-ui/react';
+import { Box, Text, Button, VStack, HStack, SimpleGrid, Input } from '@chakra-ui/react';
 import { api, type RebalanceResponse } from '../api/client';
 import { useRebalanceDates } from '../api/hooks';
 
@@ -79,6 +79,7 @@ export function PortfolioTracker() {
   const [copied, setCopied] = useState(false);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
   const [executedTrades, setExecutedTrades] = useState<{ sells: string[]; buys: string[] }>({ sells: [], buys: [] });
+  const [newCapital, setNewCapital] = useState<string>('');
   
   // Next rebalance countdown
   const { data: rebalanceDates } = useRebalanceDates();
@@ -142,7 +143,8 @@ export function PortfolioTracker() {
     setRebalanceData(null);
     try {
       const holdingsForApi = holdings.map(h => ({ ticker: h.ticker, shares: h.shares }));
-      const res: RebalanceResponse = await api.calculateRebalance(holdingsForApi, 0);
+      const newInvestment = parseFloat(newCapital) || 0;
+      const res: RebalanceResponse = await api.calculateRebalance(holdingsForApi, newInvestment);
       
       const sells: RebalanceStock[] = res.sell.map(s => ({
         ticker: s.ticker,
@@ -280,8 +282,17 @@ export function PortfolioTracker() {
         <Text fontSize="lg" fontWeight="semibold">Min Portfölj</Text>
         {holdings.length > 0 && (
           <HStack gap="8px">
+            <Input
+              type="number"
+              placeholder="Nytt kapital"
+              value={newCapital}
+              onChange={e => setNewCapital(e.target.value)}
+              size="xs"
+              width="100px"
+              bg="bg"
+            />
             <Button size="xs" variant="outline" colorPalette="blue" onClick={checkRebalance} loading={loading}>
-              🔄 Kolla ombalansering
+              🔄 Kolla
             </Button>
             <Button size="xs" variant="ghost" colorPalette="red" onClick={clearHoldings}>
               Rensa
@@ -459,7 +470,7 @@ export function PortfolioTracker() {
                             </a>
                             <Text fontSize="xs" color="fg.muted">#{b.currentRank}</Text>
                           </HStack>
-                          <Text color="fg.muted">{b.shares} st</Text>
+                          <Text color="fg.muted">{b.shares} st = {formatSEK(b.value)}</Text>
                         </HStack>
                       </Box>
                     ))}
