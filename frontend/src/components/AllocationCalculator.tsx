@@ -129,10 +129,10 @@ export function AllocationCalculator() {
       
       {/* Mode toggle */}
       <HStack gap="8px" mb="16px">
-        <Button size="sm" variant={mode === 'fresh' ? 'solid' : 'outline'} onClick={() => setMode('fresh')}>
+        <Button size="sm" variant={mode === 'fresh' ? 'solid' : 'outline'} colorScheme="blue" onClick={() => setMode('fresh')}>
           Ny portfölj
         </Button>
-        <Button size="sm" variant={mode === 'banding' ? 'solid' : 'outline'} onClick={() => setMode('banding')}>
+        <Button size="sm" variant={mode === 'banding' ? 'solid' : 'outline'} colorScheme="blue" onClick={() => setMode('banding')}>
           Ombalansering
         </Button>
       </HStack>
@@ -182,8 +182,8 @@ export function AllocationCalculator() {
             <Box><Text fontSize="xs" color="fg.muted">Utnyttjande</Text><Text fontWeight="semibold" color={isOverspent ? 'red.400' : undefined}>{(adjSummary?.utilization || result.summary.utilization).toFixed(1)}%</Text></Box>
             <Box><Text fontSize="xs" color="fg.muted">Max avvikelse</Text><Text fontWeight="semibold" color={result.summary.max_deviation > 5 ? 'red.400' : result.summary.max_deviation > 2 ? 'yellow.400' : 'green.400'}>{result.summary.max_deviation}%</Text></Box>
             {result.summary.commission_start && <Box><Text fontSize="xs" color="fg.muted">Courtage (Avanza)</Text><Text fontWeight="semibold" fontSize="xs">{result.summary.commission_start} kr <Text as="span" color="fg.muted">(Start)</Text></Text><Text fontSize="xs" color="fg.muted">{result.summary.commission_mini} kr (Mini) · {result.summary.commission_small} kr (Small)</Text></Box>}
-            <Button size="xs" variant="outline" onClick={copyToClipboard}>📋 Kopiera</Button>
-            <Button size="xs" variant={lockedIn ? 'solid' : 'outline'} colorScheme={lockedIn ? 'green' : undefined} onClick={() => {
+            <Button size="xs" variant="outline" colorScheme="gray" onClick={copyToClipboard}>📋 Kopiera</Button>
+            <Button size="xs" variant={lockedIn ? 'solid' : 'outline'} colorScheme={lockedIn ? 'green' : 'blue'} onClick={() => {
               const allocations = result.allocations.filter(a => a.included || (shareAdjustments[a.ticker] || 0) > 0).map(a => ({
                 ticker: a.ticker,
                 shares: shareAdjustments[a.ticker] ?? a.shares,
@@ -193,7 +193,7 @@ export function AllocationCalculator() {
               lockIn(allocations);
               setLockedIn(true);
             }}>{lockedIn ? '✓ Inlåst' : '🔒 Lås in portfölj'}</Button>
-            {hasAdj && <Button size="xs" variant="outline" onClick={() => setShareAdjustments({})}>Återställ</Button>}
+            {hasAdj && <Button size="xs" variant="outline" colorScheme="gray" onClick={() => setShareAdjustments({})}>Återställ</Button>}
           </HStack>
           {isOverspent && (
             <Box bg="red.900/30" borderColor="red.500" borderWidth="1px" borderRadius="md" p="8px">
@@ -294,7 +294,7 @@ export function AllocationCalculator() {
             </Box>
           )}
           
-          {(excluded.size > 0 || forceInclude.size > 0) && <Button size="sm" variant="outline" onClick={() => { setExcluded(new Set()); setForceInclude(new Set()); }}>Återställ alla</Button>}
+          {(excluded.size > 0 || forceInclude.size > 0) && <Button size="sm" variant="outline" colorScheme="gray" onClick={() => { setExcluded(new Set()); setForceInclude(new Set()); }}>Återställ alla</Button>}
         </VStack>
       )}
 
@@ -307,7 +307,7 @@ export function AllocationCalculator() {
             <Box><Text fontSize="xs" color="fg.muted">Köp</Text><Text fontWeight="semibold" color="green.400">{rebalanceResult.summary.stocks_bought}</Text></Box>
             <Box><Text fontSize="xs" color="fg.muted">Portföljvärde</Text><Text fontWeight="semibold">{formatSEK(rebalanceResult.summary.final_portfolio_value)}</Text></Box>
             <Box><Text fontSize="xs" color="fg.muted">Kvar</Text><Text fontWeight="semibold">{formatSEK(rebalanceResult.summary.cash_remaining)}</Text></Box>
-            <Button size="xs" variant="outline" onClick={copyToClipboard}>📋 Kopiera</Button>
+            <Button size="xs" variant="outline" colorScheme="gray" onClick={copyToClipboard}>📋 Kopiera</Button>
           </HStack>
 
           {/* Sell section */}
