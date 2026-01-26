@@ -4,21 +4,19 @@ import { api } from '../api/client';
 import { queryKeys } from '../api/hooks';
 
 interface DataStatus {
+  system_status?: string;
+  system_message?: string;
+  data_source?: string;
+  nordic_momentum?: {
+    stocks_count: number;
+    last_updated: string | null;
+    age_days: number;
+  };
   summary?: {
     total_stocks: number;
     fresh_count: number;
-    stale_count: number;
-    very_stale_count: number;
     fresh_percentage: number;
   };
-}
-
-interface SyncHistory {
-  last_successful_sync: string | null;
-  next_scheduled_sync: string;
-  total_syncs: number;
-  successful_syncs: number;
-  failed_syncs: number;
 }
 
 function formatTimeAgo(dateStr: string): string {
@@ -33,18 +31,6 @@ function formatTimeAgo(dateStr: string): string {
   if (diffMins < 60) return `${diffMins}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
   return `${diffDays}d ago`;
-}
-
-function formatTimeUntil(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = date.getTime() - now.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-
-  if (diffMins < 1) return 'now';
-  if (diffMins < 60) return `in ${diffMins}m`;
-  return `in ${diffHours}h ${diffMins % 60}m`;
 }
 
 function formatAbsoluteTime(dateStr: string): string {
@@ -92,23 +78,15 @@ export default function DataFreshnessIndicator() {
     staleTime: 60 * 1000,
   });
 
-  const { data: syncHistory } = useQuery({
-    queryKey: queryKeys.data.syncHistory(1),
-    queryFn: () => api.get<SyncHistory>('/data/sync-history?days=1'),
-    staleTime: 60 * 1000,
-  });
+  if (!status?.nordic_momentum) return null;
 
-  if (!status?.summary) return null;
+  const { stocks_count, last_updated, age_days } = status.nordic_momentum;
+  const iconStatus = age_days <= 1 ? 'ok' : age_days <= 3 ? 'warning' : 'error';
+  const statusLabel = age_days <= 1 ? 'Fresh' : age_days <= 3 ? 'Recent' : 'Stale';
+  const color = age_days <= 1 ? '#22c55e' : age_days <= 3 ? '#f59e0b' : '#ef4444';
 
-  const { fresh_percentage, total_stocks, fresh_count } = status.summary;
-  const iconStatus = fresh_percentage >= 80 ? 'ok' : fresh_percentage >= 50 ? 'warning' : 'error';
-  const statusLabel = fresh_percentage >= 80 ? 'OK' : fresh_percentage >= 50 ? 'Stale' : 'Outdated';
-  const color = fresh_percentage >= 80 ? '#22c55e' : fresh_percentage >= 50 ? '#f59e0b' : '#ef4444';
-
-  const lastSync = syncHistory?.last_successful_sync;
-  const nextSync = syncHistory?.next_scheduled_sync;
-  const lastSyncRelative = lastSync ? formatTimeAgo(lastSync) : 'Never';
-  const lastSyncAbsolute = lastSync ? formatAbsoluteTime(lastSync) : 'Never';
+  const lastSyncRelative = last_updated ? formatTimeAgo(last_updated) : 'Never';
+  const lastSyncAbsolute = last_updated ? formatAbsoluteTime(last_updated) : 'Never';
 
   return (
     <div style={{ position: 'relative' }}>
@@ -130,18 +108,17 @@ export default function DataFreshnessIndicator() {
         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
         aria-expanded={showDetails}
-        aria-label={`Data status: ${statusLabel}. ${fresh_count} of ${total_stocks} stocks fresh. Last synced ${lastSyncRelative}. Click for details.`}
-        title={`${fresh_count}/${total_stocks} stocks (${fresh_percentage.toFixed(0)}%)\nLast sync: ${lastSyncAbsolute}`}
+        aria-label={`Data status: ${statusLabel}. ${stocks_count} stocks. Last updated ${lastSyncRelative}. Click for details.`}
+        title={`${stocks_count} stocks · TradingView\nLast update: ${lastSyncAbsolute}`}
       >
         <StatusIcon status={iconStatus} />
         <span>
-          Data {statusLabel} · {lastSyncRelative}
+          {statusLabel} · {lastSyncRelative}
         </span>
       </button>
 
       {showDetails && (
         <>
-          {/* Backdrop to close on click outside */}
           <div 
             style={{ position: 'fixed', inset: 0, zIndex: 40 }} 
             onClick={() => setShowDetails(false)}
@@ -167,42 +144,32 @@ export default function DataFreshnessIndicator() {
           >
             <div style={{ fontWeight: 600, marginBottom: '0.625rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
               <StatusIcon status={iconStatus} />
-              Data {statusLabel}
+              Nordic Momentum Data
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#6b7280' }}>Coverage</span>
-                <span style={{ fontWeight: 500, color }}>{fresh_count}/{total_stocks} ({fresh_percentage.toFixed(0)}%)</span>
+                <span style={{ color: '#6b7280' }}>Source</span>
+                <span style={{ fontWeight: 500 }}>{status.data_source || 'TradingView'}</span>
               </div>
               
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#6b7280' }}>Last sync</span>
+                <span style={{ color: '#6b7280' }}>Stocks</span>
+                <span style={{ fontWeight: 500 }}>{stocks_count}</span>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#6b7280' }}>Last updated</span>
                 <span style={{ fontWeight: 500 }} title={lastSyncAbsolute}>{lastSyncRelative}</span>
               </div>
               
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#6b7280' }}>Next sync</span>
-                <span style={{ fontWeight: 500 }}>{nextSync ? formatTimeUntil(nextSync) : '—'}</span>
+                <span style={{ color: '#6b7280' }}>Status</span>
+                <span style={{ fontWeight: 500, color }}>{status.system_message || statusLabel}</span>
               </div>
-              
-              {syncHistory && syncHistory.total_syncs > 0 && (
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  marginTop: '0.375rem', 
-                  paddingTop: '0.375rem', 
-                  borderTop: '1px solid #e5e7eb' 
-                }}>
-                  <span style={{ color: '#6b7280' }}>24h syncs</span>
-                  <span style={{ fontWeight: 500 }}>
-                    {syncHistory.successful_syncs}/{syncHistory.total_syncs} OK
-                  </span>
-                </div>
-              )}
             </div>
 
-            {fresh_percentage < 80 && (
+            {age_days > 1 && (
               <div style={{ 
                 marginTop: '0.625rem', 
                 padding: '0.5rem', 
@@ -211,7 +178,7 @@ export default function DataFreshnessIndicator() {
                 fontSize: '0.75rem',
                 color: '#92400e'
               }}>
-                Data may be outdated. Check Data Management for details.
+                Data is {age_days} days old. Refresh will happen automatically.
               </div>
             )}
           </div>
