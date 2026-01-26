@@ -34,6 +34,12 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   
+  // Skip caching for POST/PUT/DELETE requests
+  if (event.request.method !== 'GET') {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+  
   // API requests: network first, cache fallback
   if (url.pathname.startsWith('/api') || API_ROUTES.some(r => url.pathname.includes(r))) {
     event.respondWith(
