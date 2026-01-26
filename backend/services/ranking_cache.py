@@ -759,8 +759,9 @@ def calculate_rebalance_with_banding(
     Returns:
         dict with hold/sell/buy recommendations and share counts
     """
-    # Build rank lookup
+    # Build rank and name lookup
     rank_lookup = {s['ticker']: i + 1 for i, s in enumerate(ranked_stocks)}
+    name_lookup = {s['ticker']: s.get('name', '') for s in ranked_stocks}
     
     # Analyze current holdings
     hold = []
@@ -773,11 +774,13 @@ def calculate_rebalance_with_banding(
         price = price_lookup.get(ticker, 0)
         value = shares * price
         rank = rank_lookup.get(ticker)
+        name = name_lookup.get(ticker, '')
         
         if rank is None:
             # Stock not in universe - sell
             sell.append({
                 'ticker': ticker,
+                'name': name,
                 'shares': shares,
                 'price': price,
                 'value': value,
@@ -788,6 +791,7 @@ def calculate_rebalance_with_banding(
             # Below threshold - sell
             sell.append({
                 'ticker': ticker,
+                'name': name,
                 'shares': shares,
                 'price': price,
                 'value': value,
@@ -798,6 +802,7 @@ def calculate_rebalance_with_banding(
             # Keep
             hold.append({
                 'ticker': ticker,
+                'name': name,
                 'shares': shares,
                 'price': price,
                 'value': value,
