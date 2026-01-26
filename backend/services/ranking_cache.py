@@ -4,7 +4,7 @@ Called after daily sync to ensure rankings are ready for users.
 """
 import logging
 import gc
-from datetime import date
+from datetime import date, datetime
 import pandas as pd
 import yaml
 
