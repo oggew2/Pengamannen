@@ -393,6 +393,25 @@ def compute_nordic_momentum(db=None) -> dict:
     df = df[df['sector'] != 'Finance']
     logger.info(f"After Finance filter: {len(df)} stocks")
     
+    # Filter out investment/holding companies by name (Börslabbet excludes these)
+    # Be specific to avoid filtering legitimate operating companies
+    def is_investment_company(name):
+        name_lower = name.lower()
+        # Remove class suffix for checking
+        name_clean = name_lower.replace(' class a', '').replace(' class b', '').replace(' ser. a', '').replace(' ser. b', '').strip()
+        # Specific patterns for investment companies
+        if 'investment ab' in name_lower or 'investment a/s' in name_lower:
+            return True
+        if 'invest ab' in name_lower:
+            return True
+        # "Capital AB" at end of name (like Maha Capital AB)
+        if name_clean.endswith('capital ab') or name_clean.endswith('capital a/s'):
+            return True
+        return False
+    
+    df = df[~df['name'].apply(is_investment_company)]
+    logger.info(f"After investment company filter: {len(df)} stocks")
+    
     # Calculate momentum score
     df['momentum'] = (
         df['perf_3m'].fillna(0) + 
@@ -417,16 +436,18 @@ def compute_nordic_momentum(db=None) -> dict:
     
     results = []
     for rank, (_, row) in enumerate(top40.iterrows(), 1):
+        price_sek = row.get('price_sek') or row.get('close', 0)
+        price_local = row.get('close', 0)
         results.append({
             'rank': rank,
             'ticker': row['ticker'],
             'name': row['name'],
             'market': row['market'],
             'currency': row['currency'],
-            'price': row.get('price_sek') or row.get('close', 0),  # Price in SEK
-            'price_local': row.get('close', 0),  # Price in local currency
+            'price': round(price_sek, 2),  # Price in SEK (2 decimals)
+            'price_local': round(price_local, 2),  # Price in local currency
             'market_cap_sek': row['market_cap_sek'],
-            'momentum': row['momentum'],
+            'momentum': round(row['momentum'], 2),
             'perf_3m': row['perf_3m'],
             'perf_6m': row['perf_6m'],
             'perf_12m': row['perf_12m'],
