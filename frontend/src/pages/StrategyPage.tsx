@@ -106,7 +106,8 @@ export function StrategyPage() {
 
   return (
     <VStack gap="24px" align="stretch">
-      <DataIntegrityBanner />
+      {/* DataIntegrityBanner only for non-momentum (Avanza data) */}
+      {!isMomentum && <DataIntegrityBanner />}
       
       {/* Header */}
       <Box>
