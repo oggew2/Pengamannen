@@ -129,10 +129,10 @@ export function AllocationCalculator() {
       
       {/* Mode toggle */}
       <HStack gap="8px" mb="16px">
-        <Button size="sm" variant={mode === 'fresh' ? 'solid' : 'outline'} colorScheme="blue" onClick={() => setMode('fresh')}>
+        <Button size="sm" variant={mode === 'fresh' ? 'solid' : 'outline'} bg={mode === 'fresh' ? 'blue.500' : undefined} color={mode === 'fresh' ? 'white' : 'blue.400'} borderColor="blue.400" _hover={{ bg: mode === 'fresh' ? 'blue.600' : 'blue.900/30' }} onClick={() => setMode('fresh')}>
           Ny portfölj
         </Button>
-        <Button size="sm" variant={mode === 'banding' ? 'solid' : 'outline'} colorScheme="blue" onClick={() => setMode('banding')}>
+        <Button size="sm" variant={mode === 'banding' ? 'solid' : 'outline'} bg={mode === 'banding' ? 'blue.500' : undefined} color={mode === 'banding' ? 'white' : 'blue.400'} borderColor="blue.400" _hover={{ bg: mode === 'banding' ? 'blue.600' : 'blue.900/30' }} onClick={() => setMode('banding')}>
           Ombalansering
         </Button>
       </HStack>
@@ -141,7 +141,7 @@ export function AllocationCalculator() {
         <HStack gap="12px" mb="16px">
           <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Belopp" width="200px" bg="bg" />
           <Text color="fg.muted">SEK</Text>
-          <Button onClick={calculate} loading={loading} colorScheme="blue" size="sm">Beräkna</Button>
+          <Button onClick={calculate} loading={loading} bg="blue.500" color="white" _hover={{ bg: 'blue.600' }} size="sm">Beräkna</Button>
         </HStack>
       ) : (
         <VStack align="stretch" gap="12px" mb="16px">
@@ -160,7 +160,7 @@ export function AllocationCalculator() {
           <HStack gap="12px">
             <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Nytt kapital (valfritt)" width="200px" bg="bg" />
             <Text color="fg.muted">SEK</Text>
-            <Button onClick={calculate} loading={loading} colorScheme="blue" size="sm">Beräkna</Button>
+            <Button onClick={calculate} loading={loading} bg="blue.500" color="white" _hover={{ bg: 'blue.600' }} size="sm">Beräkna</Button>
           </HStack>
         </VStack>
       )}
@@ -182,8 +182,8 @@ export function AllocationCalculator() {
             <Box><Text fontSize="xs" color="fg.muted">Utnyttjande</Text><Text fontWeight="semibold" color={isOverspent ? 'red.400' : undefined}>{(adjSummary?.utilization || result.summary.utilization).toFixed(1)}%</Text></Box>
             <Box><Text fontSize="xs" color="fg.muted">Max avvikelse</Text><Text fontWeight="semibold" color={result.summary.max_deviation > 5 ? 'red.400' : result.summary.max_deviation > 2 ? 'yellow.400' : 'green.400'}>{result.summary.max_deviation}%</Text></Box>
             {result.summary.commission_start && <Box><Text fontSize="xs" color="fg.muted">Courtage (Avanza)</Text><Text fontWeight="semibold" fontSize="xs">{result.summary.commission_start} kr <Text as="span" color="fg.muted">(Start)</Text></Text><Text fontSize="xs" color="fg.muted">{result.summary.commission_mini} kr (Mini) · {result.summary.commission_small} kr (Small)</Text></Box>}
-            <Button size="xs" variant="outline" colorScheme="gray" onClick={copyToClipboard}>📋 Kopiera</Button>
-            <Button size="xs" variant={lockedIn ? 'solid' : 'outline'} colorScheme={lockedIn ? 'green' : 'blue'} onClick={() => {
+            <Button size="xs" variant="outline" color="fg.muted" borderColor="border" _hover={{ bg: 'bg.muted' }} onClick={copyToClipboard}>📋 Kopiera</Button>
+            <Button size="xs" variant={lockedIn ? 'solid' : 'outline'} bg={lockedIn ? 'green.500' : undefined} color={lockedIn ? 'white' : 'blue.400'} borderColor={lockedIn ? 'green.500' : 'blue.400'} _hover={{ bg: lockedIn ? 'green.600' : 'blue.900/30' }} onClick={() => {
               const allocations = result.allocations.filter(a => a.included || (shareAdjustments[a.ticker] || 0) > 0).map(a => ({
                 ticker: a.ticker,
                 shares: shareAdjustments[a.ticker] ?? a.shares,
@@ -193,7 +193,7 @@ export function AllocationCalculator() {
               lockIn(allocations);
               setLockedIn(true);
             }}>{lockedIn ? '✓ Inlåst' : '🔒 Lås in portfölj'}</Button>
-            {hasAdj && <Button size="xs" variant="outline" colorScheme="gray" onClick={() => setShareAdjustments({})}>Återställ</Button>}
+            {hasAdj && <Button size="xs" variant="outline" color="fg.muted" borderColor="border" _hover={{ bg: 'bg.muted' }} onClick={() => setShareAdjustments({})}>Återställ</Button>}
           </HStack>
           {isOverspent && (
             <Box bg="red.900/30" borderColor="red.500" borderWidth="1px" borderRadius="md" p="8px">
@@ -205,7 +205,7 @@ export function AllocationCalculator() {
               <Text fontSize="xs" color="green.400" fontWeight="medium" mb="4px">Optimala belopp för jämnare fördelning:</Text>
               <HStack gap="8px" flexWrap="wrap">
                 {result.optimal_amounts.map((opt: {amount: number; max_deviation: number}) => (
-                  <Button key={opt.amount} size="xs" variant="outline" colorScheme="green" onClick={() => { setAmount(String(opt.amount)); setShareAdjustments({}); }}>
+                  <Button key={opt.amount} size="xs" variant="outline" color="green.400" borderColor="green.500" _hover={{ bg: 'green.900/30' }} onClick={() => { setAmount(String(opt.amount)); setShareAdjustments({}); }}>
                     {formatSEK(opt.amount)} ({opt.max_deviation}%)
                   </Button>
                 ))}
@@ -267,20 +267,23 @@ export function AllocationCalculator() {
                         <Button 
                           size="xs" 
                           variant={forceInclude.has(a.ticker) ? 'solid' : 'outline'} 
-                          colorScheme="orange"
+                          bg={forceInclude.has(a.ticker) ? 'orange.500' : undefined}
+                          color={forceInclude.has(a.ticker) ? 'white' : 'orange.400'}
+                          borderColor="orange.400"
+                          _hover={{ bg: forceInclude.has(a.ticker) ? 'orange.600' : 'orange.900/30' }}
                           onClick={() => toggleStock(a.ticker, true)}
                           title="Klicka för att köpa 1 aktie ändå"
                         >
                           {forceInclude.has(a.ticker) ? '1st' : '⚠️'}
                         </Button>
                       ) : isExcluded ? (
-                        <Button size="xs" variant="outline" colorScheme="gray" onClick={() => toggleStock(a.ticker, false)}>
+                        <Button size="xs" variant="outline" color="fg.muted" borderColor="border" _hover={{ bg: 'bg.muted' }} onClick={() => toggleStock(a.ticker, false)}>
                           ✗
                         </Button>
                       ) : (
                         <HStack gap="1px" justify="center">
                           <Text color="green.400" fontWeight="bold">✓</Text>
-                          <Button size="xs" variant="ghost" colorScheme="red" onClick={() => toggleStock(a.ticker, false)} title="Exkludera">
+                          <Button size="xs" variant="ghost" color="red.400" _hover={{ bg: 'red.900/30' }} onClick={() => toggleStock(a.ticker, false)} title="Exkludera">
                             ✕
                           </Button>
                         </HStack>
@@ -307,7 +310,7 @@ export function AllocationCalculator() {
             </Box>
           )}
           
-          {(excluded.size > 0 || forceInclude.size > 0) && <Button size="sm" variant="outline" colorScheme="gray" onClick={() => { setExcluded(new Set()); setForceInclude(new Set()); }}>Återställ alla</Button>}
+          {(excluded.size > 0 || forceInclude.size > 0) && <Button size="sm" variant="outline" color="fg.muted" borderColor="border" _hover={{ bg: 'bg.muted' }} onClick={() => { setExcluded(new Set()); setForceInclude(new Set()); }}>Återställ alla</Button>}
         </VStack>
       )}
 
@@ -320,7 +323,7 @@ export function AllocationCalculator() {
             <Box><Text fontSize="xs" color="fg.muted">Köp</Text><Text fontWeight="semibold" color="green.400">{rebalanceResult.summary.stocks_bought}</Text></Box>
             <Box><Text fontSize="xs" color="fg.muted">Portföljvärde</Text><Text fontWeight="semibold">{formatSEK(rebalanceResult.summary.final_portfolio_value)}</Text></Box>
             <Box><Text fontSize="xs" color="fg.muted">Kvar</Text><Text fontWeight="semibold">{formatSEK(rebalanceResult.summary.cash_remaining)}</Text></Box>
-            <Button size="xs" variant="outline" colorScheme="gray" onClick={copyToClipboard}>📋 Kopiera</Button>
+            <Button size="xs" variant="outline" color="fg.muted" borderColor="border" _hover={{ bg: 'bg.muted' }} onClick={copyToClipboard}>📋 Kopiera</Button>
           </HStack>
 
           {/* Sell section */}

@@ -250,9 +250,6 @@ export function StrategyPage() {
       {type === 'momentum' && <AllocationCalculator />}
       {type === 'momentum' && <PortfolioTracker />}
 
-      {/* Custom Portfolio Builder */}
-      <CustomPortfolioBuilder />
-
       {/* Performance Comparison */}
       <PerformanceComparison />
 
@@ -266,91 +263,6 @@ export function StrategyPage() {
         </Link>
       </HStack>
     </VStack>
-  );
-}
-
-// Custom Portfolio Builder Component
-function CustomPortfolioBuilder() {
-  const [weights, setWeights] = useState<Record<string, number>>({
-    sammansatt_momentum: 25,
-    trendande_varde: 25,
-    trendande_utdelning: 25,
-    trendande_kvalitet: 25,
-  });
-  const [saved, setSaved] = useState(false);
-
-  const strategies = [
-    { name: 'sammansatt_momentum', display: 'Sammansatt Momentum' },
-    { name: 'trendande_varde', display: 'Trendande Värde' },
-    { name: 'trendande_utdelning', display: 'Trendande Utdelning' },
-    { name: 'trendande_kvalitet', display: 'Trendande Kvalitet' },
-  ];
-
-  const total = Object.values(weights).reduce((sum, w) => sum + w, 0);
-  const estReturn = (weights.sammansatt_momentum * 0.15 + weights.trendande_varde * 0.12 + 
-    weights.trendande_utdelning * 0.10 + weights.trendande_kvalitet * 0.13) / 100;
-
-  const adjustWeight = (name: string, delta: number) => {
-    setWeights(prev => ({ ...prev, [name]: Math.max(0, Math.min(100, prev[name] + delta)) }));
-    setSaved(false);
-  };
-
-  const savePortfolio = () => {
-    localStorage.setItem('customPortfolioWeights', JSON.stringify(weights));
-    setSaved(true);
-  };
-
-  return (
-    <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="8px" p="24px">
-      <Text fontSize="lg" fontWeight="semibold" color="fg" mb="16px">Custom Portfolio Builder</Text>
-      
-      <VStack align="stretch" gap="12px" mb="16px">
-        {strategies.map(s => (
-          <HStack key={s.name} justify="space-between">
-            <HStack gap="8px">
-              <Box
-                as="button"
-                w="18px" h="18px"
-                borderRadius="3px"
-                border="2px solid"
-                borderColor={weights[s.name] > 0 ? 'brand.500' : 'fg0'}
-                bg={weights[s.name] > 0 ? 'brand.500' : 'transparent'}
-                onClick={() => setWeights(prev => ({ ...prev, [s.name]: prev[s.name] > 0 ? 0 : 25 }))}
-              >
-                {weights[s.name] > 0 && <Text fontSize="10px" color="white" lineHeight="14px">✓</Text>}
-              </Box>
-              <Text fontSize="sm" color="fg">{s.display}</Text>
-            </HStack>
-            <HStack gap="8px">
-              <Button size="xs" variant="ghost" color="fg.muted" onClick={() => adjustWeight(s.name, -5)}>−</Button>
-              <Text fontSize="sm" color="fg" fontFamily="mono" minW="40px" textAlign="center">{weights[s.name]}%</Text>
-              <Button size="xs" variant="ghost" color="fg.muted" onClick={() => adjustWeight(s.name, 5)}>+</Button>
-            </HStack>
-          </HStack>
-        ))}
-      </VStack>
-
-      <HStack justify="space-between" mb="16px" pt="12px" borderTop="1px solid" borderColor="border">
-        <Text fontSize="sm" color="fg.muted">Total:</Text>
-        <Text fontSize="sm" fontWeight="semibold" color={total === 100 ? 'success.500' : 'warning.500'}>{total}%</Text>
-      </HStack>
-
-      <HStack justify="space-between" mb="16px">
-        <Text fontSize="sm" color="fg.muted">Est. Annual Return:</Text>
-        <Text fontSize="sm" fontWeight="semibold" color="success.500">{(estReturn * 100).toFixed(1)}%</Text>
-      </HStack>
-
-      <Button 
-        size="sm" 
-        bg="brand.500" 
-        color="white" 
-        width="100%" 
-        onClick={savePortfolio}
-        disabled={total !== 100}
-      >
-        {saved ? '✓ Saved' : 'Save as Custom Portfolio'}
-      </Button>
-    </Box>
   );
 }
 
