@@ -389,22 +389,29 @@ def compute_nordic_momentum(db=None) -> dict:
     # Build DataFrame
     df = pd.DataFrame(stocks)
     
-    # Filter out Finance sector
+    # ========== BULLETPROOF FILTERS ==========
+    
+    # 1. Finance sector (banks, investment companies, insurance, REITs)
     df = df[df['sector'] != 'Finance']
     logger.info(f"After Finance filter: {len(df)} stocks")
     
-    # Filter out investment/holding companies by name (Börslabbet excludes these)
-    # Be specific to avoid filtering legitimate operating companies
+    # 2. Depositary receipts (SDB/SDR) - foreign companies listed via receipts
+    df = df[~df['ticker'].str.contains('SDB|SDR', case=False, na=False)]
+    logger.info(f"After SDB/SDR filter: {len(df)} stocks")
+    
+    # 3. Preference shares (PREF, _C class) - different risk/return profile
+    df = df[~df['ticker'].str.contains('PREF', case=False, na=False)]
+    df = df[~df['ticker'].str.endswith('_C')]
+    logger.info(f"After preference share filter: {len(df)} stocks")
+    
+    # 4. Investment/capital companies by name pattern
     def is_investment_company(name):
         name_lower = name.lower()
-        # Remove class suffix for checking
         name_clean = name_lower.replace(' class a', '').replace(' class b', '').replace(' ser. a', '').replace(' ser. b', '').strip()
-        # Specific patterns for investment companies
         if 'investment ab' in name_lower or 'investment a/s' in name_lower:
             return True
         if 'invest ab' in name_lower:
             return True
-        # "Capital AB" at end of name (like Maha Capital AB)
         if name_clean.endswith('capital ab') or name_clean.endswith('capital a/s'):
             return True
         return False
