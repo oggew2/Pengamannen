@@ -655,11 +655,12 @@ def allocate_nordic_momentum(
         substitutes = []
         for i, r in enumerate(result['rankings'], start=1):
             if r['ticker'] not in excluded and r['ticker'] not in allocated_tickers:
+                data = stock_data.get(r['ticker'], {})
                 substitutes.append({
                     'rank': i,
                     'ticker': r['ticker'],
                     'name': r['name'],
-                    'price': price_lookup.get(r['ticker'], 0),
+                    'price': data.get('price_sek') or data.get('close', 0),
                 })
                 if len(substitutes) >= 10:
                     break
