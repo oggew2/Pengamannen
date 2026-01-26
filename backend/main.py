@@ -632,9 +632,9 @@ def allocate_nordic_momentum(
         price_lookup = {s['ticker']: s.get('price_sek') or s.get('close', 0) for s in all_stocks}
         currency_lookup = {s['ticker']: s.get('currency', 'SEK') for s in all_stocks}
         
-        # Build stocks list (excluding user-excluded)
+        # Build stocks list (excluding user-excluded), preserving original rank
         stocks = []
-        for r in result['rankings']:
+        for i, r in enumerate(result['rankings'], start=1):
             if r['ticker'] not in excluded:
                 stocks.append({
                     'ticker': r['ticker'],
@@ -643,6 +643,7 @@ def allocate_nordic_momentum(
                     'currency': currency_lookup.get(r['ticker'], 'SEK'),
                     'momentum': r['momentum'],
                     'market': r['market'],
+                    'original_rank': i,  # Preserve original momentum rank
                 })
         
         # Calculate allocation

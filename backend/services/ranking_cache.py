@@ -702,7 +702,7 @@ def calculate_allocation(investment_amount: float, stocks: list, target_count: i
         deviation = actual_weight - target_weight
         
         allocations.append({
-            "rank": i + 1,
+            "rank": stock.get('original_rank', i + 1),  # Use original rank if available
             "ticker": stock['ticker'],
             "name": stock.get('name', ''),
             "price": price,
