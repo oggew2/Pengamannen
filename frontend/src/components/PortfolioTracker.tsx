@@ -33,6 +33,7 @@ export function PortfolioTracker() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [lastChecked, setLastChecked] = useState<string | null>(null);
 
   // Load holdings from localStorage (and listen for changes)
   useEffect(() => {
@@ -66,9 +67,11 @@ export function PortfolioTracker() {
   }, []);
 
   const clearHoldings = () => {
+    if (!confirm('Vill du rensa din sparade portfölj?')) return;
     setHoldings([]);
     setRebalanceData(null);
     setError(null);
+    setLastChecked(null);
     localStorage.removeItem(STORAGE_KEY);
   };
 
@@ -118,6 +121,7 @@ export function PortfolioTracker() {
         : `${sells.length} att sälja, ${buys.length} att köpa`;
 
       setRebalanceData({ sells, holds, buys, summary });
+      setLastChecked(new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
       console.error('Rebalance check failed:', err);
       setError('Kunde inte hämta data. Försök igen.');
@@ -126,7 +130,7 @@ export function PortfolioTracker() {
     }
   };
 
-  const copyTrades = () => {
+  const copyTrades = async () => {
     if (!rebalanceData) return;
     const lines: string[] = [];
     if (rebalanceData.sells.length) {
@@ -137,9 +141,14 @@ export function PortfolioTracker() {
       lines.push('', 'KÖP:');
       rebalanceData.buys.forEach(b => lines.push(`${b.ticker}\t${b.shares} st\t${formatSEK(b.value)}`));
     }
-    navigator.clipboard.writeText(lines.join('\n'));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for browsers without clipboard API
+      setError('Kunde inte kopiera. Markera texten manuellt.');
+    }
   };
 
   const formatSEK = (v: number) => new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', maximumFractionDigits: 0 }).format(v);
@@ -207,8 +216,11 @@ export function PortfolioTracker() {
           {/* Rebalance results */}
           {rebalanceData && (
             <VStack align="stretch" gap="12px" mt="8px">
-              <HStack justify="space-between">
-                <Text fontWeight="semibold">{rebalanceData.summary}</Text>
+              <HStack justify="space-between" flexWrap="wrap" gap="8px">
+                <HStack gap="8px">
+                  <Text fontWeight="semibold">{rebalanceData.summary}</Text>
+                  {lastChecked && <Text fontSize="xs" color="fg.muted">({lastChecked})</Text>}
+                </HStack>
                 {(rebalanceData.sells.length > 0 || rebalanceData.buys.length > 0) && (
                   <Button size="xs" variant="outline" onClick={copyTrades}>
                     {copied ? '✓ Kopierat!' : '📋 Kopiera trades'}
