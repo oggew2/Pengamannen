@@ -707,14 +707,16 @@ def rebalance_nordic_momentum(request: dict, response: Response):
         df = df.sort_values('momentum', ascending=False)
         
         # Build ranked list (all stocks, not just top 10)
-        ranked_stocks = [{'ticker': row['ticker'], 'name': row['name']} for _, row in df.iterrows()]
+        ranked_stocks = [{'ticker': row['ticker'], 'name': row['name'], 'currency': row.get('currency', 'SEK')} for _, row in df.iterrows()]
         price_lookup = {s['ticker']: s.get('close', 0) for s in stocks}
+        currency_lookup = {s['ticker']: s.get('currency', 'SEK') for s in stocks}
         
         rebalance = calculate_rebalance_with_banding(
             current_holdings=holdings,
             new_investment=new_investment,
             ranked_stocks=ranked_stocks,
             price_lookup=price_lookup,
+            currency_lookup=currency_lookup,
         )
         
         response.headers["Cache-Control"] = "no-cache"

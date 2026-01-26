@@ -16,6 +16,7 @@ interface RebalanceStock {
   currentRank: number | null;
   previousRank: number;
   value: number;
+  currency: string;
   action: 'SELL' | 'HOLD' | 'BUY';
   reason?: string;
 }
@@ -91,6 +92,7 @@ export function PortfolioTracker() {
         currentRank: s.rank,
         previousRank: holdings.find(h => h.ticker === s.ticker)?.rankAtPurchase || 0,
         value: s.value,
+        currency: (s as any).currency || 'SEK',
         action: 'SELL' as const,
         reason: s.rank && s.rank > 20 ? `Rank sjönk till ${s.rank}` : 'Ej längre i universum'
       }));
@@ -103,6 +105,7 @@ export function PortfolioTracker() {
           currentRank: p.rank,
           previousRank: holdings.find(h => h.ticker === p.ticker)?.rankAtPurchase || 0,
           value: p.value,
+          currency: (p as any).currency || 'SEK',
           action: 'HOLD' as const
         }));
 
@@ -112,6 +115,7 @@ export function PortfolioTracker() {
         currentRank: b.rank,
         previousRank: 0,
         value: b.value,
+        currency: (b as any).currency || 'SEK',
         action: 'BUY' as const,
         reason: `Ny i topp 10 (rank ${b.rank})`
       }));
@@ -135,11 +139,11 @@ export function PortfolioTracker() {
     const lines: string[] = [];
     if (rebalanceData.sells.length) {
       lines.push('SÄLJ:');
-      rebalanceData.sells.forEach(s => lines.push(`${s.ticker}\t${s.shares} st\t${formatSEK(s.value)}`));
+      rebalanceData.sells.forEach(s => lines.push(`${s.ticker}\t${s.shares} st\t${formatPrice(s.value, s.currency)}`));
     }
     if (rebalanceData.buys.length) {
       lines.push('', 'KÖP:');
-      rebalanceData.buys.forEach(b => lines.push(`${b.ticker}\t${b.shares} st\t${formatSEK(b.value)}`));
+      rebalanceData.buys.forEach(b => lines.push(`${b.ticker}\t${b.shares} st\t${formatPrice(b.value, b.currency)}`));
     }
     try {
       await navigator.clipboard.writeText(lines.join('\n'));
@@ -151,7 +155,12 @@ export function PortfolioTracker() {
     }
   };
 
-  const formatSEK = (v: number) => new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', maximumFractionDigits: 0 }).format(v);
+  const formatPrice = (v: number, currency: string = 'SEK') => {
+    const formatted = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(v);
+    if (currency === 'SEK') return `${formatted} kr`;
+    return `${formatted} ${currency} (≈SEK)`;
+  };
+  const formatSEK = (v: number) => new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(v) + ' kr';
   const formatDate = (d: string) => new Date(d).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
 
   const totalValue = holdings.reduce((sum, h) => sum + (h.shares * h.buyPrice), 0);
@@ -240,7 +249,7 @@ export function PortfolioTracker() {
                         <Text fontWeight="medium">{s.ticker}</Text>
                         <Text fontSize="xs" color="red.300">{s.reason}</Text>
                       </Box>
-                      <Text>{s.shares} st = {formatSEK(s.value)}</Text>
+                      <Text>{s.shares} st = {formatPrice(s.value, s.currency)}</Text>
                     </HStack>
                   ))}
                 </Box>
@@ -277,7 +286,7 @@ export function PortfolioTracker() {
                         <Text fontWeight="medium">{b.ticker}</Text>
                         <Text fontSize="xs" color="green.300">{b.reason}</Text>
                       </Box>
-                      <Text>{b.shares} st = {formatSEK(b.value)}</Text>
+                      <Text>{b.shares} st = {formatPrice(b.value, b.currency)}</Text>
                     </HStack>
                   ))}
                 </Box>

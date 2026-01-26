@@ -825,6 +825,7 @@ def calculate_rebalance_with_banding(
     new_investment: float,
     ranked_stocks: list,
     price_lookup: dict,
+    currency_lookup: dict = None,
     buy_threshold: int = 10,
     sell_threshold: int = 20,
 ) -> dict:
@@ -850,6 +851,7 @@ def calculate_rebalance_with_banding(
     # Build rank and name lookup
     rank_lookup = {s['ticker']: i + 1 for i, s in enumerate(ranked_stocks)}
     name_lookup = {s['ticker']: s.get('name', '') for s in ranked_stocks}
+    currency_lookup = currency_lookup or {}
     
     # Analyze current holdings
     hold = []
@@ -863,6 +865,7 @@ def calculate_rebalance_with_banding(
         value = shares * price
         rank = rank_lookup.get(ticker)
         name = name_lookup.get(ticker, '')
+        currency = currency_lookup.get(ticker, 'SEK')
         
         if rank is None:
             # Stock not in universe - sell
@@ -872,6 +875,7 @@ def calculate_rebalance_with_banding(
                 'shares': shares,
                 'price': price,
                 'value': value,
+                'currency': currency,
                 'reason': 'not_in_universe',
                 'rank': None,
             })
@@ -883,6 +887,7 @@ def calculate_rebalance_with_banding(
                 'shares': shares,
                 'price': price,
                 'value': value,
+                'currency': currency,
                 'reason': 'below_threshold',
                 'rank': rank,
             })
@@ -894,6 +899,7 @@ def calculate_rebalance_with_banding(
                 'shares': shares,
                 'price': price,
                 'value': value,
+                'currency': currency,
                 'rank': rank,
             })
             current_value += value
@@ -927,6 +933,7 @@ def calculate_rebalance_with_banding(
             shares = int(target_per_stock // price) if target_per_stock > 0 else 0
             if shares > 0:
                 value = shares * price
+                currency = currency_lookup.get(stock['ticker'], 'SEK')
                 buy.append({
                     'ticker': stock['ticker'],
                     'name': stock.get('name', ''),
@@ -934,6 +941,7 @@ def calculate_rebalance_with_banding(
                     'price': price,
                     'shares': shares,
                     'value': value,
+                    'currency': currency,
                 })
                 total_cash -= value
                 slots_to_fill -= 1
