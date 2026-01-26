@@ -7,6 +7,7 @@ import { api } from '../api/client';
 import { useStrategies, useBacktest } from '../api/hooks';
 import { DataIntegrityBanner } from '../components/DataIntegrityBanner';
 import { AllocationCalculator } from '../components/AllocationCalculator';
+import { PortfolioTracker } from '../components/PortfolioTracker';
 import type { StrategyMeta } from '../types';
 
 const STRATEGY_INFO: Record<string, { description: string; rules: string[] }> = {
@@ -247,6 +248,7 @@ export function StrategyPage() {
 
       {/* Allocation Calculator - only for momentum */}
       {type === 'momentum' && <AllocationCalculator />}
+      {type === 'momentum' && <PortfolioTracker />}
 
       {/* Custom Portfolio Builder */}
       <CustomPortfolioBuilder />

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Box, Text, Button, VStack, HStack, Input, Textarea } from '@chakra-ui/react';
 import { api, type AllocationResponse, type AllocationStock, type RebalanceResponse } from '../api/client';
+import { useLockInPortfolio } from './PortfolioTracker';
 
 type Mode = 'fresh' | 'banding';
 
@@ -15,6 +16,8 @@ export function AllocationCalculator() {
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [forceInclude, setForceInclude] = useState<Set<string>>(new Set());
   const [shareAdjustments, setShareAdjustments] = useState<Record<string, number>>({});
+  const [lockedIn, setLockedIn] = useState(false);
+  const { lockIn } = useLockInPortfolio();
 
   const parseHoldings = (text: string): { ticker: string; shares: number }[] => {
     return text.split('\n')
@@ -33,6 +36,7 @@ export function AllocationCalculator() {
     setResult(null);
     setRebalanceResult(null);
     setShareAdjustments({});
+    setLockedIn(false);
 
     try {
       if (mode === 'fresh') {
@@ -179,6 +183,16 @@ export function AllocationCalculator() {
             <Box><Text fontSize="xs" color="fg.muted">Max avvikelse</Text><Text fontWeight="semibold" color={result.summary.max_deviation > 5 ? 'red.400' : result.summary.max_deviation > 2 ? 'yellow.400' : 'green.400'}>{result.summary.max_deviation}%</Text></Box>
             {result.summary.commission_start && <Box><Text fontSize="xs" color="fg.muted">Courtage (Avanza)</Text><Text fontWeight="semibold" fontSize="xs">{result.summary.commission_start} kr <Text as="span" color="fg.muted">(Start)</Text></Text><Text fontSize="xs" color="fg.muted">{result.summary.commission_mini} kr (Mini) · {result.summary.commission_small} kr (Small)</Text></Box>}
             <Button size="xs" variant="outline" onClick={copyToClipboard}>📋 Kopiera</Button>
+            <Button size="xs" variant={lockedIn ? 'solid' : 'outline'} colorScheme={lockedIn ? 'green' : undefined} onClick={() => {
+              const allocations = result.allocations.filter(a => a.included || (shareAdjustments[a.ticker] || 0) > 0).map(a => ({
+                ticker: a.ticker,
+                shares: shareAdjustments[a.ticker] ?? a.shares,
+                price: a.price,
+                rank: a.rank
+              }));
+              lockIn(allocations);
+              setLockedIn(true);
+            }}>{lockedIn ? '✓ Inlåst' : '🔒 Lås in portfölj'}</Button>
             {hasAdj && <Button size="xs" variant="outline" onClick={() => setShareAdjustments({})}>Återställ</Button>}
           </HStack>
           {isOverspent && (
