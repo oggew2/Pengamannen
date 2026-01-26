@@ -1678,6 +1678,7 @@ def add_to_watchlist(request: Request, watchlist_id: int, ticker: str, notes: st
 def get_momentum_portfolio(request: Request, db: Session = Depends(get_db)):
     """Get user's saved momentum portfolio holdings."""
     from services.auth import require_auth
+    from models import UserPortfolio
     import json
     
     user = require_auth(request, db)
@@ -1706,6 +1707,7 @@ def get_momentum_portfolio(request: Request, db: Session = Depends(get_db)):
 def save_momentum_portfolio(request: Request, body: dict, db: Session = Depends(get_db)):
     """Save user's momentum portfolio holdings."""
     from services.auth import require_auth
+    from models import UserPortfolio
     import json
     
     user = require_auth(request, db)
