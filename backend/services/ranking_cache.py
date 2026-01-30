@@ -415,6 +415,12 @@ def compute_nordic_momentum(db=None) -> dict:
     df = df[~df['name'].apply(is_investment_company)]
     logger.info(f"After investment company filter: {len(df)} stocks")
     
+    # 4. Momentum confirmation filter - exclude "fading momentum" stocks
+    #    Stocks with negative 3m AND 6m but positive 12m are showing reversal, not momentum
+    #    This is academically sound: momentum strategies rely on trend continuation
+    df = df[~((df['perf_3m'] < 0) & (df['perf_6m'] < 0))]
+    logger.info(f"After momentum confirmation filter: {len(df)} stocks")
+    
     # Calculate momentum score
     df['momentum'] = (
         df['perf_3m'].fillna(0) + 
@@ -522,10 +528,36 @@ def compute_nordic_momentum_banded(db, current_holdings: list[str] = None) -> di
     if not stocks:
         return {"error": "No data available"}
     
-    # Build DataFrame and apply filters
+    # Build DataFrame and apply filters (same as compute_nordic_momentum)
     df = pd.DataFrame(stocks)
+    
+    # 1. Finance sector exclusion
     df = df[df['sector'] != 'Finance']
+    
+    # 2. Preference shares exclusion
+    df = df[~df['ticker'].str.contains('PREF', case=False, na=False)]
+    
+    # 3. Investment company exclusion
+    def is_investment_company(name):
+        name_lower = name.lower()
+        name_clean = name_lower.replace(' class a', '').replace(' class b', '').replace(' ser. a', '').replace(' ser. b', '').strip()
+        if 'investment ab' in name_lower or 'investment a/s' in name_lower:
+            return True
+        if 'invest ab' in name_lower:
+            return True
+        if name_clean.endswith('capital ab') or name_clean.endswith('capital a/s'):
+            return True
+        return False
+    
+    df = df[~df['name'].apply(is_investment_company)]
+    
+    # 4. Momentum confirmation filter - exclude fading momentum stocks
+    df = df[~((df['perf_3m'] < 0) & (df['perf_6m'] < 0))]
+    
+    # Calculate momentum
     df['momentum'] = (df['perf_3m'].fillna(0) + df['perf_6m'].fillna(0) + df['perf_12m'].fillna(0)) / 3
+    
+    # F-Score filter
     df_quality = df[df['piotroski_f_score'].fillna(0) >= 5]
     
     if len(df_quality) < 20:
