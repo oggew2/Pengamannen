@@ -347,7 +347,9 @@ def send_reports_job():
             generate_monthly_report, generate_rebalance_report,
             format_monthly_email, format_rebalance_email, send_report_email
         )
+        from services.email_notifications import send_monthly_portfolio_alerts
         from config.settings import get_settings
+        from datetime import date
         
         settings = get_settings()
         if not settings.alert_email:
@@ -361,6 +363,13 @@ def send_reports_job():
             'smtp_password': settings.smtp_password,
             'smtp_from': settings.smtp_from
         }
+        
+        # Monthly portfolio alerts on 1st of month - send to ALL users with top 40 + rebalance info
+        if date.today().day == 1:
+            logger.info("Sending monthly rankings emails to all users")
+            from services.email_notifications import generate_monthly_rankings_email
+            alert_result = generate_monthly_rankings_email(db)
+            logger.info(f"Monthly rankings emails: {alert_result}")
         
         # Monthly report on 1st of month
         if should_send_monthly_report():
