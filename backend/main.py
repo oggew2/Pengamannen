@@ -4430,6 +4430,16 @@ def get_portfolio_performance_data(
     # Calculate current positions and value
     current_positions = calculate_positions(txn_list)
     
+    # Currency conversion rates (approximate)
+    from models import IsinLookup
+    currency_rates = {'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0, 'SEK': 1.0}
+    
+    # Build ticker to currency map
+    ticker_currency = {}
+    for ticker in current_positions.keys():
+        lookup = db.query(IsinLookup).filter(IsinLookup.ticker == ticker).first()
+        ticker_currency[ticker] = lookup.currency if lookup else 'SEK'
+    
     # Get latest prices for current value
     total_value = 0
     total_cost = 0
@@ -4438,7 +4448,10 @@ def get_portfolio_performance_data(
         if ticker in price_lookup and price_lookup[ticker]:
             latest_date = max(price_lookup[ticker].keys())
             latest_price = price_lookup[ticker][latest_date]
-            total_value += pos['shares'] * latest_price
+            # Convert to SEK
+            currency = ticker_currency.get(ticker, 'SEK')
+            rate = currency_rates.get(currency, 1.0)
+            total_value += pos['shares'] * latest_price * rate
         else:
             # No price data - use cost as fallback value
             total_value += pos['total_cost']
@@ -4465,12 +4478,16 @@ def get_portfolio_performance_data(
         "period": period,
     }
     
-    # Build positions with current value and return
+    # Build positions with current value and return (reuse ticker_currency from above)
     for ticker, pos in current_positions.items():
         current_val = pos['total_cost']  # fallback
         if ticker in price_lookup and price_lookup[ticker]:
             latest_date = max(price_lookup[ticker].keys())
-            current_val = pos['shares'] * price_lookup[ticker][latest_date]
+            price_local = price_lookup[ticker][latest_date]
+            # Convert to SEK
+            currency = ticker_currency.get(ticker, 'SEK')
+            rate = currency_rates.get(currency, 1.0)
+            current_val = pos['shares'] * price_local * rate
         
         return_pct = ((current_val - pos['total_cost']) / pos['total_cost'] * 100) if pos['total_cost'] > 0 else 0
         result["positions"].append({
