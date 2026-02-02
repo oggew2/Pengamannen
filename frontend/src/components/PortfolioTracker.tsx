@@ -121,6 +121,13 @@ export function PortfolioTracker() {
   
   const showVolumeWarning = isHighVolumeWarning();
 
+  // Calculate portfolio summary
+  const portfolioSummary = useMemo(() => {
+    const totalCost = holdings.reduce((sum, h) => sum + h.shares * h.buyPrice, 0);
+    const totalFees = holdings.reduce((sum, h) => sum + (h.fees || 0), 0);
+    return { totalCost, totalFees };
+  }, [holdings]);
+
   // Calculate drift for each holding (based on buy price, not current price)
   const driftData = useMemo(() => {
     if (holdings.length === 0) return { holdings: [], maxDrift: 0 };
@@ -182,6 +189,27 @@ export function PortfolioTracker() {
       window.removeEventListener('portfolio-locked-in', handleLockIn);
     };
   }, []);
+
+  // Fetch live rankings for holdings
+  useEffect(() => {
+    if (holdings.length === 0) return;
+    
+    const fetchRankings = async () => {
+      try {
+        const res = await fetch('/v1/strategies/sammansatt_momentum');
+        if (!res.ok) return;
+        const data = await res.json();
+        const rankMap = new Map(data.stocks?.map((s: { ticker: string }, i: number) => [s.ticker, i + 1]) || []);
+        
+        setHoldings(prev => prev.map(h => ({
+          ...h,
+          currentRank: (rankMap.get(h.ticker) as number) || 0
+        })));
+      } catch { /* ignore */ }
+    };
+    
+    fetchRankings();
+  }, [holdings.length]); // Only refetch when holdings count changes
 
   // Save to database when holdings change
   const saveToDatabase = async (newHoldings: LockedHolding[], newHistory?: Transaction[]) => {
@@ -579,6 +607,11 @@ export function PortfolioTracker() {
                 💰 Månadsspar
               </Box>
             </HStack>
+            <Text fontSize="xs" color="fg.muted" mt="4px">
+              {rebalanceMode === 'full' && 'Sälj aktier under rank 20, köp nya topp-aktier. Använd vid kvartalsslut.'}
+              {rebalanceMode === 'fix_drift' && 'Återbalansera befintliga innehav utan att köpa nya. Använd vid stor drift.'}
+              {rebalanceMode === 'add_only' && 'Lägg bara till nya positioner utan att sälja. Använd vid månadssparande.'}
+            </Text>
           </VStack>
         )}
       </HStack>
@@ -731,11 +764,19 @@ export function PortfolioTracker() {
             <Text fontSize="xs" color="fg.muted">Ingen historik ännu.</Text>
           )}
 
+          {/* Portfolio summary */}
+          {holdings.length > 0 && (
+            <HStack gap="16px" fontSize="xs" color="fg.muted" mb="8px">
+              <Text>Inköpsvärde: <Text as="span" fontWeight="medium" color="fg">{Math.round(portfolioSummary.totalCost).toLocaleString('sv-SE')} kr</Text></Text>
+              <Text>Avgifter: <Text as="span" fontWeight="medium" color="fg">{Math.round(portfolioSummary.totalFees).toLocaleString('sv-SE')} kr</Text></Text>
+            </HStack>
+          )}
+
           {/* Holdings list */}
           <Box fontSize="sm">
             {driftData.maxDrift > 2 && (
               <Text fontSize="xs" color="orange.400" mb="8px">
-                ⚠️ Portföljen har driftat {driftData.maxDrift.toFixed(1)}% från målvikt. Överväg "Fix drift".
+                ⚠️ Portföljen har driftat {driftData.maxDrift.toFixed(1)}% från målvikt. Överväg "Balansera".
               </Text>
             )}
             <HStack gap="8px" flexWrap="wrap">

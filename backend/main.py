@@ -1158,30 +1158,45 @@ def check_momentum_banding(
     buy_threshold = max(1, int(universe_size * 0.10))
     sell_threshold = max(2, int(universe_size * 0.20))
     
-    # Build rank lookup
+    # Build rank lookup with normalized tickers (handle SAAB-B vs SAAB B)
+    def normalize_ticker(t: str) -> str:
+        return t.replace('-', ' ').strip().upper()
+    
     rank_map = {r["ticker"]: {"rank": r["rank"], "score": r["score"]} for r in ranked_data}
+    # Also add normalized versions
+    rank_map_normalized = {normalize_ticker(r["ticker"]): r["ticker"] for r in ranked_data}
     
     keeps, sells, watch = [], [], []
     
+    def lookup_ticker(ticker: str):
+        """Look up ticker, trying exact match first, then normalized."""
+        if ticker in rank_map:
+            return ticker, rank_map[ticker]
+        normalized = normalize_ticker(ticker)
+        if normalized in rank_map_normalized:
+            actual_ticker = rank_map_normalized[normalized]
+            return actual_ticker, rank_map[actual_ticker]
+        return ticker, None
+    
     for ticker in holdings:
-        info = rank_map.get(ticker)
+        actual_ticker, info = lookup_ticker(ticker)
         if info is None:
             sells.append({"ticker": ticker, "rank": None, "name": None, "reason": "Not in universe"})
         elif info["rank"] > sell_threshold:
-            sells.append({"ticker": ticker, "rank": info["rank"], "name": _get_stock_name(ticker, db), "reason": f"Below top 20% (rank {info['rank']})"})
+            sells.append({"ticker": actual_ticker, "rank": info["rank"], "name": _get_stock_name(actual_ticker, db), "reason": f"Below top 20% (rank {info['rank']})"})
         else:
-            name = _get_stock_name(ticker, db)
-            entry = {"ticker": ticker, "rank": info["rank"], "name": name}
+            name = _get_stock_name(actual_ticker, db)
+            entry = {"ticker": actual_ticker, "rank": info["rank"], "name": name}
             keeps.append(entry)
             if info["rank"] > buy_threshold:
                 watch.append(entry)
     
     # Find suggested buys from top 10% not already owned
-    owned_tickers = set(holdings)
+    owned_normalized = {normalize_ticker(t) for t in holdings}
     buys = []
     slots_needed = max(0, 10 - len(keeps))
     for r in ranked_data[:buy_threshold]:
-        if r['ticker'] not in owned_tickers and len(buys) < slots_needed:
+        if normalize_ticker(r['ticker']) not in owned_normalized and len(buys) < slots_needed:
             buys.append({"ticker": r['ticker'], "rank": r['rank'], "name": _get_stock_name(r['ticker'], db)})
     
     return {
