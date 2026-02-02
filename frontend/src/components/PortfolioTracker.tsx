@@ -91,9 +91,11 @@ export function PortfolioTracker() {
   const [rebalanceData, setRebalanceData] = useState<{
     sells: RebalanceStock[];
     holds: RebalanceStock[];
-    buys: RebalanceStock[];  // Includes both topups (reason='undervikt') and new (reason='ny')
+    buys: RebalanceStock[];
     summary: string;
     costs?: { courtage: number; spread: number; total: number };
+    maxDrift?: number;
+    driftRecommendation?: 'low' | 'medium' | 'high';
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -379,7 +381,15 @@ export function PortfolioTracker() {
       const costs = { courtage: Math.round(courtage), spread: Math.round(spread), total: Math.round(courtage + spread) };
 
       console.log('Rebalance result:', { sells: sells.length, holds: holds.length, buys: allBuys.length });
-      setRebalanceData({ sells, holds, buys: allBuys, summary, costs });
+      setRebalanceData({ 
+        sells, 
+        holds, 
+        buys: allBuys, 
+        summary, 
+        costs,
+        maxDrift: res.max_drift,
+        driftRecommendation: res.drift_recommendation,
+      });
       setBuyAdjustments({});  // Reset adjustments
       setExecutedTrades({ sells: [], buys: [] });
       setLastChecked(new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }));
@@ -827,6 +837,38 @@ export function PortfolioTracker() {
           {/* Rebalance results */}
           {rebalanceData && (
             <VStack align="stretch" gap="12px" mt="8px">
+              {/* Drift recommendation */}
+              {rebalanceData.driftRecommendation && (
+                <Box 
+                  p="12px" 
+                  borderRadius="md" 
+                  bg={rebalanceData.driftRecommendation === 'high' ? 'red.900/30' : 
+                      rebalanceData.driftRecommendation === 'medium' ? 'orange.900/30' : 'green.900/30'}
+                  borderWidth="1px"
+                  borderColor={rebalanceData.driftRecommendation === 'high' ? 'red.500' : 
+                              rebalanceData.driftRecommendation === 'medium' ? 'orange.500' : 'green.500'}
+                >
+                  <HStack justify="space-between">
+                    <Text fontSize="sm" fontWeight="medium" color={
+                      rebalanceData.driftRecommendation === 'high' ? 'red.300' : 
+                      rebalanceData.driftRecommendation === 'medium' ? 'orange.300' : 'green.300'
+                    }>
+                      {rebalanceData.driftRecommendation === 'high' && '🔴 Rekommenderas att ombalansera'}
+                      {rebalanceData.driftRecommendation === 'medium' && '🟡 Överväg ombalansering'}
+                      {rebalanceData.driftRecommendation === 'low' && '🟢 Låg drift - avvakta'}
+                    </Text>
+                    <Text fontSize="xs" color="fg.muted">
+                      Max drift: {rebalanceData.maxDrift?.toFixed(1)}%
+                    </Text>
+                  </HStack>
+                  <Text fontSize="xs" color="fg.muted" mt="4px">
+                    {rebalanceData.driftRecommendation === 'high' && 'Drift >20% eller aktier att sälja. Ombalansera för att följa strategin.'}
+                    {rebalanceData.driftRecommendation === 'medium' && 'Drift 10-20%. Kan ombalansera, men avgifter äter avkastning.'}
+                    {rebalanceData.driftRecommendation === 'low' && 'Drift <10%. Vänta tills drift ökar för att spara avgifter.'}
+                  </Text>
+                </Box>
+              )}
+
               {/* Summary boxes */}
               <SimpleGrid columns={3} gap="8px">
                 <Box p="12px" bg="blue.900/20" borderRadius="6px" textAlign="center">

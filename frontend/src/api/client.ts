@@ -130,6 +130,7 @@ export interface RebalanceResponse {
   final_portfolio: Array<RebalanceHolding & { action: 'HOLD' | 'BUY'; weight: number; drift?: number }>;
   drift_analysis?: Array<{ ticker: string; current_weight: number; target_weight: number; drift: number; value: number }>;
   max_drift?: number;
+  drift_recommendation?: 'low' | 'medium' | 'high';
   summary: {
     stocks_held: number;
     stocks_sold: number;

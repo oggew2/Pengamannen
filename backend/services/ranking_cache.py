@@ -1099,4 +1099,9 @@ def calculate_rebalance_with_banding(
             'final_portfolio_value': round(total_value_sek, 2),
             'final_stock_count': len(final_portfolio),
         },
+        'drift_recommendation': (
+            'high' if max_drift >= 20 or len(sell) > 0 else
+            'medium' if max_drift >= 10 else
+            'low'
+        ),
     }
