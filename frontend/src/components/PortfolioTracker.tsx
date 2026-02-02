@@ -6,6 +6,8 @@ import { useRebalanceDates } from '../api/hooks';
 import { CsvImporter } from './CsvImporter';
 import { PerformanceChart } from './PerformanceChart';
 import { Confetti, AnimatedNumber, HealthBadge, usePullToRefresh } from './FintechEffects';
+import { InfoTooltip } from './InfoTooltip';
+import { HealthScore } from './HealthScore';
 import { toaster } from './toaster';
 
 interface LockedHolding {
@@ -636,15 +638,17 @@ export function PortfolioTracker() {
                 width="120px"
                 bg="bg"
               />
-              <Button size="xs" variant="solid" colorPalette="blue" onClick={checkRebalance} loading={loading}>
-                🔄 Kolla ombalansering
-              </Button>
+              <InfoTooltip id="rebalance">
+                <Button size="xs" variant="solid" colorPalette="blue" onClick={checkRebalance} loading={loading}>
+                  🔄 Kolla ombalansering
+                </Button>
+              </InfoTooltip>
               <Button size="xs" variant="ghost" colorPalette="red" onClick={clearHoldings}>
                 Rensa
               </Button>
             </HStack>
             {/* Segmented control for rebalance mode */}
-            <HStack 
+            <HStack
               gap="0" 
               bg="bg" 
               borderRadius="md" 
@@ -725,7 +729,9 @@ export function PortfolioTracker() {
       <Box bg="bg" borderRadius="8px" p="12px" borderWidth="1px" borderColor="border" mb="16px">
         <HStack justify="space-between" cursor="pointer" onClick={() => setShowRankings(!showRankings)}>
           <HStack gap="8px">
-            <Text fontSize="sm" fontWeight="semibold">📊 Nordic Momentum Topp 40</Text>
+            <InfoTooltip id="momentum">
+              <Text fontSize="sm" fontWeight="semibold">📊 Nordic Momentum Topp 40</Text>
+            </InfoTooltip>
             <Text fontSize="xs" color="fg.muted">({rankings.length} aktier)</Text>
           </HStack>
           <Text fontSize="xs" color="fg.muted">{showRankings ? '▲' : '▼'}</Text>
@@ -736,7 +742,7 @@ export function PortfolioTracker() {
               const isOwned = holdings.some(h => h.ticker === r.ticker || (h.isin && h.isin === r.isin));
               return (
                 <Box 
-                  key={r.ticker} 
+                  key={r.ticker}
                   fontSize="xs" 
                   bg={isOwned ? 'green.900/20' : 'transparent'}
                   px="8px" 
@@ -924,6 +930,18 @@ export function PortfolioTracker() {
             </HStack>
           )}
 
+          {/* Health Score */}
+          {holdings.length > 0 && (
+            <Box mb="16px">
+              <HealthScore
+                drift={driftData.maxDrift}
+                holdingsCount={holdings.length}
+                daysUntilRebalance={daysUntil}
+                topRankCount={holdings.filter(h => h.currentRank && h.currentRank <= 10).length}
+              />
+            </Box>
+          )}
+
           {/* Holdings list */}
           <Box fontSize="sm">
             {driftData.maxDrift > 2 && (
@@ -1037,9 +1055,11 @@ export function PortfolioTracker() {
                       {rebalanceData.driftRecommendation === 'medium' && '🟡 Överväg ombalansering'}
                       {rebalanceData.driftRecommendation === 'low' && '🟢 Låg drift - avvakta'}
                     </Text>
-                    <Text fontSize="xs" color="fg.muted">
-                      Max drift: {rebalanceData.maxDrift?.toFixed(1)}%
-                    </Text>
+                    <InfoTooltip id="drift">
+                      <Text fontSize="xs" color="fg.muted">
+                        Max drift: {rebalanceData.maxDrift?.toFixed(1)}%
+                      </Text>
+                    </InfoTooltip>
                   </HStack>
                   <Text fontSize="xs" color="fg.muted" mt="4px">
                     {rebalanceData.driftRecommendation === 'high' && 'Drift >20% eller aktier att sälja. Ombalansera för att följa strategin.'}
@@ -1170,12 +1190,12 @@ export function PortfolioTracker() {
               <Box bg="bg" borderRadius="md" p="12px" borderWidth="1px" borderColor="border">
                 <HStack justify="space-between" flexWrap="wrap" gap="12px">
                   {rebalanceData.costs && rebalanceData.costs.total > 0 && (
-                    <HStack gap="16px" fontSize="sm">
-                      <Text color="fg.muted">
+                    <InfoTooltip id="costs">
+                      <Text color="fg.muted" fontSize="sm">
                         Kostnad: {formatSEK(rebalanceData.costs.total)} 
                         <Text as="span" fontSize="xs"> (courtage + spread)</Text>
                       </Text>
-                    </HStack>
+                    </InfoTooltip>
                   )}
                   {(executedTrades.sells.length > 0 || executedTrades.buys.length > 0) && (
                     <Button size="sm" colorPalette="green" onClick={saveExecutedTrades}>
