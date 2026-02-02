@@ -22,6 +22,9 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught:', error, errorInfo);
+    // Log to console for debugging
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
   }
 
   render() {
@@ -33,6 +36,11 @@ export class ErrorBoundary extends Component<Props, State> {
             <Text color="gray.600">
               Ett oväntat fel uppstod. Försök ladda om sidan.
             </Text>
+            {this.state.error && (
+              <Text fontSize="xs" color="red.400" fontFamily="mono" maxW="400px" overflow="auto">
+                {this.state.error.message}
+              </Text>
+            )}
             <Button onClick={() => window.location.reload()} colorPalette="blue">
               Ladda om
             </Button>
