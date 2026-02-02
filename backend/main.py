@@ -4517,21 +4517,16 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
         isin_to_ticker = {l.isin: l.ticker for l in lookups}
         isin_to_currency = {l.isin: l.currency for l in lookups}
     
-    # Get live FX rates from TradingView fetcher (or use defaults)
+    # Get currency data from TradingView (same as rebalance endpoint)
     try:
         from services.tradingview_fetcher import TradingViewFetcher
         fetcher = TradingViewFetcher()
-        fx_rates = getattr(fetcher, '_fx_rates', None) or {'SEK': 1.0, 'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0}
+        stocks_data = fetcher.fetch_nordic(min_market_cap_sek=2e9)
+        fx_rates = getattr(fetcher, '_fx_rates', {'EUR': 11.5, 'NOK': 1.0, 'DKK': 1.55, 'SEK': 1.0})
+        ticker_to_currency = {s['ticker']: s.get('currency', 'SEK') for s in stocks_data} if stocks_data else {}
     except:
         fx_rates = {'SEK': 1.0, 'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0}
-    
-    # Build ticker to currency mapping from Stock table
-    from models import Stock
-    tickers = [h.get('ticker') for h in holdings if h.get('ticker')]
-    ticker_to_currency = {}
-    if tickers:
-        stocks = db.query(Stock).filter(Stock.ticker.in_(tickers)).all()
-        ticker_to_currency = {s.ticker: s.currency for s in stocks if s.currency}
+        ticker_to_currency = {}
     
     def get_fx_rate(holding: dict):
         isin = holding.get('isin')
@@ -4542,7 +4537,7 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
             currency = isin_to_currency[isin]
             return fx_rates.get(currency, 1.0)
         
-        # Try ticker lookup from Stock table
+        # Try ticker lookup from TradingView data
         if ticker in ticker_to_currency:
             currency = ticker_to_currency[ticker]
             return fx_rates.get(currency, 1.0)
