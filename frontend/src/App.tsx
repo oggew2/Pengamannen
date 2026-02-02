@@ -1,12 +1,14 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Box, Flex, Text } from '@chakra-ui/react';
 import { Suspense, lazy } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { Navigation } from './components/Navigation';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Dashboard } from './pages/Dashboard';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginPage } from './pages/LoginPage';
 import { Toaster } from './components/toaster';
+import { PageTransition } from './components/Animations';
 
 // Lazy load pages
 const StockDetailPage = lazy(() => import('./pages/StockDetailPage'));
@@ -25,6 +27,22 @@ const AuthLoader = () => (
   </Flex>
 );
 
+function AnimatedRoutes() {
+  const location = useLocation();
+  
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={<PageTransition><Dashboard /></PageTransition>} />
+        <Route path="/settings" element={<PageTransition><SettingsPage /></PageTransition>} />
+        <Route path="/data" element={<PageTransition><DataManagementPage /></PageTransition>} />
+        <Route path="/stock/:ticker" element={<PageTransition><StockDetailPage /></PageTransition>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AnimatePresence>
+  );
+}
+
 function ProtectedApp() {
   const { user, loading } = useAuth();
 
@@ -42,13 +60,7 @@ function ProtectedApp() {
       >
         <Box maxW="1000px" mx="auto" px="24px" py="32px">
           <Suspense fallback={<PageLoader />}>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/data" element={<DataManagementPage />} />
-              <Route path="/stock/:ticker" element={<StockDetailPage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <AnimatedRoutes />
           </Suspense>
         </Box>
       </Box>

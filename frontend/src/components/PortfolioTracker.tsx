@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Box, Text, Button, VStack, HStack, SimpleGrid, Input, Skeleton } from '@chakra-ui/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { api, type RebalanceResponse } from '../api/client';
 import { useRebalanceDates } from '../api/hooks';
 import { CsvImporter } from './CsvImporter';
@@ -948,7 +949,14 @@ export function PortfolioTracker() {
           )}
 
           {/* Rebalance results */}
+          <AnimatePresence>
           {rebalanceData && !loading && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.3, ease: [0.34, 1.56, 0.64, 1] }}
+            >
             <VStack align="stretch" gap="12px" mt="8px">
               {/* Drift recommendation */}
               {rebalanceData.driftRecommendation && (
@@ -1118,7 +1126,9 @@ export function PortfolioTracker() {
                 </HStack>
               </Box>
             </VStack>
+            </motion.div>
           )}
+          </AnimatePresence>
         </VStack>
       )}
     </Box>
