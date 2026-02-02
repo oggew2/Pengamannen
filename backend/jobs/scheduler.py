@@ -142,6 +142,26 @@ async def tradingview_sync(db, force_refresh: bool = False) -> dict:
             lookup.updated_at = datetime.now()
             isin_updated += 1
         
+        # Also fetch Nordic stocks for ISIN lookup (DK, FI, NO)
+        try:
+            nordic_stocks = fetcher.fetch_nordic(markets=['denmark', 'finland', 'norway'], min_market_cap_sek=0)
+            for stock_data in nordic_stocks:
+                isin = stock_data.get('isin')
+                if not isin:
+                    continue
+                lookup = db.query(IsinLookup).filter(IsinLookup.isin == isin).first()
+                if not lookup:
+                    lookup = IsinLookup(isin=isin)
+                    db.add(lookup)
+                lookup.ticker = stock_data.get('ticker', stock_data.get('db_ticker'))
+                lookup.name = stock_data.get('name')
+                lookup.currency = stock_data.get('currency', 'EUR')
+                lookup.market = stock_data.get('market', 'nordic')
+                lookup.updated_at = datetime.now()
+                isin_updated += 1
+        except Exception as e:
+            logger.warning(f"Nordic ISIN sync failed: {e}")
+        
         db.commit()
         
         # Compute rankings using TradingView data
