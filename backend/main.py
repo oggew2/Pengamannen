@@ -4255,9 +4255,17 @@ async def import_csv_preview(file: UploadFile = File(...), db: Session = Depends
         "matched": len(matched),
         "unmatched": [{'name': t['name'], 'isin': t['isin'], 'date': t['date']} for t in unmatched[:10]],
         "positions": [
-            {'ticker': k, 'shares': round(v['shares'], 2), 'avg_price': round(v['avg_price_sek'], 2),
-             'total_cost': round(v['total_cost'], 2), 'fees': round(v['total_fees'], 2),
-             'currency': v['currency'], 'warning': v.get('warning')}
+            {
+                'ticker': k, 
+                'shares': round(v['shares'], 2), 
+                'avg_price_local': round(v.get('avg_price_local', v['avg_price_sek']), 2),
+                'avg_price_sek': round(v['avg_price_sek'], 2),
+                'total_cost': round(v['total_cost'], 2),
+                'fees': round(v['total_fees'], 2),
+                'currency': v['currency'],
+                'fx_rate': round(v.get('fx_rate', 1.0), 4),
+                'warning': v.get('warning')
+            }
             for k, v in positions.items()
         ],
         "summary": {
@@ -4549,6 +4557,9 @@ def sync_imported_to_holdings(request: Request, db: Session = Depends(get_db)):
             'type': t.type,
             'shares': t.shares,
             'price_sek': t.price_sek,
+            'price_local': t.price_local or t.price_sek,
+            'currency': t.currency or 'SEK',
+            'fx_rate': t.fx_rate or 1.0,
             'fee': t.fee or 0,
         })
     
@@ -4579,6 +4590,8 @@ def sync_imported_to_holdings(request: Request, db: Session = Depends(get_db)):
                 'ticker': key,
                 'shares': round(pos['shares']),
                 'buyPrice': round(pos['avg_price_sek'], 2),
+                'buyPriceLocal': round(pos.get('avg_price_local', pos['avg_price_sek']), 2),
+                'currency': pos.get('currency', 'SEK'),
                 'buyDate': pos.get('first_buy_date', ''),
                 'rankAtPurchase': rank_map.get(key, 0),
                 'currentRank': rank_map.get(key),

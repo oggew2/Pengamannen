@@ -18,10 +18,12 @@ interface Transaction {
 interface Position {
   ticker: string;
   shares: number;
-  avg_price: number;
+  avg_price_local: number;
+  avg_price_sek: number;
   total_cost: number;
   fees: number;
   currency: string;
+  fx_rate: number;
   warning?: string;
 }
 
@@ -268,7 +270,11 @@ export function CsvImporter({ onImportComplete, onSyncComplete }: {
                     </HStack>
                     <HStack gap={4}>
                       <Text color="gray.400">{pos.shares} st</Text>
-                      <Text>{Math.round(pos.total_cost).toLocaleString('sv-SE')} kr</Text>
+                      <Text color="gray.400">
+                        @ {pos.avg_price_local.toFixed(2)} {pos.currency}
+                        {pos.currency !== 'SEK' && <Text as="span" color="gray.500"> ≈ {pos.avg_price_sek.toFixed(0)} kr</Text>}
+                      </Text>
+                      <Text fontWeight="medium">{Math.round(pos.total_cost).toLocaleString('sv-SE')} kr</Text>
                     </HStack>
                   </HStack>
                 ))}

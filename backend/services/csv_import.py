@@ -72,11 +72,17 @@ def parse_avanza_csv(content: str, isin_lookup: Optional[dict] = None) -> list[d
         price = parse_num(row.get('Kurs', '0'))
         fee = parse_num(row.get('Courtage', '0'))
         
-        # FX rate - use 1.0 if empty or missing
-        fx_rate_raw = row.get('Valutakurs', '')
-        fx_rate = parse_num(fx_rate_raw) if fx_rate_raw.strip() else 1.0
-        if fx_rate == 0:
-            fx_rate = 1.0
+        # FX rate - use from CSV, or default rates for foreign currencies
+        fx_rate_raw = row.get('Valutakurs', '').strip()
+        if fx_rate_raw:
+            fx_rate = parse_num(fx_rate_raw)
+            if fx_rate == 0:
+                fx_rate = 1.0
+        else:
+            # Default FX rates when not provided (approximate)
+            default_fx = {'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0, 'USD': 10.5, 'SEK': 1.0}
+            currency_for_fx = (row.get('Instrumentvaluta', '') or row.get('Transaktionsvaluta', 'SEK')).strip() or 'SEK'
+            fx_rate = default_fx.get(currency_for_fx, 1.0)
         
         # Currency: prefer Instrumentvaluta, fallback to Transaktionsvaluta
         currency = (row.get('Instrumentvaluta', '') or row.get('Transaktionsvaluta', 'SEK')).strip() or 'SEK'
@@ -144,26 +150,34 @@ def calculate_positions(transactions: list[dict]) -> dict:
         if key not in positions:
             positions[key] = {
                 'shares': 0,
-                'total_cost': 0,
+                'total_cost': 0,  # In SEK
+                'total_cost_local': 0,  # In original currency
                 'total_fees': 0,
                 'currency': txn.get('currency', 'SEK'),
                 'isin': txn.get('isin'),
                 'name': txn.get('name'),
                 'ticker': txn.get('ticker'),
                 'first_buy_date': None,
+                'fx_rate': txn.get('fx_rate', 1.0),
             }
         
         pos = positions[key]
         shares = txn.get('shares', 0)
         price_sek = txn.get('price_sek', 0)
+        price_local = txn.get('price_local', price_sek)
         fee = txn.get('fee', 0)
         
         # Update name if we have a better one
         if txn.get('name') and not pos.get('name'):
             pos['name'] = txn['name']
         
+        # Update fx_rate to latest
+        if txn.get('fx_rate'):
+            pos['fx_rate'] = txn['fx_rate']
+        
         if txn.get('type') == 'BUY':
             pos['total_cost'] += shares * price_sek
+            pos['total_cost_local'] += shares * price_local
             pos['shares'] += shares
             pos['total_fees'] += fee
             if not pos['first_buy_date']:
@@ -173,6 +187,7 @@ def calculate_positions(transactions: list[dict]) -> dict:
                 # Reduce cost proportionally
                 sell_ratio = min(shares / pos['shares'], 1.0)
                 pos['total_cost'] -= pos['total_cost'] * sell_ratio
+                pos['total_cost_local'] -= pos['total_cost_local'] * sell_ratio
             pos['shares'] -= shares
             pos['total_fees'] += fee
     
@@ -181,10 +196,12 @@ def calculate_positions(transactions: list[dict]) -> dict:
     for key, pos in positions.items():
         if pos['shares'] > 0:
             pos['avg_price_sek'] = pos['total_cost'] / pos['shares']
+            pos['avg_price_local'] = pos['total_cost_local'] / pos['shares']
             result[key] = pos
         elif pos['shares'] < 0:
             # Negative position - missing buy history
             pos['avg_price_sek'] = 0
+            pos['avg_price_local'] = 0
             pos['warning'] = 'negative_position'
             result[key] = pos
         # Zero positions are excluded

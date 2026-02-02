@@ -8,7 +8,9 @@ import { PerformanceChart } from './PerformanceChart';
 interface LockedHolding {
   ticker: string;
   shares: number;
-  buyPrice: number;
+  buyPrice: number;  // In SEK
+  buyPriceLocal?: number;  // In original currency
+  currency?: string;  // Original currency (SEK, EUR, DKK, NOK)
   buyDate: string;
   rankAtPurchase: number;
   currentRank?: number | null;  // Dynamic rank from API
@@ -777,7 +779,10 @@ export function PortfolioTracker() {
                   >
                     <Text fontWeight="medium">{h.ticker}</Text>
                     <Text fontSize="xs" color={isSellZone ? 'red.400' : isInDanger ? 'orange.400' : 'fg.muted'}>
-                      {h.shares} st · #{rank}{rank !== h.rankAtPurchase && ` (var #${h.rankAtPurchase})`}
+                      {h.shares} st @ {(h.currency && h.currency !== 'SEK' && h.buyPriceLocal) 
+                        ? `${h.buyPriceLocal.toFixed(2)} ${h.currency} ≈${h.buyPrice.toFixed(0)} kr`
+                        : `${h.buyPrice.toFixed(2)} kr`}
+                      {' · '}#{rank}{rank !== h.rankAtPurchase && ` (var #${h.rankAtPurchase})`}
                       {hasDrift && <Text as="span" color={drift > 0 ? 'green.400' : 'red.400'}> ({drift > 0 ? '+' : ''}{drift.toFixed(1)}%)</Text>}
                     </Text>
                   </Box>
