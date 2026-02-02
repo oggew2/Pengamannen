@@ -842,16 +842,16 @@ export function PortfolioTracker() {
                 <Box 
                   p="12px" 
                   borderRadius="md" 
-                  bg={rebalanceData.driftRecommendation === 'high' ? 'red.900/30' : 
-                      rebalanceData.driftRecommendation === 'medium' ? 'orange.900/30' : 'green.900/30'}
+                  bg={rebalanceData.driftRecommendation === 'high' ? 'bg.error' : 
+                      rebalanceData.driftRecommendation === 'medium' ? 'bg.warning' : 'bg.success'}
                   borderWidth="1px"
-                  borderColor={rebalanceData.driftRecommendation === 'high' ? 'red.500' : 
-                              rebalanceData.driftRecommendation === 'medium' ? 'orange.500' : 'green.500'}
+                  borderColor={rebalanceData.driftRecommendation === 'high' ? 'border.error' : 
+                              rebalanceData.driftRecommendation === 'medium' ? 'border.warning' : 'border.success'}
                 >
                   <HStack justify="space-between">
                     <Text fontSize="sm" fontWeight="medium" color={
-                      rebalanceData.driftRecommendation === 'high' ? 'red.300' : 
-                      rebalanceData.driftRecommendation === 'medium' ? 'orange.300' : 'green.300'
+                      rebalanceData.driftRecommendation === 'high' ? 'fg.error' : 
+                      rebalanceData.driftRecommendation === 'medium' ? 'fg.warning' : 'fg.success'
                     }>
                       {rebalanceData.driftRecommendation === 'high' && '🔴 Rekommenderas att ombalansera'}
                       {rebalanceData.driftRecommendation === 'medium' && '🟡 Överväg ombalansering'}
