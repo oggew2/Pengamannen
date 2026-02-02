@@ -10,6 +10,7 @@ interface LockedHolding {
   buyDate: string;
   rankAtPurchase: number;
   currentRank?: number | null;  // Dynamic rank from API
+  fees?: number;  // Transaction fees paid (Avanza courtage)
 }
 
 interface RebalanceStock {
@@ -83,6 +84,9 @@ export function PortfolioTracker() {
   const [newCapital, setNewCapital] = useState<string>('');
   const [rebalanceMode, setRebalanceMode] = useState<'full' | 'add_only' | 'fix_drift'>('full');
   const [buyAdjustments, setBuyAdjustments] = useState<Record<string, number>>({});
+  const [editingTicker, setEditingTicker] = useState<string | null>(null);
+  const [editShares, setEditShares] = useState<string>('');
+  const [editPrice, setEditPrice] = useState<string>('');
   
   // Next rebalance countdown
   const { data: rebalanceDates } = useRebalanceDates();
@@ -170,6 +174,51 @@ export function PortfolioTracker() {
     setLastChecked(null);
     localStorage.removeItem(STORAGE_KEY);
     saveToDatabase([]);  // Clear from database too
+  };
+
+  // Calculate Avanza courtage: 0.069% min 1 SEK
+  const calculateFee = (value: number) => Math.max(1, Math.round(value * 0.00069));
+
+  const startEditing = (h: LockedHolding) => {
+    setEditingTicker(h.ticker);
+    setEditShares(h.shares.toString());
+    setEditPrice(h.buyPrice.toString());
+  };
+
+  const cancelEditing = () => {
+    setEditingTicker(null);
+    setEditShares('');
+    setEditPrice('');
+  };
+
+  const saveEditing = () => {
+    if (!editingTicker) return;
+    const shares = parseInt(editShares) || 0;
+    const price = parseFloat(editPrice) || 0;
+    
+    if (shares <= 0) {
+      // Delete holding if shares is 0
+      deleteHolding(editingTicker);
+    } else {
+      const newHoldings = holdings.map(h => 
+        h.ticker === editingTicker 
+          ? { ...h, shares, buyPrice: price, fees: calculateFee(shares * price) }
+          : h
+      );
+      setHoldings(newHoldings);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newHoldings));
+      saveToDatabase(newHoldings);
+    }
+    cancelEditing();
+  };
+
+  const deleteHolding = (ticker: string) => {
+    if (!confirm(`Ta bort ${ticker} från portföljen?`)) return;
+    const newHoldings = holdings.filter(h => h.ticker !== ticker);
+    setHoldings(newHoldings);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newHoldings));
+    saveToDatabase(newHoldings);
+    cancelEditing();
   };
 
   const checkRebalance = async () => {
@@ -299,17 +348,21 @@ export function PortfolioTracker() {
       .forEach(b => {
         const shares = getBuyShares(b.ticker, b.shares);
         const price = b.value / b.shares;
+        const value = shares * price;
+        const fee = calculateFee(value);
         const existing = newHoldings.find(h => h.ticker === b.ticker);
         if (existing) {
           // Add to existing position
           existing.shares += shares;
+          existing.fees = (existing.fees || 0) + fee;
         } else {
           newHoldings.push({
             ticker: b.ticker,
             shares,
             buyPrice: price,
             buyDate: new Date().toISOString(),
-            rankAtPurchase: b.currentRank || 0
+            rankAtPurchase: b.currentRank || 0,
+            fees: fee,
           });
         }
       });
@@ -467,6 +520,10 @@ export function PortfolioTracker() {
               <Text fontWeight="semibold">{formatSEK(totalValue)}</Text>
             </Box>
             <Box>
+              <Text fontSize="xs" color="fg.muted">Courtage betalt</Text>
+              <Text fontWeight="semibold">{formatSEK(holdings.reduce((sum, h) => sum + (h.fees || 0), 0))}</Text>
+            </Box>
+            <Box>
               <Text fontSize="xs" color="fg.muted">Låst</Text>
               <Text fontWeight="semibold">{holdings[0] ? formatDate(holdings[0].buyDate) : '—'}</Text>
             </Box>
@@ -486,6 +543,25 @@ export function PortfolioTracker() {
                 const isSellZone = rank && rank > 20;
                 const drift = driftData.holdings.find(d => d.ticker === h.ticker)?.drift ?? 0;
                 const hasDrift = Math.abs(drift) > 2;
+                const isEditing = editingTicker === h.ticker;
+                
+                if (isEditing) {
+                  return (
+                    <Box key={h.ticker} bg="blue.900/20" px="8px" py="4px" borderRadius="md" borderWidth="1px" borderColor="blue.500">
+                      <Text fontWeight="medium" mb="4px">{h.ticker}</Text>
+                      <HStack gap="4px" mb="4px">
+                        <Input size="xs" width="60px" value={editShares} onChange={e => setEditShares(e.target.value)} placeholder="Antal" type="number" bg="bg" />
+                        <Input size="xs" width="70px" value={editPrice} onChange={e => setEditPrice(e.target.value)} placeholder="Pris" type="number" step="0.01" bg="bg" />
+                      </HStack>
+                      <HStack gap="4px">
+                        <Button size="xs" colorPalette="green" onClick={saveEditing}>✓</Button>
+                        <Button size="xs" variant="ghost" onClick={cancelEditing}>✕</Button>
+                        <Button size="xs" variant="ghost" colorPalette="red" onClick={() => deleteHolding(h.ticker)}>🗑</Button>
+                      </HStack>
+                    </Box>
+                  );
+                }
+                
                 return (
                   <Box 
                     key={h.ticker} 
@@ -495,6 +571,10 @@ export function PortfolioTracker() {
                     borderRadius="md" 
                     borderWidth="1px" 
                     borderColor={isSellZone ? 'red.500' : isInDanger ? 'orange.500' : 'border'}
+                    cursor="pointer"
+                    onClick={() => startEditing(h)}
+                    title="Klicka för att redigera"
+                    _hover={{ borderColor: 'blue.400' }}
                   >
                     <Text fontWeight="medium">{h.ticker}</Text>
                     <Text fontSize="xs" color={isSellZone ? 'red.400' : isInDanger ? 'orange.400' : 'fg.muted'}>
