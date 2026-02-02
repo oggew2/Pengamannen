@@ -4519,21 +4519,6 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
     if not holdings:
         return empty_response
     
-    today = date.today()
-    yesterday = today - timedelta(days=1)
-    week_ago = today - timedelta(days=7)
-    month_ago = today - timedelta(days=30)
-    
-    # Build ISIN to ticker and currency mapping
-    from models import IsinLookup
-    isins = [h.get('isin') for h in holdings if h.get('isin')]
-    isin_to_ticker = {}
-    isin_to_currency = {}
-    if isins:
-        lookups = db.query(IsinLookup).filter(IsinLookup.isin.in_(isins)).all()
-        isin_to_ticker = {l.isin: l.ticker for l in lookups}
-        isin_to_currency = {l.isin: l.currency for l in lookups}
-    
     # Get currency and price data from TradingView (same as rebalance endpoint)
     try:
         from services.tradingview_fetcher import TradingViewFetcher
@@ -4541,19 +4526,20 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
         stocks_data = fetcher.fetch_nordic(min_market_cap_sek=2e9)
         fx_rates = getattr(fetcher, '_fx_rates', {'EUR': 11.5, 'NOK': 1.0, 'DKK': 1.55, 'SEK': 1.0})
         ticker_to_data = {s['ticker']: s for s in stocks_data} if stocks_data else {}
+        isin_to_data = {s['isin']: s for s in stocks_data if s.get('isin')} if stocks_data else {}
     except:
         fx_rates = {'SEK': 1.0, 'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0}
         ticker_to_data = {}
+        isin_to_data = {}
     
-    def get_stock_data(ticker: str):
-        # Try exact match first, then with underscore/space conversion
+    def get_stock_data(ticker: str, isin: str = None):
+        # Try ISIN first (most reliable)
+        if isin and isin in isin_to_data:
+            return isin_to_data[isin]
+        # Then ticker with format conversion
         if ticker in ticker_to_data:
             return ticker_to_data[ticker]
-        # Holdings use space (VOLV B), TradingView uses underscore (VOLV_B)
         alt = ticker.replace(' ', '_')
-        if alt in ticker_to_data:
-            return ticker_to_data[alt]
-        alt = ticker.replace('_', ' ')
         if alt in ticker_to_data:
             return ticker_to_data[alt]
         return {}
@@ -4565,10 +4551,11 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
     
     for h in holdings:
         ticker = h.get('ticker', '')
+        isin = h.get('isin')
         shares = h.get('shares', 0)
         buy_price = h.get('buyPrice', 0)
         
-        stock = get_stock_data(ticker)
+        stock = get_stock_data(ticker, isin)
         if stock:
             price = stock.get('close', 0)
             currency = stock.get('currency', 'SEK')
@@ -4601,8 +4588,9 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
     if total_value > 0:
         for h in holdings:
             ticker = h.get('ticker', '')
+            isin = h.get('isin')
             shares = h.get('shares', 0)
-            stock = get_stock_data(ticker)
+            stock = get_stock_data(ticker, isin)
             if stock:
                 price = stock.get('close', 0)
                 currency = stock.get('currency', 'SEK')
