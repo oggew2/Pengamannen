@@ -4350,6 +4350,136 @@ def get_portfolio_transactions(
     }
 
 
+@v1_router.get("/portfolio/daily-stats")
+def get_portfolio_daily_stats(db: Session = Depends(get_db)):
+    """Get daily portfolio stats for dashboard card."""
+    from models import PortfolioTransactionImported, DailyPrice, IsinLookup
+    from services.csv_import import calculate_positions
+    from datetime import date, timedelta
+    
+    transactions = db.query(PortfolioTransactionImported).all()
+    if not transactions:
+        return {"total_value": 0, "today_change": 0, "today_change_pct": 0, "week_change_pct": 0, "month_change_pct": 0, "best_performer": None, "worst_performer": None}
+    
+    txn_list = [{'date': t.date.isoformat() if t.date else None, 'ticker': t.ticker, 'isin': t.isin, 'type': t.type, 'shares': t.shares, 'price_sek': t.price_sek, 'fee': t.fee or 0} for t in transactions]
+    positions = calculate_positions(txn_list)
+    
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    week_ago = today - timedelta(days=7)
+    month_ago = today - timedelta(days=30)
+    
+    # Get ISIN mappings
+    isins = [t.isin for t in transactions if t.isin]
+    isin_lookups = {l.isin: (l.ticker, l.currency) for l in db.query(IsinLookup).filter(IsinLookup.isin.in_(isins)).all()}
+    currency_rates = {'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0, 'SEK': 1.0}
+    
+    def get_value_at_date(d):
+        total = 0
+        for ticker, pos in positions.items():
+            isin = pos.get('isin')
+            lookup_ticker, currency = isin_lookups.get(isin, (ticker, 'SEK')) if isin else (ticker, 'SEK')
+            price = db.query(DailyPrice).filter(DailyPrice.ticker.in_([lookup_ticker, ticker]), DailyPrice.date <= d).order_by(DailyPrice.date.desc()).first()
+            if price:
+                rate = currency_rates.get(currency, 1.0)
+                total += pos['shares'] * price.close * rate
+            else:
+                total += pos['total_cost']
+        return total
+    
+    current_value = get_value_at_date(today)
+    yesterday_value = get_value_at_date(yesterday)
+    week_value = get_value_at_date(week_ago)
+    month_value = get_value_at_date(month_ago)
+    
+    today_change = current_value - yesterday_value
+    today_pct = (today_change / yesterday_value * 100) if yesterday_value > 0 else 0
+    week_pct = ((current_value - week_value) / week_value * 100) if week_value > 0 else 0
+    month_pct = ((current_value - month_value) / month_value * 100) if month_value > 0 else 0
+    
+    # Find best/worst performers today
+    performers = []
+    for ticker, pos in positions.items():
+        isin = pos.get('isin')
+        lookup_ticker, currency = isin_lookups.get(isin, (ticker, 'SEK')) if isin else (ticker, 'SEK')
+        today_price = db.query(DailyPrice).filter(DailyPrice.ticker.in_([lookup_ticker, ticker]), DailyPrice.date == today).first()
+        yest_price = db.query(DailyPrice).filter(DailyPrice.ticker.in_([lookup_ticker, ticker]), DailyPrice.date == yesterday).first()
+        if today_price and yest_price and yest_price.close > 0:
+            change_pct = (today_price.close - yest_price.close) / yest_price.close * 100
+            performers.append({'ticker': ticker, 'change_pct': change_pct})
+    
+    performers.sort(key=lambda x: x['change_pct'], reverse=True)
+    best = performers[0] if performers else None
+    worst = performers[-1] if performers else None
+    
+    return {
+        "total_value": round(current_value, 2),
+        "today_change": round(today_change, 2),
+        "today_change_pct": round(today_pct, 2),
+        "week_change_pct": round(week_pct, 2),
+        "month_change_pct": round(month_pct, 2),
+        "best_performer": best,
+        "worst_performer": worst
+    }
+
+
+@v1_router.get("/portfolio/achievements")
+def get_portfolio_achievements(db: Session = Depends(get_db)):
+    """Get user achievements based on portfolio activity."""
+    from models import PortfolioTransactionImported
+    from services.csv_import import calculate_positions
+    
+    transactions = db.query(PortfolioTransactionImported).all()
+    unlocked = []
+    progress = {}
+    
+    if not transactions:
+        return {"unlocked": [], "progress": {}, "streak": 0}
+    
+    txn_list = [{'date': t.date.isoformat() if t.date else None, 'ticker': t.ticker, 'type': t.type, 'shares': t.shares, 'price_sek': t.price_sek} for t in transactions]
+    positions = calculate_positions(txn_list)
+    
+    # First import
+    if transactions:
+        unlocked.append('first_import')
+    
+    # Portfolio value milestones
+    total_cost = sum(p['total_cost'] for p in positions.values())
+    if total_cost >= 100000:
+        unlocked.append('portfolio_100k')
+    elif total_cost >= 50000:
+        progress['portfolio_100k'] = int(total_cost / 100000 * 100)
+    if total_cost >= 500000:
+        unlocked.append('portfolio_500k')
+    if total_cost >= 1000000:
+        unlocked.append('portfolio_1m')
+    
+    # Stock-specific achievements
+    tickers = list(positions.keys())
+    if 'SAAB B' in tickers:
+        unlocked.append('saab_owner')
+    if 'VOLV B' in tickers:
+        unlocked.append('volvo_owner')
+    
+    # Diversification
+    if len(tickers) >= 5:
+        unlocked.append('diversified')
+    else:
+        progress['diversified'] = int(len(tickers) / 5 * 100)
+    
+    # Time-based fun achievements
+    from datetime import datetime
+    hour = datetime.now().hour
+    if hour < 7:
+        unlocked.append('early_bird')
+    if hour >= 0 and hour < 5:
+        unlocked.append('night_owl')
+    if datetime.now().weekday() == 5:
+        unlocked.append('weekend_warrior')
+    
+    return {"unlocked": unlocked, "progress": progress, "streak": 0}
+
+
 @v1_router.get("/portfolio/performance")
 def get_portfolio_performance_data(
     period: str = "1Y",
