@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { Box, Text, Button, VStack, HStack, SimpleGrid, Input } from '@chakra-ui/react';
 import { api, type RebalanceResponse } from '../api/client';
 import { useRebalanceDates } from '../api/hooks';
+import { CsvImporter } from './CsvImporter';
+import { PerformanceChart } from './PerformanceChart';
 
 interface LockedHolding {
   ticker: string;
@@ -82,6 +84,8 @@ export function PortfolioTracker() {
   const [holdings, setHoldings] = useState<LockedHolding[]>([]);
   const [transactionHistory, setTransactionHistory] = useState<Transaction[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [showPerformance, setShowPerformance] = useState(false);
   const [rebalanceData, setRebalanceData] = useState<{
     sells: RebalanceStock[];
     holds: RebalanceStock[];
@@ -605,9 +609,34 @@ export function PortfolioTracker() {
       </SimpleGrid>
 
       {holdings.length === 0 ? (
-        <Text color="fg.muted" textAlign="center" py="20px">
-          Ingen portfölj sparad. Använd "🔒 Lås in portfölj" ovan efter att du allokerat.
-        </Text>
+        <VStack gap="16px" py="20px">
+          <Text color="fg.muted" textAlign="center">
+            Ingen portfölj sparad. Använd "🔒 Lås in portfölj" ovan efter att du allokerat.
+          </Text>
+          <Text color="fg.muted" fontSize="sm">— eller —</Text>
+          <Button size="sm" variant="outline" onClick={() => setShowImport(!showImport)}>
+            📥 Importera från Avanza CSV
+          </Button>
+          {showImport && (
+            <Box w="100%">
+              <CsvImporter 
+                onImportComplete={() => {}}
+                onSyncComplete={(newHoldings) => {
+                  const holdings: LockedHolding[] = newHoldings.map(h => ({
+                    ticker: h.ticker,
+                    shares: h.shares,
+                    buyPrice: h.buyPrice,
+                    buyDate: new Date().toISOString(),
+                    rankAtPurchase: 0,
+                  }));
+                  setHoldings(holdings);
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(holdings));
+                  setShowImport(false);
+                }}
+              />
+            </Box>
+          )}
+        </VStack>
       ) : (
         <VStack align="stretch" gap="16px">
           {/* Current holdings summary */}
@@ -630,10 +659,46 @@ export function PortfolioTracker() {
                 <Text fontWeight="semibold">{holdings[0] ? formatDate(holdings[0].buyDate) : '—'}</Text>
               </Box>
             </HStack>
-            <Button size="xs" variant="ghost" onClick={() => setShowHistory(!showHistory)}>
-              📜 {showHistory ? 'Dölj' : 'Historik'}
-            </Button>
+            <HStack gap="4px">
+              <Button size="xs" variant="ghost" onClick={() => setShowPerformance(!showPerformance)}>
+                📊 {showPerformance ? 'Dölj' : 'Översikt'}
+              </Button>
+              <Button size="xs" variant="ghost" onClick={() => setShowImport(!showImport)}>
+                📥 {showImport ? 'Dölj' : 'Import'}
+              </Button>
+              <Button size="xs" variant="ghost" onClick={() => setShowHistory(!showHistory)}>
+                📜 {showHistory ? 'Dölj' : 'Historik'}
+              </Button>
+            </HStack>
           </HStack>
+
+          {/* Performance Overview */}
+          {showPerformance && (
+            <Box bg="bg" borderRadius="md" p="12px" borderWidth="1px" borderColor="border">
+              <PerformanceChart />
+            </Box>
+          )}
+
+          {/* CSV Import */}
+          {showImport && (
+            <Box bg="bg" borderRadius="md" p="12px" borderWidth="1px" borderColor="border">
+              <CsvImporter 
+                onImportComplete={() => {}}
+                onSyncComplete={(newHoldings) => {
+                  const holdings: LockedHolding[] = newHoldings.map(h => ({
+                    ticker: h.ticker,
+                    shares: h.shares,
+                    buyPrice: h.buyPrice,
+                    buyDate: new Date().toISOString(),
+                    rankAtPurchase: 0,
+                  }));
+                  setHoldings(holdings);
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(holdings));
+                  setShowImport(false);
+                }}
+              />
+            </Box>
+          )}
 
           {/* Transaction History */}
           {showHistory && transactionHistory.length > 0 && (

@@ -375,3 +375,34 @@ class BandingHolding(Base):
     is_active = Column(Boolean, default=True)  # False when sold
     exit_date = Column(Date, nullable=True)
     exit_rank = Column(Integer, nullable=True)
+
+
+class IsinLookup(Base):
+    """ISIN lookup cache for CSV import matching."""
+    __tablename__ = "isin_lookup"
+    isin = Column(String, primary_key=True)
+    ticker = Column(String, index=True)
+    name = Column(String)
+    currency = Column(String)
+    market = Column(String)
+    updated_at = Column(DateTime, default=func.now())
+
+
+class PortfolioTransactionImported(Base):
+    """Individual transactions imported from CSV."""
+    __tablename__ = "portfolio_transactions_imported"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=True)
+    date = Column(Date, index=True)
+    ticker = Column(String, index=True)
+    isin = Column(String, index=True)
+    type = Column(String)  # BUY or SELL
+    shares = Column(Float)
+    price_local = Column(Float)
+    price_sek = Column(Float)
+    currency = Column(String)
+    fee = Column(Float, default=0)
+    fx_rate = Column(Float)
+    hash = Column(String, unique=True, index=True)  # For duplicate detection
+    imported_at = Column(DateTime, default=func.now())
+    source = Column(String, default='avanza_csv')

@@ -30,6 +30,7 @@ class TradingViewFetcher:
     
     COLUMNS = [
         "name", "description", "close", "market_cap_basic", "sector", "type",
+        "isin",  # ISIN for CSV import matching
         "price_earnings_ttm", "price_book_ratio", "price_sales_ratio",
         "price_free_cash_flow_ttm", "enterprise_value_ebitda_ttm",
         "net_income_ttm", "total_equity_fq", "total_assets_fq",
@@ -146,6 +147,7 @@ class TradingViewFetcher:
                 'ticker': ticker,
                 'db_ticker': ticker.replace('_', ' '),  # Space format to match stocks table
                 'name': row.get('description') or row.get('name'),
+                'isin': row.get('isin'),  # ISIN for CSV import matching
                 'close': row.get('close'),  # Current price
                 'market_cap': row.get('market_cap_basic'),
                 'sector': row.get('sector'),

@@ -105,6 +105,9 @@ async def tradingview_sync(db, force_refresh: bool = False) -> dict:
                     stock.market_cap_msek = stock_data['market_cap'] / 1e6
                 if stock_data.get('sector'):
                     stock.sector = stock_data['sector']
+                # Update ISIN in stocks table
+                if stock_data.get('isin'):
+                    stock.isin = stock_data['isin']
             
             # Save weekly snapshot for historical backtesting
             if save_snapshot:
@@ -121,6 +124,24 @@ async def tradingview_sync(db, force_refresh: bool = False) -> dict:
             
             updated += 1
         
+        # Update ISIN lookup table for CSV import matching
+        from models import IsinLookup
+        isin_updated = 0
+        for stock_data in stocks:
+            isin = stock_data.get('isin')
+            if not isin:
+                continue
+            lookup = db.query(IsinLookup).filter(IsinLookup.isin == isin).first()
+            if not lookup:
+                lookup = IsinLookup(isin=isin)
+                db.add(lookup)
+            lookup.ticker = stock_data['db_ticker']
+            lookup.name = stock_data.get('name')
+            lookup.currency = 'SEK'  # Swedish stocks
+            lookup.market = 'sweden'
+            lookup.updated_at = datetime.now()
+            isin_updated += 1
+        
         db.commit()
         
         # Compute rankings using TradingView data
@@ -132,6 +153,7 @@ async def tradingview_sync(db, force_refresh: bool = False) -> dict:
         return {
             "status": "SUCCESS",
             "stocks_updated": updated,
+            "isin_updated": isin_updated,
             "snapshots_saved": snapshots_saved,
             "source": "tradingview",
             "duration_seconds": round(elapsed, 2),

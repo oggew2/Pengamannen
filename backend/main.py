@@ -4200,6 +4200,415 @@ async def import_avanza_csv(file: UploadFile = File(...)):
     }
 
 
+# ============================================================================
+# CSV Import with ISIN Matching & Performance Tracking
+# ============================================================================
+
+@v1_router.post("/portfolio/import-csv")
+async def import_csv_preview(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """
+    Parse Avanza CSV and return preview with ISIN matching.
+    Does NOT save to database - use /import-confirm to save.
+    """
+    from services.csv_import import parse_avanza_csv, calculate_positions, filter_duplicates
+    from models import IsinLookup, PortfolioTransactionImported
+    
+    content = await file.read()
+    try:
+        text = content.decode('utf-8')
+    except Exception:
+        text = content.decode('latin-1')
+    
+    # Build ISIN lookup from database
+    isin_lookup = {r.isin: {'ticker': r.ticker, 'name': r.name, 'currency': r.currency}
+                   for r in db.query(IsinLookup).all()}
+    
+    # Parse CSV with ISIN matching
+    transactions = parse_avanza_csv(text, isin_lookup)
+    
+    if not transactions:
+        raise HTTPException(status_code=400, detail="No valid transactions found in CSV")
+    
+    # Check for duplicates
+    existing_hashes = {r.hash for r in db.query(PortfolioTransactionImported.hash).all()}
+    new_txns, duplicates = filter_duplicates(transactions, existing_hashes)
+    
+    # Calculate positions
+    positions = calculate_positions(new_txns)
+    
+    # Find unmatched ISINs
+    unmatched = [t for t in new_txns if not t.get('ticker')]
+    matched = [t for t in new_txns if t.get('ticker')]
+    
+    # Calculate totals
+    total_fees = sum(t.get('fee', 0) for t in new_txns)
+    total_invested = sum(t['shares'] * t['price_sek'] for t in new_txns if t['type'] == 'BUY')
+    
+    # Date range
+    dates = [t['date'] for t in new_txns if t.get('date')]
+    date_range = {'start': min(dates), 'end': max(dates)} if dates else None
+    
+    return {
+        "parsed": len(transactions),
+        "new": len(new_txns),
+        "duplicates_skipped": len(duplicates),
+        "matched": len(matched),
+        "unmatched": [{'name': t['name'], 'isin': t['isin'], 'date': t['date']} for t in unmatched[:10]],
+        "positions": [
+            {'ticker': k, 'shares': round(v['shares'], 2), 'avg_price': round(v['avg_price_sek'], 2),
+             'total_cost': round(v['total_cost'], 2), 'fees': round(v['total_fees'], 2),
+             'currency': v['currency'], 'warning': v.get('warning')}
+            for k, v in positions.items()
+        ],
+        "summary": {
+            "total_fees": round(total_fees, 2),
+            "total_invested": round(total_invested, 2),
+            "unique_stocks": len(positions),
+            "date_range": date_range,
+        },
+        "transactions": new_txns,  # For confirm step
+    }
+
+
+@v1_router.post("/portfolio/import-confirm")
+async def import_csv_confirm(
+    transactions: List[dict],
+    mode: str = "add_new",
+    db: Session = Depends(get_db)
+):
+    """
+    Confirm and save imported transactions.
+    
+    Modes:
+    - replace: Clear existing, import fresh
+    - add_new: Skip duplicates, add new only
+    """
+    from models import PortfolioTransactionImported
+    from datetime import datetime
+    
+    if mode == "replace":
+        db.query(PortfolioTransactionImported).delete()
+    
+    imported = 0
+    for txn in transactions:
+        # Skip if hash already exists
+        if db.query(PortfolioTransactionImported).filter(
+            PortfolioTransactionImported.hash == txn.get('hash')
+        ).first():
+            continue
+        
+        record = PortfolioTransactionImported(
+            date=datetime.strptime(txn['date'], '%Y-%m-%d').date() if txn.get('date') else None,
+            ticker=txn.get('ticker'),
+            isin=txn.get('isin'),
+            type=txn.get('type'),
+            shares=txn.get('shares'),
+            price_local=txn.get('price_local'),
+            price_sek=txn.get('price_sek'),
+            currency=txn.get('currency'),
+            fee=txn.get('fee', 0),
+            fx_rate=txn.get('fx_rate'),
+            hash=txn.get('hash'),
+            source='avanza_csv',
+        )
+        db.add(record)
+        imported += 1
+    
+    db.commit()
+    
+    return {"success": True, "imported": imported, "mode": mode}
+
+
+@v1_router.get("/portfolio/transactions")
+def get_portfolio_transactions(
+    ticker: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Get imported transactions with optional filters."""
+    from models import PortfolioTransactionImported
+    from datetime import datetime
+    
+    query = db.query(PortfolioTransactionImported)
+    
+    if ticker:
+        query = query.filter(PortfolioTransactionImported.ticker == ticker)
+    if from_date:
+        query = query.filter(PortfolioTransactionImported.date >= datetime.strptime(from_date, '%Y-%m-%d').date())
+    if to_date:
+        query = query.filter(PortfolioTransactionImported.date <= datetime.strptime(to_date, '%Y-%m-%d').date())
+    
+    transactions = query.order_by(PortfolioTransactionImported.date.desc()).all()
+    
+    return {
+        "transactions": [
+            {
+                "id": t.id,
+                "date": t.date.isoformat() if t.date else None,
+                "ticker": t.ticker,
+                "isin": t.isin,
+                "type": t.type,
+                "shares": t.shares,
+                "price_local": t.price_local,
+                "price_sek": t.price_sek,
+                "currency": t.currency,
+                "fee": t.fee,
+            }
+            for t in transactions
+        ],
+        "count": len(transactions),
+    }
+
+
+@v1_router.get("/portfolio/performance")
+def get_portfolio_performance_data(
+    period: str = "1Y",
+    db: Session = Depends(get_db)
+):
+    """
+    Get portfolio performance data for charting.
+    
+    Returns gross/net returns over time with cost breakdown.
+    """
+    from models import PortfolioTransactionImported, DailyPrice
+    from services.csv_import import calculate_positions
+    from datetime import datetime, timedelta, date
+    from sqlalchemy import func
+    
+    # Get all transactions
+    transactions = db.query(PortfolioTransactionImported).order_by(
+        PortfolioTransactionImported.date
+    ).all()
+    
+    if not transactions:
+        return {"data_points": [], "summary": None, "message": "No transactions found"}
+    
+    # Convert to dict format
+    txn_list = [
+        {
+            'date': t.date.isoformat() if t.date else None,
+            'ticker': t.ticker,
+            'isin': t.isin,
+            'type': t.type,
+            'shares': t.shares,
+            'price_sek': t.price_sek,
+            'fee': t.fee or 0,
+        }
+        for t in transactions
+    ]
+    
+    # Calculate period start
+    today = date.today()
+    period_map = {
+        '1M': timedelta(days=30),
+        '3M': timedelta(days=90),
+        '6M': timedelta(days=180),
+        'YTD': timedelta(days=(today - date(today.year, 1, 1)).days),
+        '1Y': timedelta(days=365),
+        'ALL': timedelta(days=3650),
+    }
+    start_date = today - period_map.get(period, timedelta(days=365))
+    
+    # Get first transaction date
+    first_txn_date = min(t.date for t in transactions if t.date)
+    start_date = max(start_date, first_txn_date)
+    
+    # Calculate positions at start
+    positions = calculate_positions([t for t in txn_list if t['date'] and t['date'] <= start_date.isoformat()])
+    
+    # Get unique tickers
+    tickers = list(set(t.ticker for t in transactions if t.ticker))
+    
+    # Get prices for date range
+    prices_query = db.query(DailyPrice).filter(
+        DailyPrice.ticker.in_(tickers),
+        DailyPrice.date >= start_date
+    ).all()
+    
+    # Build price lookup: {ticker: {date: price}}
+    price_lookup = {}
+    for p in prices_query:
+        if p.ticker not in price_lookup:
+            price_lookup[p.ticker] = {}
+        price_lookup[p.ticker][p.date.isoformat()] = p.close
+    
+    # Calculate total fees and spread
+    total_fees = sum(t.fee or 0 for t in transactions)
+    turnover = sum(t.shares * t.price_sek for t in transactions if t.price_sek)
+    estimated_spread = turnover * 0.003  # 0.3% spread estimate
+    
+    # Calculate current positions and value
+    current_positions = calculate_positions(txn_list)
+    
+    # Get latest prices for current value
+    total_value = 0
+    total_cost = 0
+    missing_prices = []
+    for ticker, pos in current_positions.items():
+        if ticker in price_lookup and price_lookup[ticker]:
+            latest_date = max(price_lookup[ticker].keys())
+            latest_price = price_lookup[ticker][latest_date]
+            total_value += pos['shares'] * latest_price
+        else:
+            # No price data - use cost as fallback value
+            total_value += pos['total_cost']
+            missing_prices.append(ticker)
+        total_cost += pos['total_cost']
+    
+    # Calculate returns
+    gross_return_pct = ((total_value - total_cost) / total_cost * 100) if total_cost > 0 else 0
+    net_return_pct = ((total_value - total_cost - total_fees - estimated_spread) / total_cost * 100) if total_cost > 0 else 0
+    
+    result = {
+        "summary": {
+            "total_invested": round(total_cost, 2),
+            "current_value": round(total_value, 2),
+            "gross_return": round(total_value - total_cost, 2),
+            "gross_return_pct": round(gross_return_pct, 2),
+            "net_return_pct": round(net_return_pct, 2),
+            "total_fees": round(total_fees, 2),
+            "estimated_spread": round(estimated_spread, 2),
+            "total_costs": round(total_fees + estimated_spread, 2),
+            "cost_impact_pct": round((total_fees + estimated_spread) / total_cost * 100, 2) if total_cost > 0 else 0,
+        },
+        "positions": [
+            {
+                "ticker": k,
+                "shares": round(v['shares'], 2),
+                "cost": round(v['total_cost'], 2),
+                "avg_price": round(v['avg_price_sek'], 2),
+                "fees": round(v['total_fees'], 2),
+            }
+            for k, v in current_positions.items()
+        ],
+        "period": period,
+    }
+    
+    if missing_prices:
+        result["warning"] = f"Prisdata saknas för {len(missing_prices)} positioner - använder inköpspris"
+    
+    return result
+
+
+@v1_router.get("/isin-lookup")
+def get_isin_lookup(db: Session = Depends(get_db)):
+    """Get ISIN lookup table for client-side matching."""
+    from models import IsinLookup
+    
+    lookups = db.query(IsinLookup).all()
+    return {
+        r.isin: {'ticker': r.ticker, 'name': r.name, 'currency': r.currency, 'market': r.market}
+        for r in lookups
+    }
+
+
+@v1_router.post("/portfolio/sync-to-holdings")
+def sync_imported_to_holdings(request: Request, db: Session = Depends(get_db)):
+    """
+    Convert imported transactions to momentum portfolio holdings format.
+    Syncs positions from PortfolioTransactionImported to UserPortfolio.
+    """
+    from services.auth import require_auth
+    from models import PortfolioTransactionImported, UserPortfolio, IsinLookup
+    from services.csv_import import calculate_positions
+    from services.ranking_cache import compute_nordic_momentum
+    import json
+    
+    user = require_auth(request, db)
+    
+    # Get all imported transactions
+    transactions = db.query(PortfolioTransactionImported).order_by(
+        PortfolioTransactionImported.date
+    ).all()
+    
+    if not transactions:
+        return {"synced": 0, "message": "No imported transactions found"}
+    
+    # Build ISIN lookup for re-matching
+    isin_map = {r.isin: r.ticker for r in db.query(IsinLookup).all()}
+    
+    # Convert to dict format for calculate_positions
+    txn_list = []
+    for t in transactions:
+        # Try to get ticker from ISIN lookup if not already set
+        ticker = t.ticker
+        if not ticker and t.isin and t.isin in isin_map:
+            ticker = isin_map[t.isin]
+        
+        txn_list.append({
+            'date': t.date.isoformat() if t.date else None,
+            'ticker': ticker,
+            'isin': t.isin,
+            'type': t.type,
+            'shares': t.shares,
+            'price_sek': t.price_sek,
+            'fee': t.fee or 0,
+        })
+    
+    # Calculate current positions
+    positions = calculate_positions(txn_list)
+    
+    # Get current rankings for rank info
+    rank_map = {}
+    try:
+        rankings_result = compute_nordic_momentum()
+        if 'rankings' in rankings_result:
+            rank_map = {r['ticker']: r['rank'] for r in rankings_result['rankings']}
+    except:
+        pass
+    
+    # Convert to holdings format expected by PortfolioTracker
+    holdings = []
+    unmapped = []
+    for key, pos in positions.items():
+        if pos['shares'] > 0:  # Only include active positions
+            # Check if key is ISIN (not a ticker)
+            is_isin = key.startswith('SE') or key.startswith('DK') or key.startswith('FI') or key.startswith('NO') or key.startswith('CA')
+            if is_isin and len(key) == 12:
+                unmapped.append({'isin': key, 'shares': pos['shares']})
+                continue  # Skip unmapped ISINs
+            
+            holdings.append({
+                'ticker': key,
+                'shares': round(pos['shares']),
+                'buyPrice': round(pos['avg_price_sek'], 2),
+                'buyDate': pos.get('first_buy_date', ''),
+                'rankAtPurchase': rank_map.get(key, 0),
+                'currentRank': rank_map.get(key),
+                'fees': round(pos['total_fees'], 2),
+            })
+    
+    # Save to UserPortfolio
+    portfolio = db.query(UserPortfolio).filter(
+        UserPortfolio.user_id == str(user.id),
+        UserPortfolio.name == "momentum_locked"
+    ).first()
+    
+    if not portfolio:
+        portfolio = UserPortfolio(
+            user_id=str(user.id),
+            name="momentum_locked",
+            description="{}"
+        )
+        db.add(portfolio)
+    
+    portfolio.holdings = json.dumps(holdings)
+    db.commit()
+    
+    result = {
+        "synced": len(holdings),
+        "holdings": holdings,
+        "total_value": sum(h['shares'] * h['buyPrice'] for h in holdings),
+    }
+    
+    if unmapped:
+        result["warning"] = f"{len(unmapped)} positions skipped (foreign stocks not in Swedish universe)"
+        result["unmapped"] = unmapped
+    
+    return result
+
+
 # Multi-Portfolio Support
 @v1_router.post("/portfolios")
 def create_portfolio_account(name: str, account_type: str = "ISK", strategy: str = None, db: Session = Depends(get_db)):
