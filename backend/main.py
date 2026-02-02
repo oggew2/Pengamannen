@@ -176,7 +176,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 # Auth middleware - protect all API routes except auth endpoints and health
 class AuthMiddleware(BaseHTTPMiddleware):
-    OPEN_PATHS = {"/v1/auth/login", "/v1/auth/register", "/v1/auth/logout", "/v1/auth/me", "/v1/health", "/health", "/", "/favicon.ico", "/v1/strategies", "/v1/data/status/detailed", "/v1/data/sync-history"}
+    OPEN_PATHS = {"/v1/auth/login", "/v1/auth/register", "/v1/auth/logout", "/v1/auth/me", "/v1/health", "/health", "/", "/favicon.ico", "/v1/strategies", "/v1/data/status/detailed", "/v1/data/sync-history", "/v1/scheduler-check"}
     OPEN_PREFIXES = ("/v1/strategies/nordic/",)  # All Nordic momentum endpoints
     
     async def dispatch(self, request: Request, call_next):
@@ -2809,6 +2809,16 @@ def get_universe_info(region: str, market_cap: str):
 def get_scheduler_status_endpoint():
     logger.info("GET /data/scheduler-status")
     return get_scheduler_status()
+
+
+@v1_router.get("/scheduler-check")
+def scheduler_check_public():
+    """Public endpoint to verify scheduler is running."""
+    from jobs.scheduler import scheduler
+    jobs = []
+    for job in scheduler.get_jobs():
+        jobs.append({"id": job.id, "next": str(job.next_run_time) if job.next_run_time else None})
+    return {"running": scheduler.running, "jobs": jobs}
 
 
 @v1_router.get("/data/freshness")
