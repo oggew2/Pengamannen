@@ -9,6 +9,7 @@ import { Confetti, AnimatedNumber, HealthBadge, usePullToRefresh } from './Finte
 import { InfoTooltip } from './InfoTooltip';
 import { HealthScore } from './HealthScore';
 import { toaster } from './toaster';
+import { haptic } from '../utils/interactions';
 
 interface LockedHolding {
   ticker: string;
@@ -276,13 +277,37 @@ export function PortfolioTracker() {
   };
 
   const clearHoldings = () => {
-    if (!confirm('Vill du rensa din sparade portfölj?')) return;
+    haptic.medium();
+    
+    // Store current state for undo
+    const previousHoldings = [...holdings];
+    const previousHistory = [...transactionHistory];
+    
+    // Clear immediately
     setHoldings([]);
     setRebalanceData(null);
     setError(null);
     setLastChecked(null);
     localStorage.removeItem(STORAGE_KEY);
-    saveToDatabase([]);  // Clear from database too
+    saveToDatabase([]);
+    
+    // Show toast with undo option
+    toaster.create({
+      title: 'Portfölj rensad',
+      description: 'Klicka för att ångra',
+      type: 'info',
+      duration: 5000,
+      action: {
+        label: 'Ångra',
+        onClick: () => {
+          setHoldings(previousHoldings);
+          setTransactionHistory(previousHistory);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(previousHoldings));
+          saveToDatabase(previousHoldings);
+          toaster.create({ title: 'Portfölj återställd', type: 'success', duration: 2000 });
+        },
+      },
+    });
   };
 
   // Calculate Avanza courtage: 0.069% min 1 SEK
@@ -561,6 +586,7 @@ export function PortfolioTracker() {
     setRebalanceData(null);
     
     // Celebration!
+    haptic.success();
     setShowConfetti(true);
     toaster.success({
       title: '🎉 Ombalansering klar!',
