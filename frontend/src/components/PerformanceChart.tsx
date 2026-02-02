@@ -158,27 +158,48 @@ export function PerformanceChart() {
 
       {/* Line chart */}
       {data.chart_data && data.chart_data.length > 1 && (
-        <Box bg="gray.800" p={4} borderRadius="lg">
-          <svg viewBox="0 0 300 100" style={{ width: '100%', height: '120px' }}>
+        <Box bg="gray.800" p={4} borderRadius="lg" overflow="hidden">
+          <svg viewBox="0 0 300 120" style={{ width: '100%', height: '140px' }}>
+            <defs>
+              <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={isPositive ? '#48BB78' : '#F56565'} stopOpacity="0.3" />
+                <stop offset="100%" stopColor={isPositive ? '#48BB78' : '#F56565'} stopOpacity="0" />
+              </linearGradient>
+            </defs>
             {(() => {
               const pts = data.chart_data!;
               const vals = pts.map(p => p.value);
-              const min = Math.min(...vals);
-              const max = Math.max(...vals);
+              const min = Math.min(...vals) * 0.98;
+              const max = Math.max(...vals) * 1.02;
               const range = max - min || 1;
-              const points = pts.map((p, i) => {
-                const x = (i / (pts.length - 1)) * 290 + 5;
-                const y = 95 - ((p.value - min) / range) * 85;
-                return `${x},${y}`;
-              }).join(' ');
-              const startVal = vals[0];
-              const endVal = vals[vals.length - 1];
-              const color = endVal >= startVal ? '#48BB78' : '#F56565';
+              
+              // Build smooth curve path
+              const getY = (v: number) => 100 - ((v - min) / range) * 85;
+              const getX = (i: number) => (i / (pts.length - 1)) * 290 + 5;
+              
+              // Create smooth bezier curve
+              let linePath = `M ${getX(0)},${getY(vals[0])}`;
+              for (let i = 1; i < pts.length; i++) {
+                const x0 = getX(i - 1), y0 = getY(vals[i - 1]);
+                const x1 = getX(i), y1 = getY(vals[i]);
+                const cpx = (x0 + x1) / 2;
+                linePath += ` C ${cpx},${y0} ${cpx},${y1} ${x1},${y1}`;
+              }
+              
+              // Area path (close to bottom)
+              const areaPath = linePath + ` L 295,110 L 5,110 Z`;
+              
+              const color = isPositive ? '#48BB78' : '#F56565';
+              
               return (
                 <>
-                  <polyline fill="none" stroke={color} strokeWidth="2" points={points} />
-                  <circle cx="5" cy={95 - ((startVal - min) / range) * 85} r="3" fill={color} />
-                  <circle cx="295" cy={95 - ((endVal - min) / range) * 85} r="3" fill={color} />
+                  {/* Gradient fill area */}
+                  <path d={areaPath} fill="url(#areaGradient)" />
+                  {/* Main line */}
+                  <path d={linePath} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  {/* End dot with glow */}
+                  <circle cx={getX(pts.length - 1)} cy={getY(vals[vals.length - 1])} r="4" fill={color} />
+                  <circle cx={getX(pts.length - 1)} cy={getY(vals[vals.length - 1])} r="8" fill={color} opacity="0.3" />
                 </>
               );
             })()}
