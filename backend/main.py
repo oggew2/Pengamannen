@@ -4887,53 +4887,6 @@ def sync_imported_to_holdings(request: Request, db: Session = Depends(get_db)):
 
 
 # Multi-Portfolio Support
-@v1_router.post("/portfolios")
-def create_portfolio_account(name: str, account_type: str = "ISK", strategy: str = None, db: Session = Depends(get_db)):
-    """Create a new portfolio account."""
-    from models import UserPortfolioAccount
-    account = UserPortfolioAccount(name=name, account_type=account_type, strategy=strategy, holdings_json="[]")
-    db.add(account)
-    db.commit()
-    return {"id": account.id, "name": name, "account_type": account_type}
-
-
-@v1_router.get("/portfolios")
-def list_portfolio_accounts(db: Session = Depends(get_db)):
-    """List all portfolio accounts."""
-    from models import UserPortfolioAccount
-    import json
-    accounts = db.query(UserPortfolioAccount).all()
-    return [{
-        "id": a.id, "name": a.name, "account_type": a.account_type,
-        "strategy": a.strategy, "holdings": json.loads(a.holdings_json or "[]")
-    } for a in accounts]
-
-
-@v1_router.put("/portfolios/{portfolio_id}")
-def update_portfolio_account(portfolio_id: int, holdings: List[dict], db: Session = Depends(get_db)):
-    """Update portfolio holdings."""
-    from models import UserPortfolioAccount
-    import json
-    account = db.query(UserPortfolioAccount).filter(UserPortfolioAccount.id == portfolio_id).first()
-    if not account:
-        raise HTTPException(status_code=404, detail="Portfolio not found")
-    account.holdings_json = json.dumps(holdings)
-    db.commit()
-    return {"id": portfolio_id, "holdings_count": len(holdings)}
-
-
-@v1_router.delete("/portfolios/{portfolio_id}")
-def delete_portfolio_account(portfolio_id: int, db: Session = Depends(get_db)):
-    """Delete a portfolio account."""
-    from models import UserPortfolioAccount
-    account = db.query(UserPortfolioAccount).filter(UserPortfolioAccount.id == portfolio_id).first()
-    if not account:
-        raise HTTPException(status_code=404, detail="Portfolio not found")
-    db.delete(account)
-    db.commit()
-    return {"deleted": True}
-
-
 # Historical Rankings Archive
 @v1_router.post("/rankings/snapshot")
 def save_rankings_snapshot(strategy: str, db: Session = Depends(get_db)):

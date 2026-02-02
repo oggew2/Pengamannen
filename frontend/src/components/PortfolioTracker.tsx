@@ -136,6 +136,7 @@ export function PortfolioTracker() {
   const [manualShares, setManualShares] = useState('');
   const [manualPrice, setManualPrice] = useState('');
   const [manualDate, setManualDate] = useState('');
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
   
   // Next rebalance countdown
   const { data: rebalanceDates } = useRebalanceDates();
@@ -432,12 +433,17 @@ export function PortfolioTracker() {
 
   // Filter rankings for autocomplete
   const filteredRankings = useMemo(() => {
-    if (!manualTicker || manualTicker.length < 1) return [];
+    if (!manualTicker || manualTicker.length < 1 || !showAutocomplete) return [];
     const search = manualTicker.toLowerCase();
     return rankings
       .filter(r => r.ticker.toLowerCase().includes(search) || r.name?.toLowerCase().includes(search))
       .slice(0, 5);
-  }, [manualTicker, rankings]);
+  }, [manualTicker, rankings, showAutocomplete]);
+
+  const selectStock = (ticker: string) => {
+    setManualTicker(ticker);
+    setShowAutocomplete(false);
+  };
 
   const deleteHolding = (ticker: string) => {
     if (!confirm(`Ta bort ${ticker} från portföljen?`)) return;
@@ -950,7 +956,8 @@ export function PortfolioTracker() {
                   <Input
                     placeholder="Sök aktie (t.ex. Volvo, VOLV B)"
                     value={manualTicker}
-                    onChange={e => setManualTicker(e.target.value)}
+                    onChange={e => { setManualTicker(e.target.value); setShowAutocomplete(true); }}
+                    onFocus={() => setShowAutocomplete(true)}
                     size="sm"
                   />
                   {filteredRankings.length > 0 && (
@@ -974,7 +981,7 @@ export function PortfolioTracker() {
                           py="8px" 
                           cursor="pointer"
                           _hover={{ bg: 'bg.subtle' }}
-                          onClick={() => setManualTicker(r.ticker)}
+                          onClick={() => selectStock(r.ticker)}
                         >
                           <HStack justify="space-between">
                             <Text fontSize="sm" fontWeight="medium">{r.ticker}</Text>
@@ -1095,7 +1102,8 @@ export function PortfolioTracker() {
                   <Input
                     placeholder="Sök aktie..."
                     value={manualTicker}
-                    onChange={e => setManualTicker(e.target.value)}
+                    onChange={e => { setManualTicker(e.target.value); setShowAutocomplete(true); }}
+                    onFocus={() => setShowAutocomplete(true)}
                     size="sm"
                   />
                   {filteredRankings.length > 0 && (
@@ -1121,7 +1129,7 @@ export function PortfolioTracker() {
                           py="8px" 
                           cursor="pointer"
                           _hover={{ bg: 'bg.subtle' }}
-                          onClick={() => setManualTicker(r.ticker)}
+                          onClick={() => selectStock(r.ticker)}
                         >
                           <HStack justify="space-between">
                             <Text fontSize="sm" fontWeight="medium">{r.ticker}</Text>
