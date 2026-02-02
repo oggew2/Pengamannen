@@ -4419,9 +4419,8 @@ def get_portfolio_transactions(
 @v1_router.get("/portfolio/daily-stats")
 def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
     """Get daily portfolio stats for dashboard card - uses momentum portfolio holdings."""
-    from models import UserPortfolio, DailyPrice
+    from models import UserPortfolio
     from services.auth import get_user_from_cookie
-    from datetime import date, timedelta
     import json
     
     empty_response = {"total_value": 0, "today_change": 0, "today_change_pct": 0, "week_change_pct": 0, "month_change_pct": 0, "best_performer": None, "worst_performer": None}
@@ -4447,63 +4446,20 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
     if not holdings:
         return empty_response
     
-    today = date.today()
-    yesterday = today - timedelta(days=1)
-    week_ago = today - timedelta(days=7)
-    month_ago = today - timedelta(days=30)
+    # Calculate total value from holdings (buy price * shares)
+    total_value = sum(h.get('shares', 0) * h.get('buyPrice', 0) for h in holdings)
     
-    def get_price_at_date(ticker: str, d: date):
-        price = db.query(DailyPrice).filter(
-            DailyPrice.ticker == ticker,
-            DailyPrice.date <= d
-        ).order_by(DailyPrice.date.desc()).first()
-        return price.close if price else None
-    
-    def get_portfolio_value(d: date):
-        total = 0
-        for h in holdings:
-            ticker = h.get('ticker', '')
-            shares = h.get('shares', 0)
-            buy_price = h.get('buyPrice', 0)
-            price = get_price_at_date(ticker, d)
-            if price:
-                total += shares * price
-            else:
-                total += shares * buy_price  # Fallback to buy price
-        return total
-    
-    current_value = get_portfolio_value(today)
-    yesterday_value = get_portfolio_value(yesterday)
-    week_value = get_portfolio_value(week_ago)
-    month_value = get_portfolio_value(month_ago)
-    
-    today_change = current_value - yesterday_value
-    today_pct = (today_change / yesterday_value * 100) if yesterday_value > 0 else 0
-    week_pct = ((current_value - week_value) / week_value * 100) if week_value > 0 else 0
-    month_pct = ((current_value - month_value) / month_value * 100) if month_value > 0 else 0
-    
-    # Find best/worst performers today
-    performers = []
-    for h in holdings:
-        ticker = h.get('ticker', '')
-        today_price = get_price_at_date(ticker, today)
-        yest_price = get_price_at_date(ticker, yesterday)
-        if today_price and yest_price and yest_price > 0:
-            change_pct = (today_price - yest_price) / yest_price * 100
-            performers.append({'ticker': ticker, 'change_pct': round(change_pct, 2)})
-    
-    performers.sort(key=lambda x: x['change_pct'], reverse=True)
-    best = performers[0] if performers else None
-    worst = performers[-1] if performers else None
-    
+    # We don't have reliable live prices, so show static values
+    # The PerformanceChart component handles live price fetching separately
     return {
-        "total_value": round(current_value, 2),
-        "today_change": round(today_change, 2),
-        "today_change_pct": round(today_pct, 2),
-        "week_change_pct": round(week_pct, 2),
-        "month_change_pct": round(month_pct, 2),
-        "best_performer": best,
-        "worst_performer": worst
+        "total_value": round(total_value, 2),
+        "today_change": 0,
+        "today_change_pct": 0,
+        "week_change_pct": 0,
+        "month_change_pct": 0,
+        "best_performer": None,
+        "worst_performer": None,
+        "holdings_count": len(holdings),
     }
 
 
