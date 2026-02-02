@@ -131,6 +131,10 @@ export function PortfolioTracker() {
   const [editShares, setEditShares] = useState<string>('');
   const [editPrice, setEditPrice] = useState<string>('');
   const [showConfetti, setShowConfetti] = useState(false);
+  const [showAddManual, setShowAddManual] = useState(false);
+  const [manualTicker, setManualTicker] = useState('');
+  const [manualShares, setManualShares] = useState('');
+  const [manualPrice, setManualPrice] = useState('');
   
   // Next rebalance countdown
   const { data: rebalanceDates } = useRebalanceDates();
@@ -354,6 +358,48 @@ export function PortfolioTracker() {
       saveToDatabase(newHoldings, newHistory);
     }
     cancelEditing();
+  };
+
+  const addManualHolding = () => {
+    const ticker = manualTicker.trim().toUpperCase();
+    const shares = parseInt(manualShares) || 0;
+    const price = parseFloat(manualPrice) || 0;
+    
+    if (!ticker || shares <= 0 || price <= 0) return;
+    
+    // Check if already exists
+    if (holdings.some(h => h.ticker === ticker)) {
+      toaster.error({ title: 'Aktien finns redan', description: 'Redigera befintligt innehav istället' });
+      return;
+    }
+    
+    // Find ISIN from rankings if available
+    const rankingMatch = rankings.find(r => r.ticker.toUpperCase() === ticker);
+    
+    const newHolding: LockedHolding = {
+      ticker,
+      shares,
+      buyPrice: price,
+      buyDate: new Date().toISOString(),
+      rankAtPurchase: rankingMatch?.rank || 0,
+      isin: rankingMatch?.isin,
+      fees: calculateFee(shares * price),
+    };
+    
+    const newHoldings = [...holdings, newHolding];
+    const newHistory = addTransaction({ type: 'BUY', ticker, shares, price, fee: newHolding.fees || 0 });
+    
+    setHoldings(newHoldings);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newHoldings));
+    saveToDatabase(newHoldings, newHistory);
+    
+    // Reset form
+    setManualTicker('');
+    setManualShares('');
+    setManualPrice('');
+    setShowAddManual(false);
+    
+    toaster.success({ title: `${ticker} tillagd`, description: `${shares} st @ ${price} kr` });
   };
 
   const deleteHolding = (ticker: string) => {
@@ -845,7 +891,57 @@ export function PortfolioTracker() {
               <Text>→</Text>
               <Text>3. Exportera CSV</Text>
             </HStack>
+            
+            <Text color="fg.muted" fontSize="xs">eller</Text>
+            
+            <Button 
+              size="md" 
+              variant="outline"
+              w="100%"
+              onClick={() => setShowAddManual(true)}
+            >
+              ✏️ Lägg till manuellt
+            </Button>
           </VStack>
+          
+          {/* Manual add form */}
+          {showAddManual && (
+            <Box w="100%" maxW="320px" bg="bg" p="16px" borderRadius="md" borderWidth="1px" borderColor="border">
+              <VStack gap="12px" align="stretch">
+                <Text fontWeight="semibold" fontSize="sm">Lägg till innehav</Text>
+                <Input
+                  placeholder="Ticker (t.ex. VOLV B)"
+                  value={manualTicker}
+                  onChange={e => setManualTicker(e.target.value)}
+                  size="sm"
+                />
+                <HStack gap="8px">
+                  <Input
+                    type="number"
+                    placeholder="Antal"
+                    value={manualShares}
+                    onChange={e => setManualShares(e.target.value)}
+                    size="sm"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Pris (kr)"
+                    value={manualPrice}
+                    onChange={e => setManualPrice(e.target.value)}
+                    size="sm"
+                  />
+                </HStack>
+                <HStack gap="8px">
+                  <Button size="sm" colorPalette="blue" onClick={addManualHolding} flex="1">
+                    Lägg till
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowAddManual(false)}>
+                    Avbryt
+                  </Button>
+                </HStack>
+              </VStack>
+            </Box>
+          )}
           
           {showImport && (
             <Box w="100%" mt="16px">
@@ -901,6 +997,9 @@ export function PortfolioTracker() {
               </Box>
             </HStack>
             <HStack gap="4px">
+              <Button size="xs" variant="ghost" onClick={() => setShowAddManual(!showAddManual)}>
+                ✏️ {showAddManual ? 'Dölj' : 'Lägg till'}
+              </Button>
               <Button size="xs" variant="ghost" onClick={() => setShowImport(!showImport)}>
                 📥 {showImport ? 'Dölj' : 'Import'}
               </Button>
@@ -909,6 +1008,40 @@ export function PortfolioTracker() {
               </Button>
             </HStack>
           </HStack>
+
+          {/* Manual add form */}
+          {showAddManual && (
+            <Box bg="bg" borderRadius="md" p="12px" borderWidth="1px" borderColor="border">
+              <HStack gap="8px" flexWrap="wrap">
+                <Input
+                  placeholder="Ticker"
+                  value={manualTicker}
+                  onChange={e => setManualTicker(e.target.value)}
+                  size="sm"
+                  w="100px"
+                />
+                <Input
+                  type="number"
+                  placeholder="Antal"
+                  value={manualShares}
+                  onChange={e => setManualShares(e.target.value)}
+                  size="sm"
+                  w="80px"
+                />
+                <Input
+                  type="number"
+                  placeholder="Pris"
+                  value={manualPrice}
+                  onChange={e => setManualPrice(e.target.value)}
+                  size="sm"
+                  w="80px"
+                />
+                <Button size="sm" colorPalette="blue" onClick={addManualHolding}>
+                  Lägg till
+                </Button>
+              </HStack>
+            </Box>
+          )}
 
           {/* CSV Import */}
           {showImport && (

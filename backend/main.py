@@ -3946,36 +3946,6 @@ def import_csv_to_holdings(request: dict):
         "holdings_count": len(holdings)
     }
 
-@v1_router.post("/user/profile")
-async def create_user_profile(name: str, email: str = None, db: Session = Depends(get_db)):
-    """Create a new user profile."""
-    from services.user_storage import UserStorageService
-    
-    user_id = UserStorageService.create_user_profile(db, name, email)
-    return {"user_id": user_id, "message": "Profile created successfully"}
-
-@v1_router.get("/user/{user_id}/profile")
-async def get_user_profile(user_id: str, db: Session = Depends(get_db)):
-    """Get user profile."""
-    from services.user_storage import UserStorageService
-    
-    profile = UserStorageService.get_user_profile(db, user_id)
-    if not profile:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    return profile
-
-@v1_router.post("/user/{user_id}/avanza-import")
-async def save_avanza_import(user_id: str, filename: str, transactions_count: int, 
-                           holdings_data: dict, raw_data: str, db: Session = Depends(get_db)):
-    """Save Avanza CSV import for user."""
-    from services.user_storage import UserStorageService
-    
-    import_id = UserStorageService.save_avanza_import(
-        db, user_id, filename, transactions_count, holdings_data, raw_data
-    )
-    return {"import_id": import_id, "message": "Avanza import saved successfully"}
-
 @v1_router.get("/portfolio/{portfolio_name}/performance")
 async def get_portfolio_performance(portfolio_name: str, days: int = 30):
     """Get portfolio performance over time."""
@@ -4017,14 +3987,6 @@ async def record_portfolio_snapshot(portfolio_name: str, holdings: List[dict]):
         "holdings_count": len(holdings),
         "timestamp": datetime.now().isoformat()
     }
-
-@v1_router.get("/user/{user_id}/avanza-imports")
-async def get_user_avanza_imports(user_id: str, db: Session = Depends(get_db)):
-    """Get all Avanza imports for user."""
-    from services.user_storage import UserStorageService
-    
-    imports = UserStorageService.get_user_avanza_imports(db, user_id)
-    return {"imports": imports, "count": len(imports)}
 
 @v1_router.websocket("/ws/sync-logs")
 async def websocket_endpoint(websocket: WebSocket):
