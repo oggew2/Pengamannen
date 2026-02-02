@@ -238,8 +238,9 @@ class TradingViewFetcher:
         if not valid_markets:
             raise ValueError(f"No valid markets specified. Valid options: {list(NORDIC_MARKETS.keys())}")
         
-        # Get current FX rates
+        # Get current FX rates and store on self for callers to access
         fx_rates = get_fx_rates()
+        self._fx_rates = fx_rates
         
         all_stocks = []
         fetch_errors = []
