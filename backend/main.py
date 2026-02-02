@@ -4452,29 +4452,48 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
     week_ago = today - timedelta(days=7)
     month_ago = today - timedelta(days=30)
     
-    def get_price_at_date(ticker: str, d: date):
-        # Try multiple ticker formats
-        formats = [ticker, ticker.replace(' ', '_'), ticker.replace(' ', '-'), f"{ticker}.ST"]
-        for fmt in formats:
-            price = db.query(DailyPrice).filter(
-                DailyPrice.ticker == fmt,
-                DailyPrice.date <= d
-            ).order_by(DailyPrice.date.desc()).first()
-            if price:
-                return price.close
-        return None
+    # Build ISIN to ticker mapping
+    from models import IsinLookup
+    isins = [h.get('isin') for h in holdings if h.get('isin')]
+    isin_to_ticker = {}
+    if isins:
+        lookups = db.query(IsinLookup).filter(IsinLookup.isin.in_(isins)).all()
+        isin_to_ticker = {l.isin: l.ticker for l in lookups}
+    
+    def get_price_at_date(holding: dict, d: date):
+        # Try ISIN lookup first, then ticker formats
+        ticker = None
+        if holding.get('isin') and holding['isin'] in isin_to_ticker:
+            ticker = isin_to_ticker[holding['isin']]
+        
+        if not ticker:
+            ticker = holding.get('ticker', '')
+        
+        # Try the ticker
+        price = db.query(DailyPrice).filter(
+            DailyPrice.ticker == ticker,
+            DailyPrice.date <= d
+        ).order_by(DailyPrice.date.desc()).first()
+        if price:
+            return price.close
+        
+        # Try with underscore
+        price = db.query(DailyPrice).filter(
+            DailyPrice.ticker == ticker.replace(' ', '_'),
+            DailyPrice.date <= d
+        ).order_by(DailyPrice.date.desc()).first()
+        return price.close if price else None
     
     def get_portfolio_value(d: date):
         total = 0
         for h in holdings:
-            ticker = h.get('ticker', '')
             shares = h.get('shares', 0)
             buy_price = h.get('buyPrice', 0)
-            price = get_price_at_date(ticker, d)
+            price = get_price_at_date(h, d)
             if price:
                 total += shares * price
             else:
-                total += shares * buy_price  # Fallback to buy price
+                total += shares * buy_price
         return total
     
     current_value = get_portfolio_value(today)
@@ -4491,8 +4510,8 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
     performers = []
     for h in holdings:
         ticker = h.get('ticker', '')
-        today_price = get_price_at_date(ticker, today)
-        yest_price = get_price_at_date(ticker, yesterday)
+        today_price = get_price_at_date(h, today)
+        yest_price = get_price_at_date(h, yesterday)
         if today_price and yest_price and yest_price > 0:
             change_pct = (today_price - yest_price) / yest_price * 100
             performers.append({'ticker': ticker, 'change_pct': round(change_pct, 2)})
