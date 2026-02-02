@@ -564,33 +564,16 @@ export function PortfolioTracker() {
               <Box
                 px="12px"
                 py="4px"
-                bg={rebalanceMode === 'full' ? 'blue.600' : 'transparent'}
-                color={rebalanceMode === 'full' ? 'white' : 'fg.muted'}
-                fontWeight={rebalanceMode === 'full' ? 'semibold' : 'normal'}
+                bg={rebalanceMode !== 'add_only' ? 'blue.600' : 'transparent'}
+                color={rebalanceMode !== 'add_only' ? 'white' : 'fg.muted'}
+                fontWeight={rebalanceMode !== 'add_only' ? 'semibold' : 'normal'}
                 fontSize="xs"
                 cursor="pointer"
                 onClick={() => setRebalanceMode('full')}
                 title="Sälj aktier under rank 20, köp nya topp-aktier"
-                _hover={{ bg: rebalanceMode === 'full' ? 'blue.600' : 'bg.subtle' }}
+                _hover={{ bg: rebalanceMode !== 'add_only' ? 'blue.600' : 'bg.subtle' }}
               >
-                🔄 Kvartalsvis
-              </Box>
-              <Box
-                px="12px"
-                py="4px"
-                bg={rebalanceMode === 'fix_drift' ? 'blue.600' : 'transparent'}
-                color={rebalanceMode === 'fix_drift' ? 'white' : 'fg.muted'}
-                fontWeight={rebalanceMode === 'fix_drift' ? 'semibold' : 'normal'}
-                fontSize="xs"
-                cursor="pointer"
-                borderLeftWidth="1px"
-                borderRightWidth="1px"
-                borderColor="border"
-                onClick={() => setRebalanceMode('fix_drift')}
-                title="Sälj och återbalansera befintliga (köp inga nya)"
-                _hover={{ bg: rebalanceMode === 'fix_drift' ? 'blue.600' : 'bg.subtle' }}
-              >
-                ⚖️ Balansera
+                🔄 Ombalansera
               </Box>
               <Box
                 px="12px"
@@ -600,6 +583,8 @@ export function PortfolioTracker() {
                 fontWeight={rebalanceMode === 'add_only' ? 'semibold' : 'normal'}
                 fontSize="xs"
                 cursor="pointer"
+                borderLeftWidth="1px"
+                borderColor="border"
                 onClick={() => setRebalanceMode('add_only')}
                 title="Lägg bara till nya positioner (sälj inget)"
                 _hover={{ bg: rebalanceMode === 'add_only' ? 'blue.600' : 'bg.subtle' }}
@@ -608,9 +593,8 @@ export function PortfolioTracker() {
               </Box>
             </HStack>
             <Text fontSize="xs" color="fg.muted" mt="4px">
-              {rebalanceMode === 'full' && 'Sälj aktier under rank 20, köp nya topp-aktier. Använd vid kvartalsslut.'}
-              {rebalanceMode === 'fix_drift' && 'Återbalansera befintliga innehav utan att köpa nya. Använd vid stor drift.'}
-              {rebalanceMode === 'add_only' && 'Lägg bara till nya positioner utan att sälja. Använd vid månadssparande.'}
+              {rebalanceMode !== 'add_only' && 'Sälj aktier under rank 20, köp nya topp-aktier med försäljningslikvid + nytt kapital.'}
+              {rebalanceMode === 'add_only' && 'Köp topp-aktier utan att sälja något. Kräver nytt kapital.'}
             </Text>
           </VStack>
         )}
