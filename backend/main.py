@@ -4418,10 +4418,9 @@ def get_portfolio_transactions(
 
 @v1_router.get("/portfolio/daily-stats-debug")
 def get_portfolio_daily_stats_debug(request: Request, db: Session = Depends(get_db)):
-    """Debug endpoint to see price lookups."""
-    from models import UserPortfolio, DailyPrice, IsinLookup
+    """Debug endpoint to see TradingView price lookups."""
+    from models import UserPortfolio
     from services.auth import get_user_from_cookie
-    from datetime import date, timedelta
     import json
     
     user = get_user_from_cookie(request, db)
@@ -4437,38 +4436,28 @@ def get_portfolio_daily_stats_debug(request: Request, db: Session = Depends(get_
         return {"error": "no portfolio"}
     
     holdings = json.loads(portfolio.holdings)
-    today = date.today()
     
-    # Build ISIN to ticker mapping
-    isins = [h.get('isin') for h in holdings if h.get('isin')]
-    isin_to_ticker = {}
-    if isins:
-        lookups = db.query(IsinLookup).filter(IsinLookup.isin.in_(isins)).all()
-        isin_to_ticker = {l.isin: l.ticker for l in lookups}
+    # Get TradingView data
+    from services.tradingview_fetcher import TradingViewFetcher
+    fetcher = TradingViewFetcher()
+    stocks_data = fetcher.fetch_nordic(min_market_cap_sek=2e9)
+    ticker_to_data = {s['ticker']: s for s in stocks_data} if stocks_data else {}
     
     debug = []
     for h in holdings:
-        ticker_from_holding = h.get('ticker', '')
-        isin = h.get('isin')
-        ticker_from_isin = isin_to_ticker.get(isin) if isin else None
-        ticker_used = ticker_from_isin or ticker_from_holding
-        
-        # Check what prices exist
-        price_exact = db.query(DailyPrice).filter(DailyPrice.ticker == ticker_used, DailyPrice.date <= today).order_by(DailyPrice.date.desc()).first()
-        price_underscore = db.query(DailyPrice).filter(DailyPrice.ticker == ticker_used.replace(' ', '_'), DailyPrice.date <= today).order_by(DailyPrice.date.desc()).first()
-        
+        ticker = h.get('ticker', '')
+        stock = ticker_to_data.get(ticker, {})
         debug.append({
-            "ticker_holding": ticker_from_holding,
-            "isin": isin,
-            "ticker_from_isin": ticker_from_isin,
-            "ticker_used": ticker_used,
+            "ticker": ticker,
             "shares": h.get('shares'),
             "buyPrice": h.get('buyPrice'),
-            "price_found": price_exact.close if price_exact else (price_underscore.close if price_underscore else None),
-            "price_date": str(price_exact.date) if price_exact else (str(price_underscore.date) if price_underscore else None),
+            "tv_found": bool(stock),
+            "tv_price": stock.get('close'),
+            "tv_change_1d": stock.get('change_1d'),
+            "tv_currency": stock.get('currency'),
         })
     
-    return {"holdings_count": len(holdings), "debug": debug}
+    return {"holdings_count": len(holdings), "tv_stocks_count": len(ticker_to_data), "sample_tickers": list(ticker_to_data.keys())[:10], "debug": debug}
 
 
 @v1_router.get("/portfolio/daily-stats")
