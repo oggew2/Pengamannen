@@ -655,7 +655,7 @@ export function PortfolioTracker() {
         </Box>
       )}
       
-      <HStack justify="space-between" mb="16px">
+      <HStack justify="space-between" mb="16px" flexWrap="wrap" gap="8px">
         <HStack gap="8px">
           <Text fontSize="lg" fontWeight="semibold">Min Portfölj</Text>
           {holdings.length > 0 && (
@@ -667,75 +667,72 @@ export function PortfolioTracker() {
           )}
         </HStack>
         {holdings.length > 0 && (
-          <VStack gap="8px" align="flex-end">
+          <Button size="xs" variant="ghost" colorPalette="red" onClick={clearHoldings}>
+            Rensa
+          </Button>
+        )}
+      </HStack>
+
+      {/* Rebalance controls - stacked on mobile */}
+      {holdings.length > 0 && (
+        <Box bg="bg" borderRadius="8px" p="12px" borderWidth="1px" borderColor="border" mb="16px">
+          <VStack gap="12px" align="stretch">
+            {/* Mode toggle */}
+            <HStack gap="0" bg="bg.subtle" borderRadius="md" overflow="hidden" w="100%">
+              <Box
+                flex="1"
+                py="8px"
+                bg={rebalanceMode !== 'add_only' ? 'blue.600' : 'transparent'}
+                color={rebalanceMode !== 'add_only' ? 'white' : 'fg.muted'}
+                fontWeight={rebalanceMode !== 'add_only' ? 'semibold' : 'normal'}
+                fontSize="sm"
+                cursor="pointer"
+                textAlign="center"
+                onClick={() => setRebalanceMode('full')}
+              >
+                🔄 Ombalansera
+              </Box>
+              <Box
+                flex="1"
+                py="8px"
+                bg={rebalanceMode === 'add_only' ? 'blue.600' : 'transparent'}
+                color={rebalanceMode === 'add_only' ? 'white' : 'fg.muted'}
+                fontWeight={rebalanceMode === 'add_only' ? 'semibold' : 'normal'}
+                fontSize="sm"
+                cursor="pointer"
+                textAlign="center"
+                borderLeftWidth="1px"
+                borderColor="border"
+                onClick={() => setRebalanceMode('add_only')}
+              >
+                💰 Månadsspar
+              </Box>
+            </HStack>
+            
+            <Text fontSize="xs" color="fg.muted">
+              {rebalanceMode !== 'add_only' 
+                ? 'Sälj aktier under rank 20, köp nya med försäljningslikvid + nytt kapital' 
+                : 'Köp topp-aktier utan att sälja. Kräver nytt kapital.'}
+            </Text>
+            
+            {/* Action row */}
             <HStack gap="8px">
               <Input
                 type="number"
                 placeholder="Nytt kapital (SEK)"
                 value={newCapital}
                 onChange={e => setNewCapital(e.target.value)}
-                size="xs"
-                width="120px"
-                bg="bg"
+                size="sm"
+                flex="1"
+                bg="bg.subtle"
               />
-              <InfoTooltip id="rebalance">
-                <Button size="xs" variant="solid" colorPalette="blue" onClick={checkRebalance} loading={loading}>
-                  🔄 Kolla ombalansering
-                </Button>
-              </InfoTooltip>
-              <Button size="xs" variant="ghost" colorPalette="red" onClick={clearHoldings}>
-                Rensa
+              <Button size="sm" colorPalette="blue" onClick={checkRebalance} loading={loading} flexShrink={0}>
+                Kolla
               </Button>
             </HStack>
-            {/* Segmented control for rebalance mode */}
-            <HStack
-              gap="0" 
-              bg="bg" 
-              borderRadius="md" 
-              borderWidth="1px" 
-              borderColor="border"
-              overflow="hidden"
-            >
-              <Box
-                px="12px"
-                py="4px"
-                bg={rebalanceMode !== 'add_only' ? 'blue.600' : 'transparent'}
-                color={rebalanceMode !== 'add_only' ? 'white' : 'fg.muted'}
-                fontWeight={rebalanceMode !== 'add_only' ? 'semibold' : 'normal'}
-                fontSize="xs"
-                cursor="pointer"
-                onClick={() => setRebalanceMode('full')}
-                title="Sälj aktier under rank 20, köp nya topp-aktier"
-                transition="all 0.15s ease"
-                _hover={{ bg: rebalanceMode !== 'add_only' ? 'blue.600' : 'bg.subtle' }}
-              >
-                🔄 Ombalansera
-              </Box>
-              <Box
-                px="12px"
-                py="4px"
-                bg={rebalanceMode === 'add_only' ? 'blue.600' : 'transparent'}
-                color={rebalanceMode === 'add_only' ? 'white' : 'fg.muted'}
-                fontWeight={rebalanceMode === 'add_only' ? 'semibold' : 'normal'}
-                fontSize="xs"
-                cursor="pointer"
-                borderLeftWidth="1px"
-                borderColor="border"
-                onClick={() => setRebalanceMode('add_only')}
-                title="Lägg bara till nya positioner (sälj inget)"
-                transition="all 0.15s ease"
-                _hover={{ bg: rebalanceMode === 'add_only' ? 'blue.600' : 'bg.subtle' }}
-              >
-                💰 Månadsspar
-              </Box>
-            </HStack>
-            <Text fontSize="xs" color="fg.muted" mt="4px">
-              {rebalanceMode !== 'add_only' && 'Sälj aktier under rank 20, köp nya topp-aktier med försäljningslikvid + nytt kapital.'}
-              {rebalanceMode === 'add_only' && 'Köp topp-aktier utan att sälja något. Kräver nytt kapital.'}
-            </Text>
           </VStack>
-        )}
-      </HStack>
+        </Box>
+      )}
 
       {/* Next Rebalance Countdown */}
       <SimpleGrid columns={{ base: 1, md: 2 }} gap="12px" mb="16px">
