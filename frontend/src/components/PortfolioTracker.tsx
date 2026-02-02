@@ -85,6 +85,7 @@ export function PortfolioTracker() {
     sells: RebalanceStock[];
     holds: RebalanceStock[];
     buys: RebalanceStock[];
+    topups: RebalanceStock[];  // Underweight holdings to top up
     summary: string;
     costs?: { courtage: number; spread: number; total: number };
   } | null>(null);
@@ -92,7 +93,7 @@ export function PortfolioTracker() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
-  const [executedTrades, setExecutedTrades] = useState<{ sells: string[]; buys: string[] }>({ sells: [], buys: [] });
+  const [executedTrades, setExecutedTrades] = useState<{ sells: string[]; buys: string[]; topups: string[] }>({ sells: [], buys: [], topups: [] });
   const [newCapital, setNewCapital] = useState<string>('');
   const [rebalanceMode, setRebalanceMode] = useState<'full' | 'add_only' | 'fix_drift'>('full');
   const [buyAdjustments, setBuyAdjustments] = useState<Record<string, number>>({});
@@ -305,32 +306,45 @@ export function PortfolioTracker() {
           action: 'HOLD' as const
         }));
 
-      const buys: RebalanceStock[] = res.buy.map(b => ({
-        ticker: b.ticker,
-        shares: b.shares,
-        currentRank: b.rank,
-        previousRank: 0,
-        value: b.value,
-        currency: (b as any).currency || 'SEK',
-        action: 'BUY' as const,
-        reason: `Ny i topp 10 (rank ${b.rank})`
-      }));
+      // Separate new buys from topups (existing holdings that need more)
+      const heldTickers = new Set(holdings.map(h => h.ticker));
+      const newBuys: RebalanceStock[] = [];
+      const topups: RebalanceStock[] = [];
+      
+      res.buy.forEach(b => {
+        const stock: RebalanceStock = {
+          ticker: b.ticker,
+          shares: b.shares,
+          currentRank: b.rank,
+          previousRank: holdings.find(h => h.ticker === b.ticker)?.rankAtPurchase || 0,
+          value: b.value,
+          currency: (b as any).currency || 'SEK',
+          action: 'BUY' as const,
+          reason: heldTickers.has(b.ticker) ? 'Fyll på (undervikt)' : `Ny i topp 10 (rank ${b.rank})`
+        };
+        if (heldTickers.has(b.ticker)) {
+          topups.push(stock);
+        } else {
+          newBuys.push(stock);
+        }
+      });
 
-      const summary = sells.length === 0 && buys.length === 0
+      const summary = sells.length === 0 && newBuys.length === 0 && topups.length === 0
         ? '✓ Ingen ombalansering behövs'
-        : `${sells.length} att sälja, ${buys.length} att köpa`;
+        : `${sells.length} sälj, ${newBuys.length} nya, ${topups.length} fyll på`;
 
       // Calculate transaction costs (Avanza: 0.069% min 1kr, spread ~0.3%)
       const sellValue = sells.reduce((sum, s) => sum + s.value, 0);
-      const buyValue = buys.reduce((sum, b) => sum + b.value, 0);
+      const buyValue = [...newBuys, ...topups].reduce((sum, b) => sum + b.value, 0);
       const totalTurnover = sellValue + buyValue;
-      const courtage = Math.max(totalTurnover * 0.00069, (sells.length + buys.length));
+      const courtage = Math.max(totalTurnover * 0.00069, (sells.length + newBuys.length + topups.length));
       const spread = totalTurnover * 0.003;
       const costs = { courtage: Math.round(courtage), spread: Math.round(spread), total: Math.round(courtage + spread) };
 
-      console.log('Rebalance result:', { sells: sells.length, holds: holds.length, buys: buys.length });
-      setRebalanceData({ sells, holds, buys, summary, costs });
+      console.log('Rebalance result:', { sells: sells.length, holds: holds.length, buys: newBuys.length, topups: topups.length });
+      setRebalanceData({ sells, holds, buys: newBuys, topups, summary, costs });
       setBuyAdjustments({});  // Reset adjustments
+      setExecutedTrades({ sells: [], buys: [], topups: [] });
       setLastChecked(new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
       console.error('Rebalance check failed:', err);
@@ -347,8 +361,12 @@ export function PortfolioTracker() {
       lines.push('SÄLJ:');
       rebalanceData.sells.forEach(s => lines.push(`${s.ticker}\t${s.shares} st\t${formatPrice(s.value, s.currency)}`));
     }
+    if (rebalanceData.topups.length) {
+      lines.push('', 'FYLL PÅ:');
+      rebalanceData.topups.forEach(b => lines.push(`${b.ticker}\t${b.shares} st\t${formatPrice(b.value, b.currency)}`));
+    }
     if (rebalanceData.buys.length) {
-      lines.push('', 'KÖP:');
+      lines.push('', 'NYA:');
       rebalanceData.buys.forEach(b => lines.push(`${b.ticker}\t${b.shares} st\t${formatPrice(b.value, b.currency)}`));
     }
     try {
@@ -356,7 +374,6 @@ export function PortfolioTracker() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback for browsers without clipboard API
       setError('Kunde inte kopiera. Markera texten manuellt.');
     }
   };
@@ -368,7 +385,7 @@ export function PortfolioTracker() {
   };
   const formatSEK = (v: number) => new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(v) + ' kr';
   
-  const toggleExecuted = (type: 'sells' | 'buys', ticker: string) => {
+  const toggleExecuted = (type: 'sells' | 'buys' | 'topups', ticker: string) => {
     setExecutedTrades(prev => ({
       ...prev,
       [type]: prev[type].includes(ticker)
@@ -379,7 +396,8 @@ export function PortfolioTracker() {
 
   const adjustBuyShares = (ticker: string, delta: number) => {
     setBuyAdjustments(prev => {
-      const base = rebalanceData?.buys.find(b => b.ticker === ticker)?.shares || 0;
+      const base = rebalanceData?.buys.find(b => b.ticker === ticker)?.shares 
+        || rebalanceData?.topups.find(b => b.ticker === ticker)?.shares || 0;
       const current = prev[ticker] ?? base;
       const newVal = Math.max(0, current + delta);
       return { ...prev, [ticker]: newVal };
@@ -408,18 +426,18 @@ export function PortfolioTracker() {
         });
       });
     
-    // Remove sold stocks, add/update bought stocks
+    // Remove sold stocks
     let newHoldings = holdings.filter(h => !executedTrades.sells.includes(h.ticker));
     
-    rebalanceData.buys
-      .filter(b => executedTrades.buys.includes(b.ticker))
+    // Process topups (add to existing positions)
+    rebalanceData.topups
+      .filter(b => executedTrades.topups.includes(b.ticker))
       .forEach(b => {
         const shares = getBuyShares(b.ticker, b.shares);
         const price = b.value / b.shares;
         const value = shares * price;
         const fee = calculateFee(value);
         
-        // Log buy transaction
         newHistory.push({
           date: new Date().toISOString(),
           type: 'BUY',
@@ -431,19 +449,37 @@ export function PortfolioTracker() {
         
         const existing = newHoldings.find(h => h.ticker === b.ticker);
         if (existing) {
-          // Add to existing position
           existing.shares += shares;
           existing.fees = (existing.fees || 0) + fee;
-        } else {
-          newHoldings.push({
-            ticker: b.ticker,
-            shares,
-            buyPrice: price,
-            buyDate: new Date().toISOString(),
-            rankAtPurchase: b.currentRank || 0,
-            fees: fee,
-          });
         }
+      });
+    
+    // Process new buys
+    rebalanceData.buys
+      .filter(b => executedTrades.buys.includes(b.ticker))
+      .forEach(b => {
+        const shares = getBuyShares(b.ticker, b.shares);
+        const price = b.value / b.shares;
+        const value = shares * price;
+        const fee = calculateFee(value);
+        
+        newHistory.push({
+          date: new Date().toISOString(),
+          type: 'BUY',
+          ticker: b.ticker,
+          shares,
+          price,
+          fee,
+        });
+        
+        newHoldings.push({
+          ticker: b.ticker,
+          shares,
+          buyPrice: price,
+          buyDate: new Date().toISOString(),
+          rankAtPurchase: b.currentRank || 0,
+          fees: fee,
+        });
       });
     
     setTransactionHistory(newHistory);
@@ -451,7 +487,7 @@ export function PortfolioTracker() {
     setHoldings(newHoldings);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newHoldings));
     saveToDatabase(newHoldings, newHistory);
-    setExecutedTrades({ sells: [], buys: [] });
+    setExecutedTrades({ sells: [], buys: [], topups: [] });
     setBuyAdjustments({});
     setRebalanceData(null);
     window.dispatchEvent(new Event('portfolio-locked-in'));
@@ -712,7 +748,7 @@ export function PortfolioTracker() {
           {rebalanceData && (
             <VStack align="stretch" gap="12px" mt="8px">
               {/* Summary boxes */}
-              <SimpleGrid columns={3} gap="8px">
+              <SimpleGrid columns={4} gap="8px">
                 <Box p="12px" bg="blue.900/20" borderRadius="6px" textAlign="center">
                   <Text fontSize="2xl" fontWeight="bold" color="blue.400">{rebalanceData.holds.length}</Text>
                   <Text fontSize="xs" color="fg.muted">Behåll</Text>
@@ -721,9 +757,13 @@ export function PortfolioTracker() {
                   <Text fontSize="2xl" fontWeight="bold" color="red.400">{rebalanceData.sells.length}</Text>
                   <Text fontSize="xs" color="fg.muted">Sälj</Text>
                 </Box>
+                <Box p="12px" bg="yellow.900/20" borderRadius="6px" textAlign="center">
+                  <Text fontSize="2xl" fontWeight="bold" color="yellow.400">{rebalanceData.topups.length}</Text>
+                  <Text fontSize="xs" color="fg.muted">Fyll på</Text>
+                </Box>
                 <Box p="12px" bg="green.900/20" borderRadius="6px" textAlign="center">
                   <Text fontSize="2xl" fontWeight="bold" color="green.400">{rebalanceData.buys.length}</Text>
-                  <Text fontSize="xs" color="fg.muted">Köp</Text>
+                  <Text fontSize="xs" color="fg.muted">Nya</Text>
                 </Box>
               </SimpleGrid>
 
@@ -779,10 +819,53 @@ export function PortfolioTracker() {
                 </Box>
               )}
 
-              {/* Buys - clickable with Avanza links */}
+              {/* Topups - existing holdings that need more */}
+              {rebalanceData.topups.length > 0 && (
+                <Box bg="yellow.900/20" borderColor="yellow.500" borderWidth="1px" borderRadius="md" p="12px">
+                  <Text fontSize="sm" color="yellow.400" fontWeight="semibold" mb="8px">FYLL PÅ (undervikt)</Text>
+                  <VStack gap="4px" align="stretch">
+                    {rebalanceData.topups.map(b => {
+                      const shares = getBuyShares(b.ticker, b.shares);
+                      const price = b.value / b.shares;
+                      const value = shares * price;
+                      return (
+                        <Box key={b.ticker} p="8px" bg={executedTrades.topups.includes(b.ticker) ? 'yellow.900/30' : 'bg'} borderRadius="4px">
+                          <HStack justify="space-between" fontSize="sm">
+                            <HStack gap="8px">
+                              <Text
+                                color={executedTrades.topups.includes(b.ticker) ? 'yellow.400' : 'yellow.300'}
+                                cursor="pointer"
+                                onClick={() => toggleExecuted('topups', b.ticker)}
+                              >
+                                {executedTrades.topups.includes(b.ticker) ? '✓' : '+'}
+                              </Text>
+                              <a
+                                href={`https://www.avanza.se/aktier/om-aktien.html?query=${b.ticker}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <Text fontWeight="medium" color="yellow.300" textDecoration="underline">{b.ticker}</Text>
+                              </a>
+                              <Text fontSize="xs" color="fg.muted">#{b.currentRank}</Text>
+                            </HStack>
+                            <HStack gap="4px">
+                              <Button size="xs" variant="ghost" onClick={() => adjustBuyShares(b.ticker, -1)}>−</Button>
+                              <Text minW="50px" textAlign="center">{shares} st</Text>
+                              <Button size="xs" variant="ghost" onClick={() => adjustBuyShares(b.ticker, 1)}>+</Button>
+                              <Text color="fg.muted" minW="80px" textAlign="right">{formatPrice(value, b.currency)}</Text>
+                            </HStack>
+                          </HStack>
+                        </Box>
+                      );
+                    })}
+                  </VStack>
+                </Box>
+              )}
+
+              {/* Buys - new positions */}
               {rebalanceData.buys.length > 0 && (
                 <Box bg="green.900/20" borderColor="green.500" borderWidth="1px" borderRadius="md" p="12px">
-                  <Text fontSize="sm" color="green.400" fontWeight="semibold" mb="8px">KÖP</Text>
+                  <Text fontSize="sm" color="green.400" fontWeight="semibold" mb="8px">NYA POSITIONER</Text>
                   <VStack gap="4px" align="stretch">
                     {rebalanceData.buys.map(b => {
                       const shares = getBuyShares(b.ticker, b.shares);
@@ -819,7 +902,6 @@ export function PortfolioTracker() {
                       );
                     })}
                   </VStack>
-                  <Text fontSize="xs" color="fg.muted" mt="8px">✓ markerar genomförd • +/− justerar antal</Text>
                 </Box>
               )}
 
@@ -834,9 +916,9 @@ export function PortfolioTracker() {
                       </Text>
                     </HStack>
                   )}
-                  {(executedTrades.sells.length > 0 || executedTrades.buys.length > 0) && (
+                  {(executedTrades.sells.length > 0 || executedTrades.buys.length > 0 || executedTrades.topups.length > 0) && (
                     <Button size="sm" colorPalette="green" onClick={saveExecutedTrades}>
-                      ✓ Spara {executedTrades.sells.length + executedTrades.buys.length} genomförda
+                      ✓ Spara {executedTrades.sells.length + executedTrades.buys.length + executedTrades.topups.length} genomförda
                     </Button>
                   )}
                 </HStack>
