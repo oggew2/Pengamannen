@@ -127,26 +127,21 @@ async def tradingview_sync(db, force_refresh: bool = False) -> dict:
         # Flush fundamentals before prices to avoid batch conflicts
         db.flush()
         
-        # Save daily prices for portfolio tracking
-        from models import DailyPrice
+        # Save daily prices for portfolio tracking using raw SQL upsert
+        from sqlalchemy import text
         prices_saved = 0
-        prices_updated = 0
         for stock_data in stocks:
             close_price = stock_data.get('close')
             if not close_price:
                 continue
             db_ticker = stock_data['db_ticker']
-            # Upsert: update if exists, insert if not
-            existing = db.query(DailyPrice).filter(
-                DailyPrice.ticker == db_ticker,
-                DailyPrice.date == today
-            ).first()
-            if existing:
-                existing.close = close_price
-                prices_updated += 1
-            else:
-                db.add(DailyPrice(ticker=db_ticker, date=today, close=close_price))
-                prices_saved += 1
+            # SQLite upsert - insert or update on conflict
+            db.execute(text("""
+                INSERT INTO daily_prices (ticker, date, close) VALUES (:ticker, :date, :close)
+                ON CONFLICT(ticker, date) DO UPDATE SET close = :close
+            """), {"ticker": db_ticker, "date": today, "close": close_price})
+            prices_saved += 1
+        db.flush()
         
         # Update ISIN lookup table for CSV import matching
         from models import IsinLookup
@@ -188,15 +183,11 @@ async def tradingview_sync(db, force_refresh: bool = False) -> dict:
                 close_price = stock_data.get('close')
                 ticker = stock_data.get('ticker', stock_data.get('db_ticker'))
                 if close_price and ticker:
-                    existing = db.query(DailyPrice).filter(
-                        DailyPrice.ticker == ticker,
-                        DailyPrice.date == today
-                    ).first()
-                    if existing:
-                        existing.close = close_price
-                    else:
-                        db.add(DailyPrice(ticker=ticker, date=today, close=close_price))
-                        prices_saved += 1
+                    db.execute(text("""
+                        INSERT INTO daily_prices (ticker, date, close) VALUES (:ticker, :date, :close)
+                        ON CONFLICT(ticker, date) DO UPDATE SET close = :close
+                    """), {"ticker": ticker, "date": today, "close": close_price})
+                    prices_saved += 1
         except Exception as e:
             logger.warning(f"Nordic ISIN sync failed: {e}")
         
