@@ -552,13 +552,42 @@ export function PortfolioTracker() {
   }, []);
   const { containerRef, refreshing } = usePullToRefresh(handleRefresh);
 
+  // Personalized greeting based on time and context
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 10) return 'God morgon';
+    if (hour < 17) return 'Välkommen tillbaka';
+    return 'God kväll';
+  };
+
   return (
-    <Box ref={containerRef} bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="20px">
+    <Box ref={containerRef} bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="20px" className="animate-fade-in-up">
       <Confetti active={showConfetti} onComplete={() => setShowConfetti(false)} />
       
       {refreshing && (
         <Box textAlign="center" py="8px" mb="8px">
           <Text fontSize="xs" color="fg.muted">Uppdaterar...</Text>
+        </Box>
+      )}
+
+      {/* Personalized welcome banner */}
+      {holdings.length > 0 && daysUntil <= 14 && (
+        <Box 
+          bg="blue.900/20" 
+          borderColor="blue.500/30" 
+          borderWidth="1px" 
+          borderRadius="md" 
+          p="12px" 
+          mb="16px"
+          className="animate-slide-in"
+        >
+          <Text fontSize="sm" color="fg">
+            {getGreeting()}! {daysUntil <= 0 
+              ? '🔔 Dags att ombalansera din portfölj idag!' 
+              : daysUntil === 1 
+                ? '⏰ Imorgon är det dags för ombalansering'
+                : `📅 ${daysUntil} dagar till nästa ombalansering`}
+          </Text>
         </Box>
       )}
       
@@ -842,7 +871,7 @@ export function PortfolioTracker() {
                 ⚠️ Portföljen har driftat {driftData.maxDrift.toFixed(1)}% från målvikt. Överväg "Balansera".
               </Text>
             )}
-            <HStack gap="8px" flexWrap="wrap">
+            <HStack gap="8px" flexWrap="wrap" className="stagger-children">
               {holdings.map(h => {
                 const rank = h.currentRank ?? h.rankAtPurchase;
                 const isInDanger = rank && rank > 15;
