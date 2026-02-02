@@ -4464,6 +4464,40 @@ def get_portfolio_performance_data(
         "period": period,
     }
     
+    # Build chart data - portfolio value over time
+    chart_data = []
+    current_date = start_date
+    while current_date <= today:
+        # Get positions at this date
+        txns_to_date = [t for t in txn_list if t['date'] and t['date'] <= current_date.isoformat()]
+        pos_at_date = calculate_positions(txns_to_date)
+        
+        # Calculate value at this date
+        day_value = 0
+        for ticker, pos in pos_at_date.items():
+            if ticker in price_lookup:
+                # Find closest price on or before this date
+                valid_dates = [d for d in price_lookup[ticker].keys() if d <= current_date.isoformat()]
+                if valid_dates:
+                    price = price_lookup[ticker][max(valid_dates)]
+                    day_value += pos['shares'] * price
+                else:
+                    day_value += pos['total_cost']
+            else:
+                day_value += pos['total_cost']
+        
+        if day_value > 0:
+            chart_data.append({"date": current_date.strftime("%d %b"), "value": round(day_value)})
+        
+        # Weekly intervals for cleaner chart
+        current_date += timedelta(days=7)
+    
+    # Add final point for today
+    if chart_data and chart_data[-1]["value"] != round(total_value):
+        chart_data.append({"date": today.strftime("%d %b"), "value": round(total_value)})
+    
+    result["chart_data"] = chart_data
+    
     if missing_prices:
         result["warning"] = f"Prisdata saknas för {len(missing_prices)} positioner - använder inköpspris"
     

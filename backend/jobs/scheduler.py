@@ -477,35 +477,24 @@ def send_reports_job():
 
 
 def cleanup_old_data_job():
-    """Weekly cleanup of old data to prevent disk growth."""
-    logger.info("Starting weekly data cleanup")
+    """Weekly cleanup of logs only - prices kept for backtesting."""
+    logger.info("Starting weekly cleanup")
     db = SessionLocal()
     try:
         from datetime import date, timedelta
-        from models import DailyPrice, DataSyncLog
+        from models import DataSyncLog
         
-        # Keep 2 years of daily prices (enough for backtesting)
-        cutoff = date.today() - timedelta(days=730)
-        deleted_prices = db.query(DailyPrice).filter(DailyPrice.date < cutoff).delete()
-        
-        # Keep 30 days of sync logs
+        # Only clean logs (keep 30 days) - prices needed for backtesting
         log_cutoff = date.today() - timedelta(days=30)
         deleted_logs = db.query(DataSyncLog).filter(DataSyncLog.started_at < log_cutoff).delete()
-        
         db.commit()
         
-        # Vacuum database to reclaim space
-        db.execute("VACUUM")
-        
-        logger.info(f"Cleanup complete: {deleted_prices} old prices, {deleted_logs} old logs deleted")
-        
+        logger.info(f"Cleanup complete: {deleted_logs} old logs deleted")
     except Exception as e:
         logger.error(f"Cleanup failed: {e}")
         db.rollback()
     finally:
         db.close()
-        import gc
-        gc.collect()
 
 
 def start_scheduler():

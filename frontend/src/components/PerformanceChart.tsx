@@ -21,12 +21,18 @@ interface Position {
   fees: number;
 }
 
+interface ChartPoint {
+  date: string;
+  value: number;
+}
+
 interface PerformanceData {
   summary: PerformanceSummary | null;
   positions: Position[];
   period: string;
   message?: string;
   warning?: string;
+  chart_data?: ChartPoint[];
 }
 
 type Period = '1M' | '3M' | '6M' | 'YTD' | '1Y' | 'ALL';
@@ -149,6 +155,40 @@ export function PerformanceChart() {
           </Button>
         </HStack>
       </Box>
+
+      {/* Line chart */}
+      {data.chart_data && data.chart_data.length > 1 && (
+        <Box bg="gray.800" p={4} borderRadius="lg">
+          <svg viewBox="0 0 300 100" style={{ width: '100%', height: '120px' }}>
+            {(() => {
+              const pts = data.chart_data!;
+              const vals = pts.map(p => p.value);
+              const min = Math.min(...vals);
+              const max = Math.max(...vals);
+              const range = max - min || 1;
+              const points = pts.map((p, i) => {
+                const x = (i / (pts.length - 1)) * 290 + 5;
+                const y = 95 - ((p.value - min) / range) * 85;
+                return `${x},${y}`;
+              }).join(' ');
+              const startVal = vals[0];
+              const endVal = vals[vals.length - 1];
+              const color = endVal >= startVal ? '#48BB78' : '#F56565';
+              return (
+                <>
+                  <polyline fill="none" stroke={color} strokeWidth="2" points={points} />
+                  <circle cx="5" cy={95 - ((startVal - min) / range) * 85} r="3" fill={color} />
+                  <circle cx="295" cy={95 - ((endVal - min) / range) * 85} r="3" fill={color} />
+                </>
+              );
+            })()}
+          </svg>
+          <HStack justify="space-between" mt={1}>
+            <Text fontSize="xs" color="gray.500">{data.chart_data[0].date}</Text>
+            <Text fontSize="xs" color="gray.500">{data.chart_data[data.chart_data.length - 1].date}</Text>
+          </HStack>
+        </Box>
+      )}
 
       {/* Stats grid */}
       <HStack gap={4} flexWrap="wrap">
