@@ -1812,12 +1812,21 @@ def get_momentum_portfolio(request: Request, db: Session = Depends(get_db)):
     ).first()
     
     if not portfolio or not portfolio.holdings:
-        return {"holdings": [], "updated_at": None}
+        return {"holdings": [], "history": [], "updated_at": None}
     
     try:
         holdings = json.loads(portfolio.holdings)
     except:
         holdings = []
+    
+    # Get transaction history from description field
+    history = []
+    try:
+        if portfolio.description and portfolio.description.startswith('{'):
+            desc_data = json.loads(portfolio.description)
+            history = desc_data.get('history', [])
+    except:
+        pass
     
     # Get current rankings to update ranks dynamically
     try:
@@ -1831,6 +1840,7 @@ def get_momentum_portfolio(request: Request, db: Session = Depends(get_db)):
     
     return {
         "holdings": holdings,
+        "history": history,
         "updated_at": portfolio.updated_at.isoformat() if portfolio.updated_at else None
     }
 
@@ -1860,6 +1870,12 @@ def save_momentum_portfolio(request: Request, body: dict, db: Session = Depends(
         db.add(portfolio)
     
     portfolio.holdings = json.dumps(holdings)
+    
+    # Store history if provided
+    history = body.get("history", [])
+    if history:
+        portfolio.description = json.dumps({"history": history})
+    
     db.commit()
     
     return {"status": "saved", "count": len(holdings)}

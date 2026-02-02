@@ -13,6 +13,15 @@ interface LockedHolding {
   fees?: number;  // Transaction fees paid (Avanza courtage)
 }
 
+interface Transaction {
+  date: string;
+  type: 'BUY' | 'SELL' | 'EDIT';
+  ticker: string;
+  shares: number;
+  price: number;
+  fee: number;
+}
+
 interface RebalanceStock {
   ticker: string;
   shares: number;
@@ -25,6 +34,7 @@ interface RebalanceStock {
 }
 
 const STORAGE_KEY = 'borslabbet_locked_holdings';
+const HISTORY_KEY = 'borslabbet_transaction_history';
 
 // Quarterly momentum rebalance months (mid-month ~15th)
 const REBALANCE_MONTHS = [3, 6, 9, 12];
@@ -69,6 +79,8 @@ END:VCALENDAR`;
 
 export function PortfolioTracker() {
   const [holdings, setHoldings] = useState<LockedHolding[]>([]);
+  const [transactionHistory, setTransactionHistory] = useState<Transaction[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const [rebalanceData, setRebalanceData] = useState<{
     sells: RebalanceStock[];
     holds: RebalanceStock[];
@@ -117,7 +129,7 @@ export function PortfolioTracker() {
     return { holdings: result, maxDrift };
   }, [holdings]);
 
-  // Load holdings from database (with localStorage fallback)
+  // Load holdings and history from database (with localStorage fallback)
   useEffect(() => {
     const loadHoldings = async () => {
       try {
@@ -129,8 +141,12 @@ export function PortfolioTracker() {
             setHoldings(data.holdings);
             // Sync to localStorage for offline access
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data.holdings));
-            return;
           }
+          if (data.history) {
+            setTransactionHistory(data.history);
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(data.history));
+          }
+          return;
         }
       } catch { /* fallback to localStorage */ }
       
@@ -139,6 +155,12 @@ export function PortfolioTracker() {
       if (saved) {
         try {
           setHoldings(JSON.parse(saved));
+        } catch { /* ignore */ }
+      }
+      const savedHistory = localStorage.getItem(HISTORY_KEY);
+      if (savedHistory) {
+        try {
+          setTransactionHistory(JSON.parse(savedHistory));
         } catch { /* ignore */ }
       }
     };
@@ -155,15 +177,24 @@ export function PortfolioTracker() {
   }, []);
 
   // Save to database when holdings change
-  const saveToDatabase = async (newHoldings: LockedHolding[]) => {
+  const saveToDatabase = async (newHoldings: LockedHolding[], newHistory?: Transaction[]) => {
+    const historyToSave = newHistory || transactionHistory;
     try {
       await fetch('/v1/user/momentum-portfolio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ holdings: newHoldings })
+        body: JSON.stringify({ holdings: newHoldings, history: historyToSave })
       });
     } catch { /* ignore - localStorage is backup */ }
+  };
+
+  const addTransaction = (tx: Omit<Transaction, 'date'>) => {
+    const newTx: Transaction = { ...tx, date: new Date().toISOString() };
+    const newHistory = [...transactionHistory, newTx];
+    setTransactionHistory(newHistory);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory));
+    return newHistory;
   };
 
   const clearHoldings = () => {
@@ -195,29 +226,48 @@ export function PortfolioTracker() {
     if (!editingTicker) return;
     const shares = parseInt(editShares) || 0;
     const price = parseFloat(editPrice) || 0;
+    const oldHolding = holdings.find(h => h.ticker === editingTicker);
     
     if (shares <= 0) {
       // Delete holding if shares is 0
       deleteHolding(editingTicker);
     } else {
+      const fee = calculateFee(shares * price);
       const newHoldings = holdings.map(h => 
         h.ticker === editingTicker 
-          ? { ...h, shares, buyPrice: price, fees: calculateFee(shares * price) }
+          ? { ...h, shares, buyPrice: price, fees: fee }
           : h
       );
+      // Log edit transaction
+      const newHistory = addTransaction({
+        type: 'EDIT',
+        ticker: editingTicker,
+        shares: shares - (oldHolding?.shares || 0),
+        price,
+        fee: 0,  // No fee for manual edits
+      });
       setHoldings(newHoldings);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newHoldings));
-      saveToDatabase(newHoldings);
+      saveToDatabase(newHoldings, newHistory);
     }
     cancelEditing();
   };
 
   const deleteHolding = (ticker: string) => {
     if (!confirm(`Ta bort ${ticker} från portföljen?`)) return;
+    const oldHolding = holdings.find(h => h.ticker === ticker);
     const newHoldings = holdings.filter(h => h.ticker !== ticker);
+    // Log sell transaction
+    const newHistory = addTransaction({
+      type: 'SELL',
+      ticker,
+      shares: oldHolding?.shares || 0,
+      price: oldHolding?.buyPrice || 0,
+      fee: calculateFee((oldHolding?.shares || 0) * (oldHolding?.buyPrice || 0)),
+    });
     setHoldings(newHoldings);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newHoldings));
-    saveToDatabase(newHoldings);
+    saveToDatabase(newHoldings, newHistory);
     cancelEditing();
   };
 
@@ -340,6 +390,24 @@ export function PortfolioTracker() {
 
   const saveExecutedTrades = () => {
     if (!rebalanceData) return;
+    
+    let newHistory = [...transactionHistory];
+    
+    // Log sell transactions
+    rebalanceData.sells
+      .filter(s => executedTrades.sells.includes(s.ticker))
+      .forEach(s => {
+        const oldHolding = holdings.find(h => h.ticker === s.ticker);
+        newHistory.push({
+          date: new Date().toISOString(),
+          type: 'SELL',
+          ticker: s.ticker,
+          shares: oldHolding?.shares || s.shares,
+          price: s.value / s.shares,
+          fee: calculateFee(s.value),
+        });
+      });
+    
     // Remove sold stocks, add/update bought stocks
     let newHoldings = holdings.filter(h => !executedTrades.sells.includes(h.ticker));
     
@@ -350,6 +418,17 @@ export function PortfolioTracker() {
         const price = b.value / b.shares;
         const value = shares * price;
         const fee = calculateFee(value);
+        
+        // Log buy transaction
+        newHistory.push({
+          date: new Date().toISOString(),
+          type: 'BUY',
+          ticker: b.ticker,
+          shares,
+          price,
+          fee,
+        });
+        
         const existing = newHoldings.find(h => h.ticker === b.ticker);
         if (existing) {
           // Add to existing position
@@ -367,9 +446,11 @@ export function PortfolioTracker() {
         }
       });
     
+    setTransactionHistory(newHistory);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory));
     setHoldings(newHoldings);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newHoldings));
-    saveToDatabase(newHoldings);
+    saveToDatabase(newHoldings, newHistory);
     setExecutedTrades({ sells: [], buys: [] });
     setBuyAdjustments({});
     setRebalanceData(null);
@@ -510,24 +591,57 @@ export function PortfolioTracker() {
       ) : (
         <VStack align="stretch" gap="16px">
           {/* Current holdings summary */}
-          <HStack gap="24px" flexWrap="wrap">
-            <Box>
-              <Text fontSize="xs" color="fg.muted">Innehav</Text>
-              <Text fontWeight="semibold">{holdings.length} aktier</Text>
-            </Box>
-            <Box>
-              <Text fontSize="xs" color="fg.muted">Inköpsvärde</Text>
-              <Text fontWeight="semibold">{formatSEK(totalValue)}</Text>
-            </Box>
-            <Box>
-              <Text fontSize="xs" color="fg.muted">Courtage betalt</Text>
-              <Text fontWeight="semibold">{formatSEK(holdings.reduce((sum, h) => sum + (h.fees || 0), 0))}</Text>
-            </Box>
-            <Box>
-              <Text fontSize="xs" color="fg.muted">Låst</Text>
-              <Text fontWeight="semibold">{holdings[0] ? formatDate(holdings[0].buyDate) : '—'}</Text>
-            </Box>
+          <HStack gap="24px" flexWrap="wrap" justify="space-between">
+            <HStack gap="24px" flexWrap="wrap">
+              <Box>
+                <Text fontSize="xs" color="fg.muted">Innehav</Text>
+                <Text fontWeight="semibold">{holdings.length} aktier</Text>
+              </Box>
+              <Box>
+                <Text fontSize="xs" color="fg.muted">Inköpsvärde</Text>
+                <Text fontWeight="semibold">{formatSEK(totalValue)}</Text>
+              </Box>
+              <Box>
+                <Text fontSize="xs" color="fg.muted">Courtage betalt</Text>
+                <Text fontWeight="semibold">{formatSEK(holdings.reduce((sum, h) => sum + (h.fees || 0), 0))}</Text>
+              </Box>
+              <Box>
+                <Text fontSize="xs" color="fg.muted">Låst</Text>
+                <Text fontWeight="semibold">{holdings[0] ? formatDate(holdings[0].buyDate) : '—'}</Text>
+              </Box>
+            </HStack>
+            <Button size="xs" variant="ghost" onClick={() => setShowHistory(!showHistory)}>
+              📜 {showHistory ? 'Dölj' : 'Historik'}
+            </Button>
           </HStack>
+
+          {/* Transaction History */}
+          {showHistory && transactionHistory.length > 0 && (
+            <Box bg="bg" borderRadius="md" p="12px" borderWidth="1px" borderColor="border" maxH="200px" overflowY="auto">
+              <Text fontSize="xs" fontWeight="semibold" mb="8px">Transaktionshistorik</Text>
+              <VStack align="stretch" gap="4px">
+                {[...transactionHistory].reverse().map((tx, i) => (
+                  <HStack key={i} fontSize="xs" justify="space-between">
+                    <HStack gap="8px">
+                      <Text color="fg.muted">{new Date(tx.date).toLocaleDateString('sv-SE')}</Text>
+                      <Text color={tx.type === 'BUY' ? 'green.400' : tx.type === 'SELL' ? 'red.400' : 'blue.400'}>
+                        {tx.type === 'BUY' ? '🟢 Köp' : tx.type === 'SELL' ? '🔴 Sälj' : '✏️ Ändra'}
+                      </Text>
+                      <Text fontWeight="medium">{tx.ticker}</Text>
+                    </HStack>
+                    <HStack gap="8px">
+                      <Text>{tx.shares > 0 ? '+' : ''}{tx.shares} st</Text>
+                      <Text color="fg.muted">@ {tx.price.toFixed(2)}</Text>
+                      {tx.fee > 0 && <Text color="fg.muted">(avg {tx.fee} kr)</Text>}
+                    </HStack>
+                  </HStack>
+                ))}
+              </VStack>
+            </Box>
+          )}
+          {showHistory && transactionHistory.length === 0 && (
+            <Text fontSize="xs" color="fg.muted">Ingen historik ännu.</Text>
+          )}
 
           {/* Holdings list */}
           <Box fontSize="sm">
