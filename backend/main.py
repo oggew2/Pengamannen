@@ -4525,10 +4525,29 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
     except:
         fx_rates = {'SEK': 1.0, 'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0}
     
+    # Build ticker to currency mapping from Stock table
+    from models import Stock
+    tickers = [h.get('ticker') for h in holdings if h.get('ticker')]
+    ticker_to_currency = {}
+    if tickers:
+        stocks = db.query(Stock).filter(Stock.ticker.in_(tickers)).all()
+        ticker_to_currency = {s.ticker: s.currency for s in stocks if s.currency}
+    
     def get_fx_rate(holding: dict):
         isin = holding.get('isin')
-        currency = isin_to_currency.get(isin, 'SEK') if isin else 'SEK'
-        return fx_rates.get(currency, 1.0)
+        ticker = holding.get('ticker', '')
+        
+        # Try ISIN lookup first
+        if isin and isin in isin_to_currency:
+            currency = isin_to_currency[isin]
+            return fx_rates.get(currency, 1.0)
+        
+        # Try ticker lookup from Stock table
+        if ticker in ticker_to_currency:
+            currency = ticker_to_currency[ticker]
+            return fx_rates.get(currency, 1.0)
+        
+        return 1.0  # Assume SEK
     
     def get_price_at_date(holding: dict, d: date):
         # Try ISIN lookup first, then ticker formats
