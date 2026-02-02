@@ -476,6 +476,38 @@ def send_reports_job():
         db.close()
 
 
+def cleanup_old_data_job():
+    """Weekly cleanup of old data to prevent disk growth."""
+    logger.info("Starting weekly data cleanup")
+    db = SessionLocal()
+    try:
+        from datetime import date, timedelta
+        from models import DailyPrice, DataSyncLog
+        
+        # Keep 2 years of daily prices (enough for backtesting)
+        cutoff = date.today() - timedelta(days=730)
+        deleted_prices = db.query(DailyPrice).filter(DailyPrice.date < cutoff).delete()
+        
+        # Keep 30 days of sync logs
+        log_cutoff = date.today() - timedelta(days=30)
+        deleted_logs = db.query(DataSyncLog).filter(DataSyncLog.started_at < log_cutoff).delete()
+        
+        db.commit()
+        
+        # Vacuum database to reclaim space
+        db.execute("VACUUM")
+        
+        logger.info(f"Cleanup complete: {deleted_prices} old prices, {deleted_logs} old logs deleted")
+        
+    except Exception as e:
+        logger.error(f"Cleanup failed: {e}")
+        db.rollback()
+    finally:
+        db.close()
+        import gc
+        gc.collect()
+
+
 def start_scheduler():
     """Start the APScheduler with configured jobs."""
     settings = get_settings()
@@ -508,8 +540,16 @@ def start_scheduler():
         replace_existing=True
     )
     
+    # Weekly cleanup on Sundays at 4 AM UTC
+    scheduler.add_job(
+        cleanup_old_data_job,
+        CronTrigger(day_of_week="sun", hour=4, minute=0),
+        id="weekly_cleanup",
+        replace_existing=True
+    )
+    
     scheduler.start()
-    logger.info(f"Scheduler started: sync at {settings.data_sync_hour}:00, reports at 08:00 UTC")
+    logger.info(f"Scheduler started: sync at {settings.data_sync_hour}:00, reports at 08:00, cleanup Sundays 04:00 UTC")
 
 def stop_scheduler():
     """Stop the scheduler."""
