@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Box, Text, Button, VStack, HStack, SimpleGrid, Input } from '@chakra-ui/react';
+import { Box, Text, Button, VStack, HStack, SimpleGrid, Input, Skeleton } from '@chakra-ui/react';
 import { api, type RebalanceResponse } from '../api/client';
 import { useRebalanceDates } from '../api/hooks';
 import { CsvImporter } from './CsvImporter';
@@ -580,6 +580,7 @@ export function PortfolioTracker() {
                 cursor="pointer"
                 onClick={() => setRebalanceMode('full')}
                 title="Sälj aktier under rank 20, köp nya topp-aktier"
+                transition="all 0.15s ease"
                 _hover={{ bg: rebalanceMode !== 'add_only' ? 'blue.600' : 'bg.subtle' }}
               >
                 🔄 Ombalansera
@@ -596,6 +597,7 @@ export function PortfolioTracker() {
                 borderColor="border"
                 onClick={() => setRebalanceMode('add_only')}
                 title="Lägg bara till nya positioner (sälj inget)"
+                transition="all 0.15s ease"
                 _hover={{ bg: rebalanceMode === 'add_only' ? 'blue.600' : 'bg.subtle' }}
               >
                 💰 Månadsspar
@@ -611,7 +613,7 @@ export function PortfolioTracker() {
 
       {/* Next Rebalance Countdown */}
       <SimpleGrid columns={{ base: 1, md: 2 }} gap="12px" mb="16px">
-        <Box bg="bg" borderRadius="8px" p="12px" borderWidth="1px" borderColor="border">
+        <Box bg="bg" borderRadius="8px" p="12px" borderWidth="1px" borderColor="border" transition="all 0.15s ease" _hover={{ borderColor: 'blue.400' }}>
           <HStack justify="space-between">
             <Box>
               <Text fontSize="xs" color="fg.muted">Nästa ombalansering</Text>
@@ -812,7 +814,8 @@ export function PortfolioTracker() {
                     cursor="pointer"
                     onClick={() => startEditing(h)}
                     title="Klicka för att redigera"
-                    _hover={{ borderColor: 'blue.400' }}
+                    transition="all 0.15s ease"
+                    _hover={{ borderColor: 'blue.400', transform: 'translateY(-1px)', shadow: 'sm' }}
                   >
                     <Text fontWeight="medium">{h.ticker}</Text>
                     <Text fontSize="xs" color={isSellZone ? 'red.400' : isInDanger ? 'orange.400' : 'fg.muted'}>
@@ -835,8 +838,22 @@ export function PortfolioTracker() {
             </Box>
           )}
 
+          {/* Loading skeleton for rebalance */}
+          {loading && (
+            <VStack align="stretch" gap="12px" mt="8px">
+              <Skeleton height="60px" borderRadius="md" />
+              <SimpleGrid columns={3} gap="8px">
+                <Skeleton height="80px" borderRadius="md" />
+                <Skeleton height="80px" borderRadius="md" />
+                <Skeleton height="80px" borderRadius="md" />
+              </SimpleGrid>
+              <Skeleton height="120px" borderRadius="md" />
+              <Skeleton height="100px" borderRadius="md" />
+            </VStack>
+          )}
+
           {/* Rebalance results */}
-          {rebalanceData && (
+          {rebalanceData && !loading && (
             <VStack align="stretch" gap="12px" mt="8px">
               {/* Drift recommendation */}
               {rebalanceData.driftRecommendation && (
