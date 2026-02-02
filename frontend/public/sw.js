@@ -75,8 +75,8 @@ self.addEventListener('push', (event) => {
   
   const options = {
     body: data.body,
-    icon: data.icon || '/icon-192.png',
-    badge: data.badge || '/badge-72.png',
+    icon: data.icon || '/icon.svg',
+    badge: data.badge || '/icon.svg',
     tag: data.tag || 'borslabbet',
     data: { url: data.url || '/' },
     vibrate: [100, 50, 100],

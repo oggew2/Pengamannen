@@ -104,6 +104,24 @@ export function PushNotificationToggle() {
   };
 
   if (!supported) {
+    // Check if iOS in browser (not PWA)
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    
+    if (isIOS && !isStandalone) {
+      return (
+        <Box p="12px" bg="blue.900/20" borderRadius="6px" borderWidth="1px" borderColor="blue.500">
+          <Text fontSize="sm" fontWeight="medium" color="blue.400" mb="4px">📱 Aktivera notiser på iPhone</Text>
+          <Text fontSize="xs" color="fg.muted">
+            1. Tryck på dela-knappen (□↑) i Safari{'\n'}
+            2. Välj "Lägg till på hemskärmen"{'\n'}
+            3. Öppna appen från hemskärmen{'\n'}
+            4. Aktivera notiser här
+          </Text>
+        </Box>
+      );
+    }
+    
     return (
       <Box p="8px" bg="bg.subtle" borderRadius="6px">
         <Text fontSize="sm" color="fg.muted">
