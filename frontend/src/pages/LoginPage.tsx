@@ -74,6 +74,8 @@ export function LoginPage() {
                 <Text fontSize="sm" color="fg.muted" mb="4px">Email</Text>
                 <Input
                   type="email"
+                  name="email"
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
@@ -89,6 +91,8 @@ export function LoginPage() {
                 <Text fontSize="sm" color="fg.muted" mb="4px">Password</Text>
                 <Input
                   type="password"
+                  name="password"
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"

@@ -282,8 +282,8 @@ def get_me(request: Request, db: Session = Depends(get_db)):
         "is_admin": user.is_admin,
         "invite_code": user.invite_code,
         "market_filter": user.market_filter,
-        "rebalance_frequency": user.rebalance_frequency or "quarterly",
-        "rebalance_day": user.rebalance_day or 15,
+        "rebalance_frequency": getattr(user, 'rebalance_frequency', None) or "quarterly",
+        "rebalance_day": getattr(user, 'rebalance_day', None) or 15,
     }
 
 @v1_router.put("/auth/rebalance-settings")
