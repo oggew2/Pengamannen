@@ -8,7 +8,6 @@ import { PerformanceChart } from './PerformanceChart';
 import { Confetti, AnimatedNumber, HealthBadge, usePullToRefresh } from './FintechEffects';
 import { InfoTooltip } from './InfoTooltip';
 import { HealthScore } from './HealthScore';
-import { getRebalanceFrequency } from './NotificationSettings';
 import { toaster } from './toaster';
 
 interface LockedHolding {
@@ -50,11 +49,22 @@ const HISTORY_KEY = 'borslabbet_transaction_history';
 
 // Rebalance months based on frequency setting
 const QUARTERLY_MONTHS = [3, 6, 9, 12];
+const MONTHLY_MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
+
+function getRebalanceMonths(): number[] {
+  try {
+    const saved = localStorage.getItem('notification_settings');
+    if (saved) {
+      const settings = JSON.parse(saved);
+      if (settings.rebalanceFrequency === 'monthly') return MONTHLY_MONTHS;
+    }
+  } catch {}
+  return QUARTERLY_MONTHS;
+}
 
 function getNextRebalanceDate(): Date {
   const now = new Date();
-  const freq = getRebalanceFrequency();
-  const months = freq === 'monthly' ? [1,2,3,4,5,6,7,8,9,10,11,12] : QUARTERLY_MONTHS;
+  const months = getRebalanceMonths();
   
   for (let offset = 0; offset < 12; offset++) {
     const check = new Date(now.getFullYear(), now.getMonth() + offset, 15);

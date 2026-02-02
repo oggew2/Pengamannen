@@ -107,15 +107,3 @@ export function NotificationSettings() {
     </Box>
   );
 }
-
-// Export for use in PortfolioTracker
-export function getRebalanceFrequency(): 'quarterly' | 'monthly' {
-  try {
-    const saved = localStorage.getItem('notification_settings');
-    if (saved) {
-      const settings = JSON.parse(saved);
-      return settings.rebalanceFrequency || 'quarterly';
-    }
-  } catch {}
-  return 'quarterly';
-}
