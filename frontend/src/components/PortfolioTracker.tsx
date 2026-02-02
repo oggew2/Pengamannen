@@ -90,6 +90,8 @@ export function PortfolioTracker() {
   const [transactionHistory, setTransactionHistory] = useState<Transaction[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showRankings, setShowRankings] = useState(false);
+  const [rankings, setRankings] = useState<Array<{ticker: string; rank: number; name?: string}>>([]);
   const [rebalanceData, setRebalanceData] = useState<{
     sells: RebalanceStock[];
     holds: RebalanceStock[];
@@ -185,6 +187,14 @@ export function PortfolioTracker() {
     };
     
     loadHoldings();
+    
+    // Load rankings
+    fetch('/v1/strategies/sammansatt_momentum', { credentials: 'include' })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.rankings) setRankings(data.rankings.slice(0, 40));
+      })
+      .catch(() => {});
     
     // Listen for custom event (same-tab lock-in)
     const handleLockIn = () => loadHoldings();
@@ -699,6 +709,41 @@ export function PortfolioTracker() {
           </Box>
         )}
       </SimpleGrid>
+
+      {/* Rankings Section - Collapsible */}
+      <Box bg="bg" borderRadius="8px" p="12px" borderWidth="1px" borderColor="border" mb="16px">
+        <HStack justify="space-between" cursor="pointer" onClick={() => setShowRankings(!showRankings)}>
+          <HStack gap="8px">
+            <Text fontSize="sm" fontWeight="semibold">📊 Nordic Momentum Topp 40</Text>
+            <Text fontSize="xs" color="fg.muted">({rankings.length} aktier)</Text>
+          </HStack>
+          <Text fontSize="xs" color="fg.muted">{showRankings ? '▲' : '▼'}</Text>
+        </HStack>
+        {showRankings && rankings.length > 0 && (
+          <SimpleGrid columns={{ base: 2, md: 4 }} gap="8px" mt="12px">
+            {rankings.map((r, i) => {
+              const isOwned = holdings.some(h => h.ticker === r.ticker);
+              return (
+                <HStack 
+                  key={r.ticker} 
+                  fontSize="xs" 
+                  bg={isOwned ? 'green.900/20' : 'transparent'}
+                  px="8px" 
+                  py="4px" 
+                  borderRadius="md"
+                  borderWidth={isOwned ? '1px' : '0'}
+                  borderColor="green.500/30"
+                >
+                  <Text color="fg.muted" w="20px">{i + 1}.</Text>
+                  <Text fontWeight={isOwned ? 'semibold' : 'normal'} color={isOwned ? 'green.400' : 'fg'}>
+                    {r.ticker}
+                  </Text>
+                </HStack>
+              );
+            })}
+          </SimpleGrid>
+        )}
+      </Box>
 
       {holdings.length === 0 ? (
         <VStack gap="24px" py="40px" textAlign="center">

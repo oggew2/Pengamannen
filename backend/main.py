@@ -1091,9 +1091,12 @@ def check_momentum_banding(
         
         ranked_data = [{"ticker": row['ticker'], "rank": int(row['rank']), "score": float(row['score'])} for _, row in ranked_df.iterrows()]
     
-    universe_size = len(ranked_data)
-    buy_threshold = max(1, int(universe_size * 0.10))
-    sell_threshold = max(2, int(universe_size * 0.20))
+    # Fixed thresholds for Nordic Momentum strategy:
+    # - Buy: Top 10 stocks
+    # - Keep: Top 20 stocks  
+    # - Sell: Below rank 20
+    buy_threshold = 10
+    sell_threshold = 20
     
     # Build rank lookup with normalized tickers (handle SAAB-B vs SAAB B)
     def normalize_ticker(t: str) -> str:

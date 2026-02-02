@@ -1,14 +1,17 @@
 # Börslabbet App
 
-A quantitative Swedish stock strategy platform implementing Börslabbet's proven investment strategies with data from Avanza.
+A quantitative Nordic stock strategy platform implementing Börslabbet's proven momentum strategy.
 
-## Features
+## Active Strategy
 
-### Core Strategies
-- **Sammansatt Momentum** - Quarterly rebalancing, Piotroski F-Score quality filter
-- **Trendande Värde** - 6-factor value scoring, momentum sorted
-- **Trendande Utdelning** - Dividend yield with momentum filter
-- **Trendande Kvalitet** - ROE/ROA/ROIC/FCFROE quality composite
+**Nordic Momentum (Sammansatt Momentum)** - The only active strategy
+- Quarterly rebalancing (March, June, September, December)
+- Top 10 stocks from Nordic markets (Sweden, Finland, Norway, Denmark)
+- Buy: Top 10 ranked stocks
+- Keep: Top 20 ranked stocks
+- Sell: Below rank 20
+
+> **Note:** Other strategies (Trendande Värde, Utdelning, Kvalitet) are deprecated and not maintained.
 
 ## Data Pipeline
 - **TradingView Scanner API** - Primary data source for fundamentals + momentum (<2s sync)
