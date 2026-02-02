@@ -750,6 +750,9 @@ def rebalance_nordic_momentum(request: dict, response: Response):
         price_lookup = {s['ticker']: s.get('close', 0) for s in stocks}
         currency_lookup = {s['ticker']: s.get('currency', 'SEK') for s in stocks}
         
+        # Get FX rates from fetcher
+        fx_rates = getattr(fetcher, '_fx_rates', {'EUR': 10.56, 'NOK': 0.93, 'DKK': 1.42, 'SEK': 1})
+        
         if mode == 'add_only':
             # In add_only mode, set sell_threshold very high so nothing gets sold
             rebalance = calculate_rebalance_with_banding(
@@ -758,6 +761,7 @@ def rebalance_nordic_momentum(request: dict, response: Response):
                 ranked_stocks=ranked_stocks,
                 price_lookup=price_lookup,
                 currency_lookup=currency_lookup,
+                fx_rates=fx_rates,
                 sell_threshold=9999,
             )
         elif mode == 'fix_drift':
@@ -768,61 +772,71 @@ def rebalance_nordic_momentum(request: dict, response: Response):
                 ranked_stocks=ranked_stocks,
                 price_lookup=price_lookup,
                 currency_lookup=currency_lookup,
+                fx_rates=fx_rates,
             )
             
             # In fix_drift mode, use sell proceeds + new investment to rebalance existing holdings
             if rebalance['hold']:
-                sell_proceeds = sum(s['value'] for s in rebalance['sell'])
-                total_cash = new_investment + sell_proceeds
+                sell_proceeds = sum(s.get('value_sek', s['value']) for s in rebalance['sell'])
+                total_cash = new_investment + sell_proceeds  # All in SEK
                 
                 if total_cash > 0:
-                    # Calculate target value per holding after sells
-                    hold_value = sum(h['value'] for h in rebalance['hold'])
-                    target_total = hold_value + total_cash
-                    target_per_stock = target_total / len(rebalance['hold'])
+                    # Calculate target value per holding after sells (in SEK)
+                    hold_value_sek = sum(h.get('value_sek', h['value']) for h in rebalance['hold'])
+                    target_total_sek = hold_value_sek + total_cash
+                    target_per_stock_sek = target_total_sek / len(rebalance['hold'])
                     
                     # Calculate buys needed to fix drift (buy underweight holdings)
                     drift_buys = []
                     for h in rebalance['hold']:
-                        deficit = target_per_stock - h['value']
-                        if deficit > 100:  # Only buy if deficit > 100 SEK
+                        h_value_sek = h.get('value_sek', h['value'])
+                        deficit_sek = target_per_stock_sek - h_value_sek
+                        if deficit_sek > 100:  # Only buy if deficit > 100 SEK
                             price = price_lookup.get(h['ticker'], 0)
+                            currency = h.get('currency', 'SEK')
+                            fx_rate = fx_rates.get(currency, 1)
+                            # Convert deficit to local currency
+                            deficit_local = deficit_sek / fx_rate if fx_rate > 0 else deficit_sek
                             if price > 0:
-                                shares = int(deficit // price)
+                                shares = int(deficit_local // price)
                                 if shares > 0:
+                                    value_local = shares * price
+                                    value_sek = value_local * fx_rate
                                     drift_buys.append({
                                         'ticker': h['ticker'],
                                         'name': h.get('name', ''),
                                         'rank': h.get('rank'),
                                         'price': price,
                                         'shares': shares,
-                                        'value': shares * price,
-                                        'currency': h.get('currency', 'SEK'),
+                                        'value': value_local,
+                                        'value_sek': value_sek,
+                                        'currency': currency,
                                         'reason': 'fix_drift',
                                     })
                     
                     rebalance['buy'] = drift_buys
                     
-                    # Recalculate final portfolio
+                    # Recalculate final portfolio (using SEK values)
                     final_portfolio = []
-                    new_total = hold_value + sum(b['value'] for b in drift_buys)
+                    new_total_sek = hold_value_sek + sum(b.get('value_sek', b['value']) for b in drift_buys)
                     target_weight = 100.0 / len(rebalance['hold'])
                     
                     for h in rebalance['hold']:
-                        buy_add = next((b['value'] for b in drift_buys if b['ticker'] == h['ticker']), 0)
-                        new_value = h['value'] + buy_add
-                        weight = (new_value / new_total * 100) if new_total > 0 else 0
+                        h_value_sek = h.get('value_sek', h['value'])
+                        buy_add_sek = next((b.get('value_sek', b['value']) for b in drift_buys if b['ticker'] == h['ticker']), 0)
+                        new_value_sek = h_value_sek + buy_add_sek
+                        weight = (new_value_sek / new_total_sek * 100) if new_total_sek > 0 else 0
                         drift = weight - target_weight
                         final_portfolio.append({
                             **h,
-                            'action': 'HOLD' if buy_add == 0 else 'BUY',
+                            'action': 'HOLD' if buy_add_sek == 0 else 'BUY',
                             'weight': round(weight, 1),
                             'drift': round(drift, 1),
                         })
                     
                     rebalance['final_portfolio'] = sorted(final_portfolio, key=lambda x: x.get('rank') or 999)
                     rebalance['summary']['stocks_bought'] = len(drift_buys)
-                    rebalance['summary']['total_cash_used'] = sum(b['value'] for b in drift_buys)
+                    rebalance['summary']['total_cash_used'] = sum(b.get('value_sek', b['value']) for b in drift_buys)
         else:
             rebalance = calculate_rebalance_with_banding(
                 current_holdings=holdings,
@@ -830,6 +844,7 @@ def rebalance_nordic_momentum(request: dict, response: Response):
                 ranked_stocks=ranked_stocks,
                 price_lookup=price_lookup,
                 currency_lookup=currency_lookup,
+                fx_rates=fx_rates,
             )
         
         rebalance['mode'] = mode

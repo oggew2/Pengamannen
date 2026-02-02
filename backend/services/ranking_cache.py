@@ -863,6 +863,7 @@ def calculate_rebalance_with_banding(
     ranked_stocks: list,
     price_lookup: dict,
     currency_lookup: dict = None,
+    fx_rates: dict = None,
     buy_threshold: int = 10,
     sell_threshold: int = 20,
 ) -> dict:
@@ -876,8 +877,9 @@ def calculate_rebalance_with_banding(
     
     Args:
         current_holdings: List of {ticker, shares, avg_price?}
-        new_investment: Additional cash to invest (can be 0)
+        new_investment: Additional cash to invest in SEK (can be 0)
         ranked_stocks: List of stocks ranked by momentum
+        fx_rates: Dict of currency -> SEK rate (e.g., {'EUR': 10.56, 'NOK': 0.93})
         price_lookup: Dict of ticker -> current price
         buy_threshold: Target portfolio size (default 10)
         sell_threshold: Sell when rank exceeds this (default 20)
@@ -889,20 +891,35 @@ def calculate_rebalance_with_banding(
     rank_lookup = {s['ticker']: i + 1 for i, s in enumerate(ranked_stocks)}
     name_lookup = {s['ticker']: s.get('name', '') for s in ranked_stocks}
     currency_lookup = currency_lookup or {}
+    fx_rates = fx_rates or {'EUR': 1, 'NOK': 1, 'DKK': 1, 'SEK': 1}  # Default to 1 if not provided
+    
+    def to_sek(amount, currency):
+        """Convert amount to SEK"""
+        if currency == 'SEK':
+            return amount
+        return amount * fx_rates.get(currency, 1)
+    
+    def from_sek(amount_sek, currency):
+        """Convert SEK amount to target currency"""
+        if currency == 'SEK':
+            return amount_sek
+        rate = fx_rates.get(currency, 1)
+        return amount_sek / rate if rate > 0 else amount_sek
     
     # Analyze current holdings
     hold = []
     sell = []
-    current_value = 0
+    current_value = 0  # In SEK
     
     for h in current_holdings:
         ticker = h['ticker']
         shares = h.get('shares', 0)
-        price = price_lookup.get(ticker, 0)
-        value = shares * price
+        price = price_lookup.get(ticker, 0)  # In local currency
+        currency = currency_lookup.get(ticker, 'SEK')
+        value_local = shares * price  # In local currency
+        value_sek = to_sek(value_local, currency)  # In SEK
         rank = rank_lookup.get(ticker)
         name = name_lookup.get(ticker, '')
-        currency = currency_lookup.get(ticker, 'SEK')
         
         # In add_only mode (sell_threshold >= 9999), keep everything
         if sell_threshold >= 9999:
@@ -911,11 +928,12 @@ def calculate_rebalance_with_banding(
                 'name': name,
                 'shares': shares,
                 'price': price,
-                'value': value,
+                'value': value_local,
+                'value_sek': value_sek,
                 'currency': currency,
                 'rank': rank,
             })
-            current_value += value
+            current_value += value_sek
         elif rank is None:
             # Stock not in universe - sell
             sell.append({
@@ -923,7 +941,8 @@ def calculate_rebalance_with_banding(
                 'name': name,
                 'shares': shares,
                 'price': price,
-                'value': value,
+                'value': value_local,
+                'value_sek': value_sek,
                 'currency': currency,
                 'reason': 'not_in_universe',
                 'rank': None,
@@ -935,7 +954,8 @@ def calculate_rebalance_with_banding(
                 'name': name,
                 'shares': shares,
                 'price': price,
-                'value': value,
+                'value': value_local,
+                'value_sek': value_sek,
                 'currency': currency,
                 'reason': 'below_threshold',
                 'rank': rank,
@@ -947,47 +967,54 @@ def calculate_rebalance_with_banding(
                 'name': name,
                 'shares': shares,
                 'price': price,
-                'value': value,
+                'value': value_local,
+                'value_sek': value_sek,
                 'currency': currency,
                 'rank': rank,
             })
-            current_value += value
+            current_value += value_sek
     
-    # Calculate available cash
-    sell_proceeds = sum(s['value'] for s in sell)
-    total_cash = new_investment + sell_proceeds
+    # Calculate available cash (in SEK)
+    sell_proceeds = sum(s.get('value_sek', s['value']) for s in sell)
+    total_cash = new_investment + sell_proceeds  # All in SEK
     
     # Find stocks to buy - always buy current top 10 with new investment
     held_tickers = set(h['ticker'] for h in hold)
     buy = []
     
     if new_investment > 0:
-        # Buy current top 10 with new money (equal weight)
+        # Buy current top 10 with new money (equal weight in SEK)
         top_10 = [s for s in ranked_stocks if rank_lookup.get(s['ticker'], 999) <= buy_threshold][:buy_threshold]
-        target_per_stock = new_investment / len(top_10) if top_10 else 0
+        target_per_stock_sek = new_investment / len(top_10) if top_10 else 0
         
         for stock in top_10:
-            price = price_lookup.get(stock['ticker'], 0)
+            price = price_lookup.get(stock['ticker'], 0)  # In local currency
+            currency = currency_lookup.get(stock['ticker'], 'SEK')
             if price <= 0:
                 continue
-            shares = int(target_per_stock // price)
+            # Convert target SEK to local currency
+            target_local = from_sek(target_per_stock_sek, currency)
+            shares = int(target_local // price)
             if shares > 0:
+                value_local = shares * price
+                value_sek = to_sek(value_local, currency)
                 buy.append({
                     'ticker': stock['ticker'],
                     'name': stock.get('name', ''),
                     'rank': rank_lookup.get(stock['ticker']),
                     'price': price,
                     'shares': shares,
-                    'value': shares * price,
-                    'currency': currency_lookup.get(stock['ticker'], 'SEK'),
+                    'value': value_local,
+                    'value_sek': value_sek,
+                    'currency': currency,
                 })
     
     # Also fill empty slots from sells (if any)
     slots_to_fill = buy_threshold - len(hold) - len([b for b in buy if b['ticker'] not in held_tickers])
     
     if slots_to_fill > 0 and total_cash > 0:
-        # Target value per new stock
-        target_per_stock = total_cash / slots_to_fill if slots_to_fill > 0 else 0
+        # Target value per new stock (in SEK)
+        target_per_stock_sek = total_cash / slots_to_fill if slots_to_fill > 0 else 0
         
         for stock in ranked_stocks:
             if slots_to_fill <= 0:
@@ -995,35 +1022,39 @@ def calculate_rebalance_with_banding(
             if stock['ticker'] in held_tickers:
                 continue
             
-            price = price_lookup.get(stock['ticker'], 0)
+            price = price_lookup.get(stock['ticker'], 0)  # In local currency
+            currency = currency_lookup.get(stock['ticker'], 'SEK')
             if price <= 0:
                 continue
             
-            # Calculate shares to buy
-            shares = int(target_per_stock // price) if target_per_stock > 0 else 0
+            # Convert target SEK to local currency
+            target_local = from_sek(target_per_stock_sek, currency)
+            shares = int(target_local // price) if target_local > 0 else 0
             if shares > 0:
-                value = shares * price
-                currency = currency_lookup.get(stock['ticker'], 'SEK')
+                value_local = shares * price
+                value_sek = to_sek(value_local, currency)
                 buy.append({
                     'ticker': stock['ticker'],
                     'name': stock.get('name', ''),
                     'rank': rank_lookup.get(stock['ticker']),
                     'price': price,
                     'shares': shares,
-                    'value': value,
+                    'value': value_local,
+                    'value_sek': value_sek,
                     'currency': currency,
                 })
-                total_cash -= value
+                total_cash -= value_sek
                 slots_to_fill -= 1
     
-    # Calculate final portfolio with drift analysis
+    # Calculate final portfolio with drift analysis (all in SEK for comparison)
     final_portfolio = []
-    total_value = current_value + sum(b['value'] for b in buy)
+    total_value_sek = current_value + sum(b.get('value_sek', b['value']) for b in buy)
     target_weight = 100.0 / len(hold) if hold else 10.0  # Equal weight target
     
     drift_analysis = []
     for h in hold:
-        weight = (h['value'] / total_value * 100) if total_value > 0 else 0
+        h_value_sek = h.get('value_sek', h['value'])
+        weight = (h_value_sek / total_value_sek * 100) if total_value_sek > 0 else 0
         drift = weight - target_weight
         drift_analysis.append({
             'ticker': h['ticker'],
@@ -1031,17 +1062,22 @@ def calculate_rebalance_with_banding(
             'target_weight': round(target_weight, 1),
             'drift': round(drift, 1),
             'value': h['value'],
+            'value_sek': h_value_sek,
         })
         final_portfolio.append({**h, 'action': 'HOLD', 'weight': round(weight, 1), 'drift': round(drift, 1)})
     
     for b in buy:
-        weight = (b['value'] / total_value * 100) if total_value > 0 else 0
+        b_value_sek = b.get('value_sek', b['value'])
+        weight = (b_value_sek / total_value_sek * 100) if total_value_sek > 0 else 0
         final_portfolio.append({**b, 'action': 'BUY', 'weight': round(weight, 1), 'drift': 0})
     
     final_portfolio.sort(key=lambda x: x.get('rank') or 999)
     
     # Calculate max drift for alerts
     max_drift = max(abs(d['drift']) for d in drift_analysis) if drift_analysis else 0
+    
+    # Summary values in SEK
+    total_buy_sek = sum(b.get('value_sek', b['value']) for b in buy)
     
     return {
         'mode': 'banding',
@@ -1058,9 +1094,9 @@ def calculate_rebalance_with_banding(
             'stocks_bought': len(buy),
             'sell_proceeds': round(sell_proceeds, 2),
             'new_investment': round(new_investment, 2),
-            'total_cash_used': round(sum(b['value'] for b in buy), 2),
+            'total_cash_used': round(total_buy_sek, 2),
             'cash_remaining': round(total_cash, 2),
-            'final_portfolio_value': round(total_value, 2),
+            'final_portfolio_value': round(total_value_sek, 2),
             'final_stock_count': len(final_portfolio),
         },
     }
