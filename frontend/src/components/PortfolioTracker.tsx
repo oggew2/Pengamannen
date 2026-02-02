@@ -91,8 +91,8 @@ export function PortfolioTracker() {
   const [transactionHistory, setTransactionHistory] = useState<Transaction[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  const [showRankings, setShowRankings] = useState(false);
-  const [rankings, setRankings] = useState<Array<{ticker: string; rank: number; name?: string}>>([]);
+  const [showRankings, setShowRankings] = useState(true);  // Default expanded for easy access
+  const [rankings, setRankings] = useState<Array<{ticker: string; rank: number; name?: string; isin?: string}>>([]);
   const [rebalanceData, setRebalanceData] = useState<{
     sells: RebalanceStock[];
     holds: RebalanceStock[];
@@ -733,23 +733,26 @@ export function PortfolioTracker() {
         {showRankings && rankings.length > 0 && (
           <SimpleGrid columns={{ base: 2, md: 4 }} gap="8px" mt="12px">
             {rankings.map((r, i) => {
-              const isOwned = holdings.some(h => h.ticker === r.ticker);
+              const isOwned = holdings.some(h => h.ticker === r.ticker || (h.isin && h.isin === r.isin));
               return (
-                <HStack 
+                <Box 
                   key={r.ticker} 
                   fontSize="xs" 
                   bg={isOwned ? 'green.900/20' : 'transparent'}
                   px="8px" 
-                  py="4px" 
+                  py="6px" 
                   borderRadius="md"
                   borderWidth={isOwned ? '1px' : '0'}
                   borderColor="green.500/30"
                 >
-                  <Text color="fg.muted" w="20px">{i + 1}.</Text>
-                  <Text fontWeight={isOwned ? 'semibold' : 'normal'} color={isOwned ? 'green.400' : 'fg'}>
-                    {r.ticker}
-                  </Text>
-                </HStack>
+                  <HStack>
+                    <Text color="fg.muted" w="24px" fontWeight="medium">{i + 1}.</Text>
+                    <Text fontWeight={isOwned ? 'semibold' : 'medium'} color={isOwned ? 'green.400' : 'fg'}>
+                      {r.ticker.replace('_', ' ')}
+                    </Text>
+                  </HStack>
+                  {r.name && <Text color="fg.muted" fontSize="2xs" ml="24px" truncate>{r.name}</Text>}
+                </Box>
               );
             })}
           </SimpleGrid>
