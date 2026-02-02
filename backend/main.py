@@ -4451,18 +4451,27 @@ def get_portfolio_performance_data(
             "total_costs": round(total_fees + estimated_spread, 2),
             "cost_impact_pct": round((total_fees + estimated_spread) / total_cost * 100, 2) if total_cost > 0 else 0,
         },
-        "positions": [
-            {
-                "ticker": k,
-                "shares": round(v['shares'], 2),
-                "cost": round(v['total_cost'], 2),
-                "avg_price": round(v['avg_price_sek'], 2),
-                "fees": round(v['total_fees'], 2),
-            }
-            for k, v in current_positions.items()
-        ],
+        "positions": [],
         "period": period,
     }
+    
+    # Build positions with current value and return
+    for ticker, pos in current_positions.items():
+        current_val = pos['total_cost']  # fallback
+        if ticker in price_lookup and price_lookup[ticker]:
+            latest_date = max(price_lookup[ticker].keys())
+            current_val = pos['shares'] * price_lookup[ticker][latest_date]
+        
+        return_pct = ((current_val - pos['total_cost']) / pos['total_cost'] * 100) if pos['total_cost'] > 0 else 0
+        result["positions"].append({
+            "ticker": ticker,
+            "shares": round(pos['shares'], 2),
+            "cost": round(pos['total_cost'], 2),
+            "current_value": round(current_val, 2),
+            "return_pct": round(return_pct, 1),
+            "avg_price": round(pos['avg_price_sek'], 2),
+            "fees": round(pos['total_fees'], 2),
+        })
     
     # Build chart data - portfolio value over time
     chart_data = []
@@ -4487,7 +4496,11 @@ def get_portfolio_performance_data(
                 day_value += pos['total_cost']
         
         if day_value > 0:
-            chart_data.append({"date": current_date.strftime("%d %b"), "value": round(day_value)})
+            # Deduct cumulative fees/spread up to this date for net value
+            fees_to_date = sum(t.get('fee', 0) for t in txns_to_date)
+            spread_to_date = sum((t.get('shares', 0) * t.get('price_sek', 0)) for t in txns_to_date) * 0.003
+            net_value = day_value - fees_to_date - spread_to_date
+            chart_data.append({"date": current_date.strftime("%d %b"), "value": round(net_value)})
         
         # Weekly intervals for cleaner chart
         current_date += timedelta(days=7)

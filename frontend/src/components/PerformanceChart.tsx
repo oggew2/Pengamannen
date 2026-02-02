@@ -17,6 +17,8 @@ interface Position {
   ticker: string;
   shares: number;
   cost: number;
+  current_value: number;
+  return_pct: number;
   avg_price: number;
   fees: number;
 }
@@ -280,6 +282,33 @@ export function PerformanceChart() {
         </Box>
       </HStack>
 
+      {/* Best & Worst Performers */}
+      {positions.length >= 2 && (() => {
+        const sorted = [...positions].sort((a, b) => b.return_pct - a.return_pct);
+        const best = sorted[0];
+        const worst = sorted[sorted.length - 1];
+        return (
+          <HStack gap={4}>
+            <Box flex="1" bg="gray.800" p={3} borderRadius="md" borderLeft="3px solid" borderColor="green.400">
+              <Text fontSize="xs" color="gray.400">🏆 Bäst</Text>
+              <HStack justify="space-between">
+                <Text fontWeight="bold">{best.ticker}</Text>
+                <Text color="green.400" fontWeight="bold">+{best.return_pct.toFixed(1)}%</Text>
+              </HStack>
+            </Box>
+            <Box flex="1" bg="gray.800" p={3} borderRadius="md" borderLeft="3px solid" borderColor="red.400">
+              <Text fontSize="xs" color="gray.400">📉 Sämst</Text>
+              <HStack justify="space-between">
+                <Text fontWeight="bold">{worst.ticker}</Text>
+                <Text color={worst.return_pct >= 0 ? 'green.400' : 'red.400'} fontWeight="bold">
+                  {worst.return_pct >= 0 ? '+' : ''}{worst.return_pct.toFixed(1)}%
+                </Text>
+              </HStack>
+            </Box>
+          </HStack>
+        );
+      })()}
+
       {/* Cost breakdown */}
       <Box bg="gray.800" p={4} borderRadius="lg">
         <Text fontWeight="medium" mb={3}>Kostnadsfördelning</Text>
@@ -319,20 +348,23 @@ export function PerformanceChart() {
               <Box as="thead">
                 <Box as="tr" borderBottom="1px" borderColor="gray.600">
                   <Box as="th" textAlign="left" py={2} color="gray.400">Aktie</Box>
-                  <Box as="th" textAlign="right" py={2} color="gray.400">Antal</Box>
-                  <Box as="th" textAlign="right" py={2} color="gray.400">Kostnad</Box>
-                  <Box as="th" textAlign="right" py={2} color="gray.400">Snitt</Box>
-                  <Box as="th" textAlign="right" py={2} color="gray.400">Avgifter</Box>
+                  <Box as="th" textAlign="right" py={2} color="gray.400">Värde</Box>
+                  <Box as="th" textAlign="right" py={2} color="gray.400">Avkastning</Box>
                 </Box>
               </Box>
               <Box as="tbody">
-                {positions.map((pos) => (
+                {[...positions].sort((a, b) => b.return_pct - a.return_pct).map((pos) => (
                   <Box as="tr" key={pos.ticker} borderBottom="1px" borderColor="gray.700">
-                    <Box as="td" py={2} fontWeight="medium">{pos.ticker}</Box>
-                    <Box as="td" py={2} textAlign="right">{pos.shares} st</Box>
-                    <Box as="td" py={2} textAlign="right">{Math.round(pos.cost).toLocaleString('sv-SE')} kr</Box>
-                    <Box as="td" py={2} textAlign="right">{pos.avg_price.toFixed(2)} kr</Box>
-                    <Box as="td" py={2} textAlign="right">{Math.round(pos.fees).toLocaleString('sv-SE')} kr</Box>
+                    <Box as="td" py={2}>
+                      <Text fontWeight="medium">{pos.ticker}</Text>
+                      <Text fontSize="xs" color="gray.500">{pos.shares} st @ {pos.avg_price.toFixed(0)} kr</Text>
+                    </Box>
+                    <Box as="td" py={2} textAlign="right">{Math.round(pos.current_value).toLocaleString('sv-SE')} kr</Box>
+                    <Box as="td" py={2} textAlign="right">
+                      <Text color={pos.return_pct >= 0 ? 'green.400' : 'red.400'} fontWeight="medium">
+                        {pos.return_pct >= 0 ? '+' : ''}{pos.return_pct.toFixed(1)}%
+                      </Text>
+                    </Box>
                   </Box>
                 ))}
               </Box>
