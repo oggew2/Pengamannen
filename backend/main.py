@@ -4507,13 +4507,23 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
     week_ago = today - timedelta(days=7)
     month_ago = today - timedelta(days=30)
     
-    # Build ISIN to ticker mapping
+    # Build ISIN to ticker and currency mapping
     from models import IsinLookup
     isins = [h.get('isin') for h in holdings if h.get('isin')]
     isin_to_ticker = {}
+    isin_to_currency = {}
     if isins:
         lookups = db.query(IsinLookup).filter(IsinLookup.isin.in_(isins)).all()
         isin_to_ticker = {l.isin: l.ticker for l in lookups}
+        isin_to_currency = {l.isin: l.currency for l in lookups}
+    
+    # Currency conversion rates to SEK
+    fx_rates = {'SEK': 1.0, 'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0, 'USD': 10.5}
+    
+    def get_fx_rate(holding: dict):
+        isin = holding.get('isin')
+        currency = isin_to_currency.get(isin, 'SEK') if isin else 'SEK'
+        return fx_rates.get(currency, 1.0)
     
     def get_price_at_date(holding: dict, d: date):
         # Try ISIN lookup first, then ticker formats
@@ -4560,12 +4570,14 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
         total = 0
         for h, has_price in holdings_with_prices:
             shares = h.get('shares', 0)
-            buy_price = h.get('buyPrice', 0)
+            buy_price = h.get('buyPrice', 0)  # Already in SEK from import
+            fx = get_fx_rate(h)
             if has_price:
                 price = get_price_at_date(h, d)
-                total += shares * (price if price else buy_price)
+                # Price from DailyPrice is in local currency, convert to SEK
+                total += shares * (price if price else buy_price) * fx
             else:
-                # No price data - use buy price consistently
+                # No price data - use buy price (already in SEK)
                 total += shares * buy_price
         return total
     
