@@ -4442,22 +4442,50 @@ def get_portfolio_daily_stats_debug(request: Request, db: Session = Depends(get_
     fetcher = TradingViewFetcher()
     stocks_data = fetcher.fetch_nordic(min_market_cap_sek=2e9)
     ticker_to_data = {s['ticker']: s for s in stocks_data} if stocks_data else {}
+    fx_rates = getattr(fetcher, '_fx_rates', {'EUR': 11.5, 'NOK': 1.0, 'DKK': 1.55, 'SEK': 1.0})
+    
+    def get_stock(t):
+        if t in ticker_to_data: return ticker_to_data[t]
+        if t.replace(' ', '_') in ticker_to_data: return ticker_to_data[t.replace(' ', '_')]
+        if t.replace('_', ' ') in ticker_to_data: return ticker_to_data[t.replace('_', ' ')]
+        return {}
     
     debug = []
+    total_value = 0
+    weighted_change = 0
     for h in holdings:
         ticker = h.get('ticker', '')
-        stock = ticker_to_data.get(ticker, {})
+        shares = h.get('shares', 0)
+        stock = get_stock(ticker)
+        price = stock.get('close', 0)
+        currency = stock.get('currency', 'SEK')
+        fx = fx_rates.get(currency, 1.0)
+        value = shares * price * fx
+        change_1d = stock.get('change_1d', 0) or 0
+        total_value += value
         debug.append({
             "ticker": ticker,
-            "shares": h.get('shares'),
-            "buyPrice": h.get('buyPrice'),
+            "shares": shares,
             "tv_found": bool(stock),
-            "tv_price": stock.get('close'),
-            "tv_change_1d": stock.get('change_1d'),
-            "tv_currency": stock.get('currency'),
+            "tv_price": price,
+            "tv_change_1d": change_1d,
+            "tv_currency": currency,
+            "fx": fx,
+            "value_sek": round(value, 2),
         })
     
-    return {"holdings_count": len(holdings), "tv_stocks_count": len(ticker_to_data), "sample_tickers": list(ticker_to_data.keys())[:10], "debug": debug}
+    # Calculate weighted change
+    for i, h in enumerate(holdings):
+        if total_value > 0 and debug[i]['tv_found']:
+            weight = debug[i]['value_sek'] / total_value
+            weighted_change += weight * (debug[i]['tv_change_1d'] or 0)
+    
+    return {
+        "holdings_count": len(holdings), 
+        "total_value": round(total_value, 2),
+        "weighted_change_1d": round(weighted_change, 2),
+        "debug": debug
+    }
 
 
 @v1_router.get("/portfolio/daily-stats")
