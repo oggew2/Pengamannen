@@ -4517,121 +4517,53 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
         isin_to_ticker = {l.isin: l.ticker for l in lookups}
         isin_to_currency = {l.isin: l.currency for l in lookups}
     
-    # Get currency data from TradingView (same as rebalance endpoint)
+    # Get currency and price data from TradingView (same as rebalance endpoint)
     try:
         from services.tradingview_fetcher import TradingViewFetcher
         fetcher = TradingViewFetcher()
         stocks_data = fetcher.fetch_nordic(min_market_cap_sek=2e9)
         fx_rates = getattr(fetcher, '_fx_rates', {'EUR': 11.5, 'NOK': 1.0, 'DKK': 1.55, 'SEK': 1.0})
         ticker_to_currency = {s['ticker']: s.get('currency', 'SEK') for s in stocks_data} if stocks_data else {}
+        ticker_to_price = {s['ticker']: s.get('close', 0) for s in stocks_data} if stocks_data else {}
     except:
         fx_rates = {'SEK': 1.0, 'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0}
         ticker_to_currency = {}
+        ticker_to_price = {}
     
     def get_fx_rate(holding: dict):
-        isin = holding.get('isin')
         ticker = holding.get('ticker', '')
-        
-        # Try ISIN lookup first
-        if isin and isin in isin_to_currency:
-            currency = isin_to_currency[isin]
-            return fx_rates.get(currency, 1.0)
-        
-        # Try ticker lookup from TradingView data
         if ticker in ticker_to_currency:
             currency = ticker_to_currency[ticker]
             return fx_rates.get(currency, 1.0)
-        
         return 1.0  # Assume SEK
     
-    def get_price_at_date(holding: dict, d: date):
-        # Try ISIN lookup first, then ticker formats
-        ticker = None
-        if holding.get('isin') and holding['isin'] in isin_to_ticker:
-            ticker = isin_to_ticker[holding['isin']]
-        
-        if not ticker:
-            ticker = holding.get('ticker', '')
-        
-        if not ticker:
-            return None
-        
-        # Try the ticker
-        price = db.query(DailyPrice).filter(
-            DailyPrice.ticker == ticker,
-            DailyPrice.date <= d
-        ).order_by(DailyPrice.date.desc()).first()
-        if price:
-            return price.close
-        
-        # Try with underscore
-        ticker_underscore = ticker.replace(' ', '_')
-        if ticker_underscore != ticker:
-            price = db.query(DailyPrice).filter(
-                DailyPrice.ticker == ticker_underscore,
-                DailyPrice.date <= d
-            ).order_by(DailyPrice.date.desc()).first()
-            if price:
-                return price.close
-        
-        return None
+    def get_live_price(holding: dict):
+        ticker = holding.get('ticker', '')
+        return ticker_to_price.get(ticker)
     
-    # First pass: check which holdings have prices
-    holdings_with_prices = []
+    # Calculate current value using live prices
+    total_value = 0
     for h in holdings:
-        price = get_price_at_date(h, today)
-        if price is not None:
-            holdings_with_prices.append((h, True))
+        shares = h.get('shares', 0)
+        buy_price = h.get('buyPrice', 0)
+        fx = get_fx_rate(h)
+        live_price = get_live_price(h)
+        if live_price:
+            total_value += shares * live_price * fx
         else:
-            holdings_with_prices.append((h, False))
+            total_value += shares * buy_price  # Fallback to buy price (already in SEK)
     
-    def get_portfolio_value(d: date):
-        total = 0
-        for h, has_price in holdings_with_prices:
-            shares = h.get('shares', 0)
-            buy_price = h.get('buyPrice', 0)  # Already in SEK from import
-            fx = get_fx_rate(h)
-            if has_price:
-                price = get_price_at_date(h, d)
-                # Price from DailyPrice is in local currency, convert to SEK
-                total += shares * (price if price else buy_price) * fx
-            else:
-                # No price data - use buy price (already in SEK)
-                total += shares * buy_price
-        return total
-    
-    current_value = get_portfolio_value(today)
-    yesterday_value = get_portfolio_value(yesterday)
-    week_value = get_portfolio_value(week_ago)
-    month_value = get_portfolio_value(month_ago)
-    
-    today_change = current_value - yesterday_value
-    today_pct = (today_change / yesterday_value * 100) if yesterday_value > 0 else 0
-    week_pct = ((current_value - week_value) / week_value * 100) if week_value > 0 else 0
-    month_pct = ((current_value - month_value) / month_value * 100) if month_value > 0 else 0
-    
-    # Find best/worst performers today
-    performers = []
-    for h in holdings:
-        ticker = h.get('ticker', '')
-        today_price = get_price_at_date(h, today)
-        yest_price = get_price_at_date(h, yesterday)
-        if today_price and yest_price and yest_price > 0:
-            change_pct = (today_price - yest_price) / yest_price * 100
-            performers.append({'ticker': ticker, 'change_pct': round(change_pct, 2)})
-    
-    performers.sort(key=lambda x: x['change_pct'], reverse=True)
-    best = performers[0] if performers else None
-    worst = performers[-1] if performers else None
-    
+    # For daily/weekly/monthly changes, we don't have historical live data
+    # So just show current value with 0% changes
     return {
-        "total_value": round(current_value, 2),
-        "today_change": round(today_change, 2),
-        "today_change_pct": round(today_pct, 2),
-        "week_change_pct": round(week_pct, 2),
-        "month_change_pct": round(month_pct, 2),
-        "best_performer": best,
-        "worst_performer": worst
+        "total_value": round(total_value, 2),
+        "today_change": 0,
+        "today_change_pct": 0,
+        "week_change_pct": 0,
+        "month_change_pct": 0,
+        "best_performer": None,
+        "worst_performer": None,
+        "holdings_count": len(holdings),
     }
 
 
