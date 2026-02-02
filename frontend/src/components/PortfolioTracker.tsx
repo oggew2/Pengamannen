@@ -638,16 +638,23 @@ export function PortfolioTracker() {
       </SimpleGrid>
 
       {holdings.length === 0 ? (
-        <VStack gap="16px" py="20px">
-          <Text color="fg.muted" textAlign="center">
-            Ingen portfölj sparad. Använd "🔒 Lås in portfölj" ovan efter att du allokerat.
+        <VStack gap="20px" py="32px" textAlign="center">
+          <Text fontSize="lg" fontWeight="medium" color="fg">Kom igång med din portfölj</Text>
+          <Text color="fg.muted" maxW="400px">
+            Importera dina transaktioner från Avanza för att spåra din portfölj och få ombalanseringsförslag.
           </Text>
-          <Text color="fg.muted" fontSize="sm">— eller —</Text>
-          <Button size="sm" variant="outline" onClick={() => setShowImport(!showImport)}>
-            📥 Importera från Avanza CSV
+          <Button 
+            size="lg" 
+            colorScheme="blue" 
+            onClick={() => setShowImport(true)}
+          >
+            📥 Importera från Avanza
           </Button>
+          <Text fontSize="xs" color="fg.subtle">
+            Exportera CSV från Avanza → Mina sidor → Transaktioner → Exportera
+          </Text>
           {showImport && (
-            <Box w="100%">
+            <Box w="100%" mt="16px">
               <CsvImporter 
                 onImportComplete={() => {}}
                 onSyncComplete={(newHoldings) => {
