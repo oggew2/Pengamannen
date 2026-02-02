@@ -103,6 +103,30 @@ export function PerformanceChart() {
     setScrubIndex(Math.max(0, Math.min(data.chart_data.length - 1, idx)));
   }, [data?.chart_data]);
 
+  // Memoize chart path calculations - MUST be before early returns
+  const chartPaths = useMemo(() => {
+    if (!data?.chart_data || data.chart_data.length < 2) return null;
+    const pts = data.chart_data;
+    const vals = pts.map(p => p.value);
+    const min = Math.min(...vals) * 0.98;
+    const max = Math.max(...vals) * 1.02;
+    const range = max - min || 1;
+    const len = pts.length - 1 || 1;
+    
+    const getY = (v: number) => 100 - ((v - min) / range) * 85;
+    const getX = (i: number) => (i / len) * 290 + 5;
+    
+    let linePath = `M ${getX(0)},${getY(vals[0])}`;
+    for (let i = 1; i < pts.length; i++) {
+      const x0 = getX(i - 1), y0 = getY(vals[i - 1]);
+      const x1 = getX(i), y1 = getY(vals[i]);
+      const cpx = (x0 + x1) / 2;
+      linePath += ` C ${cpx},${y0} ${cpx},${y1} ${x1},${y1}`;
+    }
+    
+    return { linePath, areaPath: linePath + ` L 295,110 L 5,110 Z`, vals, getX, getY };
+  }, [data?.chart_data]);
+
   if (loading) return <ChartSkeleton />;
 
   if (error) {
@@ -137,30 +161,6 @@ export function PerformanceChart() {
   const { summary, positions } = data;
   const returnPct = showNet ? summary.net_return_pct : summary.gross_return_pct;
   const isPositive = returnPct >= 0;
-
-  // Memoize chart path calculations
-  const chartPaths = useMemo(() => {
-    if (!data?.chart_data || data.chart_data.length < 2) return null;
-    const pts = data.chart_data;
-    const vals = pts.map(p => p.value);
-    const min = Math.min(...vals) * 0.98;
-    const max = Math.max(...vals) * 1.02;
-    const range = max - min || 1;
-    const len = pts.length - 1 || 1;  // Prevent division by zero
-    
-    const getY = (v: number) => 100 - ((v - min) / range) * 85;
-    const getX = (i: number) => (i / len) * 290 + 5;
-    
-    let linePath = `M ${getX(0)},${getY(vals[0])}`;
-    for (let i = 1; i < pts.length; i++) {
-      const x0 = getX(i - 1), y0 = getY(vals[i - 1]);
-      const x1 = getX(i), y1 = getY(vals[i]);
-      const cpx = (x0 + x1) / 2;
-      linePath += ` C ${cpx},${y0} ${cpx},${y1} ${x1},${y1}`;
-    }
-    
-    return { linePath, areaPath: linePath + ` L 295,110 L 5,110 Z`, vals, getX, getY };
-  }, [data?.chart_data]);
 
   return (
     <VStack gap={4} align="stretch">
