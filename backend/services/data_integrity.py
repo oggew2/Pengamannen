@@ -31,18 +31,25 @@ class DataIntegrityChecker:
         
     def run_all_checks(self) -> Dict:
         """Run all integrity checks and return comprehensive report."""
+        import os
         self.issues = []
         self.warnings = []
+        
+        # Check data source - TradingView uses live prices, not DailyPrice table
+        data_source = os.getenv('DATA_SOURCE', 'tradingview')
         
         checks = {
             "data_freshness": self._check_data_freshness(),
             "fundamentals_coverage": self._check_fundamentals_coverage(),
-            "price_coverage": self._check_price_coverage(),
-            "sync_failures": self._check_sync_failures(),
             "missing_critical_fields": self._check_critical_fields(),
             "market_cap_filter": self._check_market_cap_data(),
             "active_stock_count": self._check_active_stock_count(),
         }
+        
+        # Only check price coverage and sync failures for Avanza source
+        if data_source != 'tradingview':
+            checks["price_coverage"] = self._check_price_coverage()
+            checks["sync_failures"] = self._check_sync_failures()
         
         # Determine overall status
         has_critical = any(c.get("status") == "CRITICAL" for c in checks.values())

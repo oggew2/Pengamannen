@@ -4,7 +4,7 @@ import { Box, Flex, Text, Button, HStack, VStack, Skeleton } from '@chakra-ui/re
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { useStrategies, usePortfolio, useRebalanceDates, queryKeys } from '../api/hooks';
+import { useStrategies, useRebalanceDates, queryKeys } from '../api/hooks';
 import { AlertsBanner } from '../components/AlertsBanner';
 import { DataIntegrityBanner } from '../components/DataIntegrityBanner';
 import type { StrategyMeta } from '../types';
@@ -19,10 +19,17 @@ const ALLOWED_STRATEGIES = ['sammansatt_momentum'];
 
 export function Dashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState('1Y');
+  const [momentumHoldings, setMomentumHoldings] = useState<Array<{ticker: string; shares: number; buyPrice: number}>>([]);
   const queryClient = useQueryClient();
   const { data: strategies = [], isLoading: strategiesLoading, isError: strategiesError } = useStrategies();
-  const { data: portfolio, isLoading: portfolioLoading, isError: portfolioError } = usePortfolio();
   const { data: rebalanceDates = [] } = useRebalanceDates();
+
+  // Load momentum portfolio
+  useEffect(() => {
+    api.get<{holdings: Array<{ticker: string; shares: number; buyPrice: number}>}>('/user/momentum-portfolio')
+      .then(data => setMomentumHoldings(data.holdings || []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (strategies.length > 0) {
@@ -67,17 +74,23 @@ export function Dashboard() {
     return historicalData.filter(d => d.date >= startDate.toISOString().split('T')[0]);
   }, [historicalData, selectedPeriod]);
 
-  const portfolioValue = filteredData.length > 0 ? filteredData[filteredData.length - 1].value : 100000;
+  // Calculate real portfolio value from holdings
+  const realPortfolioValue = useMemo(() => {
+    if (!momentumHoldings.length) return null;
+    return momentumHoldings.reduce((sum, h) => sum + (h.shares * h.buyPrice), 0);
+  }, [momentumHoldings]);
+
+  const portfolioValue = realPortfolioValue || (filteredData.length > 0 ? filteredData[filteredData.length - 1].value : 100000);
   const startValue = filteredData.length > 0 ? filteredData[0].value : 90000;
-  const ytdReturn = ((portfolioValue - startValue) / startValue) * 100;
+  const ytdReturn = realPortfolioValue ? 0 : ((portfolioValue - startValue) / startValue) * 100; // Show 0% for real portfolio (no historical data yet)
 
   const formatCurrency = (value: number) => 
     new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
   const formatPercent = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 
-  const loading = strategiesLoading || portfolioLoading;
+  const loading = strategiesLoading;
 
-  if (strategiesError || portfolioError) {
+  if (strategiesError) {
     return (
       <Box bg="red.900/20" borderColor="red.500" borderWidth="1px" borderRadius="8px" p="16px">
         <Text color="red.400" fontWeight="semibold">Failed to load data</Text>
@@ -108,9 +121,11 @@ export function Dashboard() {
       <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="24px">
         <Flex justify="space-between" align="start" mb="16px" flexWrap="wrap" gap="16px">
           <VStack align="start" gap="4px">
-            <Text fontSize="sm" color="fg.muted">{portfolio?.holdings?.length ? 'Portfolio Value' : 'Strategy Simulation'}</Text>
+            <Text fontSize="sm" color="fg.muted">{momentumHoldings.length ? 'Portfolio Value' : 'Strategy Simulation'}</Text>
             <Text fontSize="4xl" fontWeight="bold" color="fg" fontFamily={tokens.fonts.mono}>{formatCurrency(portfolioValue)}</Text>
-            <Text fontSize="lg" color={ytdReturn >= 0 ? 'success.fg' : 'error.fg'} fontFamily={tokens.fonts.mono}>{formatPercent(ytdReturn)} YTD</Text>
+            <Text fontSize="lg" color={ytdReturn >= 0 ? 'success.fg' : 'error.fg'} fontFamily={tokens.fonts.mono}>
+              {realPortfolioValue ? `${momentumHoldings.length} innehav` : formatPercent(ytdReturn) + ' YTD'}
+            </Text>
           </VStack>
           <HStack gap="4px">
             {['6M', '1Y', '3Y', 'ALL'].map(period => (
@@ -118,19 +133,22 @@ export function Dashboard() {
             ))}
           </HStack>
         </Flex>
-        <Box height="180px">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={filteredData}>
-              <XAxis dataKey="date" stroke={tokens.colors.text.muted} fontSize={11} tickFormatter={(v) => new Date(v).toLocaleDateString('sv-SE', { month: 'short' })} />
-              <YAxis stroke={tokens.colors.text.muted} fontSize={11} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={40} />
-              <Tooltip contentStyle={{ backgroundColor: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.default}`, borderRadius: '6px', color: tokens.colors.text.primary }} formatter={(value: number | undefined) => value !== undefined ? [formatCurrency(value), 'Value'] : ['', '']} />
-              <Line type="monotone" dataKey="value" stroke={tokens.colors.brand.primary} strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </Box>
-        {!portfolio?.holdings?.length && (
+        {/* Only show chart for simulated data */}
+        {!realPortfolioValue && (
+          <Box height="180px">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={filteredData}>
+                <XAxis dataKey="date" stroke={tokens.colors.text.muted} fontSize={11} tickFormatter={(v) => new Date(v).toLocaleDateString('sv-SE', { month: 'short' })} />
+                <YAxis stroke={tokens.colors.text.muted} fontSize={11} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={40} />
+                <Tooltip contentStyle={{ backgroundColor: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.default}`, borderRadius: '6px', color: tokens.colors.text.primary }} formatter={(value: number | undefined) => value !== undefined ? [formatCurrency(value), 'Value'] : ['', '']} />
+                <Line type="monotone" dataKey="value" stroke={tokens.colors.brand.primary} strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </Box>
+        )}
+        {!momentumHoldings.length && (
           <Text fontSize="xs" color="fg.subtle" mt="8px">
-            Simulated performance. <Link to="/rebalancing" style={{ color: tokens.colors.brand.primary }}>Import portfolio →</Link>
+            Simulated performance. <Link to="/strategies/momentum" style={{ color: tokens.colors.brand.primary }}>Import portfolio →</Link>
           </Text>
         )}
       </Box>
@@ -152,7 +170,7 @@ export function Dashboard() {
       </HStack>
 
       {/* Kom igång card for new users */}
-      {!portfolio?.holdings?.length && (
+      {!momentumHoldings.length && (
         <Box bg="brand.solid/10" borderColor="brand.fg" borderWidth="1px" borderRadius="lg" p="20px">
           <Flex justify="space-between" align="center">
             <VStack align="start" gap="4px">
@@ -165,21 +183,21 @@ export function Dashboard() {
       )}
 
       {/* Compact Holdings Preview */}
-      {portfolio?.holdings && portfolio.holdings.length > 0 && (
+      {momentumHoldings.length > 0 && (
         <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="20px">
           <Flex justify="space-between" align="center" mb="12px">
             <Text fontSize="md" fontWeight="semibold" color="fg">Dina innehav</Text>
-            <Link to="/rebalancing"><Button size="xs" variant="ghost" color="brand.fg">Visa alla</Button></Link>
+            <Link to="/strategies/momentum"><Button size="xs" variant="ghost" color="brand.fg">Visa alla</Button></Link>
           </Flex>
           <VStack align="stretch" gap="8px">
-            {portfolio.holdings.slice(0, 5).map(h => (
+            {momentumHoldings.slice(0, 5).map(h => (
               <Flex key={h.ticker} justify="space-between" align="center">
                 <Text fontSize="sm" color="fg" fontFamily={tokens.fonts.mono}>{h.ticker}</Text>
-                <Text fontSize="sm" color="fg.muted">{h.name || h.ticker}</Text>
+                <Text fontSize="sm" color="fg.muted">{h.shares} st @ {h.buyPrice.toFixed(0)} kr</Text>
               </Flex>
             ))}
-            {portfolio.holdings.length > 5 && (
-              <Text fontSize="xs" color="fg.subtle" textAlign="center">+{portfolio.holdings.length - 5} fler innehav</Text>
+            {momentumHoldings.length > 5 && (
+              <Text fontSize="xs" color="fg.subtle" textAlign="center">+{momentumHoldings.length - 5} fler innehav</Text>
             )}
           </VStack>
         </Box>
