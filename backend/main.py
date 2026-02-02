@@ -4524,6 +4524,9 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
         if not ticker:
             ticker = holding.get('ticker', '')
         
+        if not ticker:
+            return None
+        
         # Try the ticker
         price = db.query(DailyPrice).filter(
             DailyPrice.ticker == ticker,
@@ -4533,21 +4536,36 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
             return price.close
         
         # Try with underscore
-        price = db.query(DailyPrice).filter(
-            DailyPrice.ticker == ticker.replace(' ', '_'),
-            DailyPrice.date <= d
-        ).order_by(DailyPrice.date.desc()).first()
-        return price.close if price else None
+        ticker_underscore = ticker.replace(' ', '_')
+        if ticker_underscore != ticker:
+            price = db.query(DailyPrice).filter(
+                DailyPrice.ticker == ticker_underscore,
+                DailyPrice.date <= d
+            ).order_by(DailyPrice.date.desc()).first()
+            if price:
+                return price.close
+        
+        return None
+    
+    # First pass: check which holdings have prices
+    holdings_with_prices = []
+    for h in holdings:
+        price = get_price_at_date(h, today)
+        if price is not None:
+            holdings_with_prices.append((h, True))
+        else:
+            holdings_with_prices.append((h, False))
     
     def get_portfolio_value(d: date):
         total = 0
-        for h in holdings:
+        for h, has_price in holdings_with_prices:
             shares = h.get('shares', 0)
             buy_price = h.get('buyPrice', 0)
-            price = get_price_at_date(h, d)
-            if price:
-                total += shares * price
+            if has_price:
+                price = get_price_at_date(h, d)
+                total += shares * (price if price else buy_price)
             else:
+                # No price data - use buy price consistently
                 total += shares * buy_price
         return total
     
