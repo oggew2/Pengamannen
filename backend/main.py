@@ -4416,6 +4416,61 @@ def get_portfolio_transactions(
     }
 
 
+@v1_router.get("/portfolio/daily-stats-debug")
+def get_portfolio_daily_stats_debug(request: Request, db: Session = Depends(get_db)):
+    """Debug endpoint to see price lookups."""
+    from models import UserPortfolio, DailyPrice, IsinLookup
+    from services.auth import get_user_from_cookie
+    from datetime import date, timedelta
+    import json
+    
+    user = get_user_from_cookie(request, db)
+    if not user:
+        return {"error": "not logged in"}
+    
+    portfolio = db.query(UserPortfolio).filter(
+        UserPortfolio.user_id == user.id,
+        UserPortfolio.name == "momentum_locked"
+    ).first()
+    
+    if not portfolio or not portfolio.holdings:
+        return {"error": "no portfolio"}
+    
+    holdings = json.loads(portfolio.holdings)
+    today = date.today()
+    
+    # Build ISIN to ticker mapping
+    isins = [h.get('isin') for h in holdings if h.get('isin')]
+    isin_to_ticker = {}
+    if isins:
+        lookups = db.query(IsinLookup).filter(IsinLookup.isin.in_(isins)).all()
+        isin_to_ticker = {l.isin: l.ticker for l in lookups}
+    
+    debug = []
+    for h in holdings:
+        ticker_from_holding = h.get('ticker', '')
+        isin = h.get('isin')
+        ticker_from_isin = isin_to_ticker.get(isin) if isin else None
+        ticker_used = ticker_from_isin or ticker_from_holding
+        
+        # Check what prices exist
+        price_exact = db.query(DailyPrice).filter(DailyPrice.ticker == ticker_used, DailyPrice.date <= today).order_by(DailyPrice.date.desc()).first()
+        price_underscore = db.query(DailyPrice).filter(DailyPrice.ticker == ticker_used.replace(' ', '_'), DailyPrice.date <= today).order_by(DailyPrice.date.desc()).first()
+        
+        debug.append({
+            "ticker_holding": ticker_from_holding,
+            "isin": isin,
+            "ticker_from_isin": ticker_from_isin,
+            "ticker_used": ticker_used,
+            "shares": h.get('shares'),
+            "buyPrice": h.get('buyPrice'),
+            "price_found": price_exact.close if price_exact else (price_underscore.close if price_underscore else None),
+            "price_date": str(price_exact.date) if price_exact else (str(price_underscore.date) if price_underscore else None),
+        })
+    
+    return {"holdings_count": len(holdings), "debug": debug}
+
+
 @v1_router.get("/portfolio/daily-stats")
 def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
     """Get daily portfolio stats for dashboard card - uses momentum portfolio holdings."""
