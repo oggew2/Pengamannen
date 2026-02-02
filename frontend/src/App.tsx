@@ -9,15 +9,8 @@ import { LoginPage } from './pages/LoginPage';
 import { Toaster } from './components/toaster';
 
 // Lazy load pages
-const StrategyPage = lazy(() => import('./pages/StrategyPage').then(m => ({ default: m.StrategyPage })));
-const HistoricalBacktestPage = lazy(() => import('./pages/HistoricalBacktestPage').then(m => ({ default: m.HistoricalBacktestPage })));
 const StockDetailPage = lazy(() => import('./pages/StockDetailPage'));
-const DividendCalendarPage = lazy(() => import('./pages/DividendCalendarPage'));
-const AlertsPage = lazy(() => import('./pages/AlertsPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
-const EducationPage = lazy(() => import('./pages/EducationPage'));
-const GettingStartedPage = lazy(() => import('./pages/GettingStartedPage'));
-const MinStrategiPage = lazy(() => import('./pages/MinStrategiPage'));
 const DataManagementPage = lazy(() => import('./pages/DataManagementPage'));
 
 const PageLoader = () => (
@@ -51,15 +44,8 @@ function ProtectedApp() {
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
-              <Route path="/strategies/:type" element={<StrategyPage />} />
-              <Route path="/rebalancing" element={<MinStrategiPage />} />
-              <Route path="/backtesting/historical" element={<HistoricalBacktestPage />} />
-              <Route path="/dividends" element={<DividendCalendarPage />} />
-              <Route path="/alerts" element={<AlertsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/data" element={<DataManagementPage />} />
-              <Route path="/learn" element={<EducationPage />} />
-              <Route path="/getting-started" element={<GettingStartedPage />} />
               <Route path="/stock/:ticker" element={<StockDetailPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

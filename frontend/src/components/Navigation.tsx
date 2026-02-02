@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Box, Flex, Text, IconButton, VStack } from '@chakra-ui/react';
 import { DataIntegrityIndicator } from './DataIntegrityBanner';
@@ -20,31 +20,6 @@ const HomeIcon = () => (
     <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
   </svg>
 );
-const TrendingIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
-  </svg>
-);
-const StrategyIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18M10 4v18"/>
-  </svg>
-);
-const AnalysisIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M21 21H3V3"/><path d="M18 9l-5 5-4-4-3 3"/>
-  </svg>
-);
-const LearnIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/>
-  </svg>
-);
-const BellIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>
-  </svg>
-);
 const SettingsIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
@@ -55,124 +30,53 @@ const DataIcon = () => (
     <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
   </svg>
 );
-const ChevronIcon = ({ open }: { open: boolean }) => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 150ms' }}>
-    <polyline points="6 9 12 15 18 9"/>
-  </svg>
-);
-
-const strategyLinks = [
-  { to: '/strategies/momentum', label: 'Momentum', icon: <TrendingIcon /> },
-];
 
 const navLinks = [
-  { to: '/', label: 'Dashboard', icon: <HomeIcon /> },
-  { to: '/rebalancing', label: 'Min Strategi', icon: <StrategyIcon /> },
-  { to: '/backtesting/historical', label: 'Backtest', icon: <AnalysisIcon /> },
-  { to: '/learn', label: 'Lär dig mer', icon: <LearnIcon /> },
-  { to: '/alerts', label: 'Notiser', icon: <BellIcon /> },
+  { to: '/', label: 'Portfölj', icon: <HomeIcon /> },
   { to: '/settings', label: 'Inställningar', icon: <SettingsIcon /> },
 ];
 
 const mobileLinks = [
-  { to: '/', label: 'Hem', icon: <HomeIcon /> },
-  { to: '/rebalancing', label: 'Min Strategi', icon: <StrategyIcon /> },
-  { to: '/strategies/momentum', label: 'Strategier', icon: <TrendingIcon /> },
-  { to: '/alerts', label: 'Notiser', icon: <BellIcon /> },
-  { to: '/settings', label: 'Mer', icon: <SettingsIcon /> },
+  { to: '/', label: 'Portfölj', icon: <HomeIcon /> },
+  { to: '/settings', label: 'Inställningar', icon: <SettingsIcon /> },
 ];
 
 export function Navigation() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [strategiesOpen, setStrategiesOpen] = useState(false);
-  const location = useLocation();
-  const { user } = useAuth();
-  const isStrategyActive = location.pathname.startsWith('/strategies/');
+  const { user, logout } = useAuth();
   const isAdmin = user?.is_admin ?? false;
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', 'dark');
   }, []);
 
-  useEffect(() => {
-    if (isStrategyActive) setStrategiesOpen(true);
-  }, [isStrategyActive]);
-
-  const StrategyGroup = ({ onClick }: { onClick?: () => void }) => (
-    <>
-      <Flex
-        as="button"
-        align="center"
-        justify="space-between"
-        w="100%"
-        px="16px"
-        py="10px"
-        borderRadius="8px"
-        bg={isStrategyActive && !strategiesOpen ? 'brand.500' : 'transparent'}
-        color={isStrategyActive ? 'brand.500' : 'gray.100'}
-        _hover={{ bg: 'gray.600' }}
-        transition="all 150ms"
-        onClick={() => setStrategiesOpen(!strategiesOpen)}
-      >
-        <Flex align="center" gap="12px">
-          <TrendingIcon />
-          <Text fontSize="sm" fontWeight="medium">Strategier</Text>
-        </Flex>
-        <ChevronIcon open={strategiesOpen} />
-      </Flex>
-      {strategiesOpen && (
-        <VStack gap="2px" align="stretch" pl="20px">
-          {strategyLinks.map(link => (
-            <NavLink key={link.to} to={link.to} onClick={onClick}>
-              {({ isActive }) => (
-                <Flex
-                  align="center"
-                  gap="12px"
-                  px="16px"
-                  py="8px"
-                  borderRadius="8px"
-                  bg={isActive ? 'brand.500' : 'transparent'}
-                  color={isActive ? 'white' : 'gray.100'}
-                  _hover={{ bg: isActive ? 'brand.600' : 'gray.600' }}
-                  transition="all 150ms"
-                >
-                  {link.icon}
-                  <Text fontSize="sm" fontWeight="medium">{link.label}</Text>
-                </Flex>
-              )}
-            </NavLink>
-          ))}
-        </VStack>
-      )}
-    </>
-  );
-
   return (
     <>
-      {/* Desktop Sidebar - hidden below lg */}
+      {/* Desktop Sidebar */}
       <Box
         as="nav"
+        display={{ base: 'none', lg: 'flex' }}
+        flexDirection="column"
         position="fixed"
-        left={0}
-        top={0}
-        bottom={0}
+        left="0"
+        top="0"
+        bottom="0"
         w="240px"
-        bg="gray.700"
-        borderRight="1px solid"
-        borderColor="gray.600"
-        hideBelow="lg"
-        zIndex={40}
+        bg="bg.subtle"
+        borderRightWidth="1px"
+        borderColor="border"
+        p="16px"
+        zIndex="100"
       >
-        <Box p="24px" borderBottom="1px solid" borderColor="gray.600">
-          <NavLink to="/">
-            <Text fontSize="xl" fontWeight="semibold" color="brand.500">Börslabbet</Text>
-          </NavLink>
-          <Box mt="8px">
-            <DataIntegrityIndicator />
+        <Flex align="center" gap="12px" mb="32px" px="8px">
+          <Box w="32px" h="32px" borderRadius="8px" bg="brand.solid" display="flex" alignItems="center" justifyContent="center">
+            <Text fontSize="lg" fontWeight="bold" color="white">B</Text>
           </Box>
-        </Box>
-        <VStack gap="4px" align="stretch" p="16px">
-          {navLinks.slice(0, 2).map(link => (
+          <Text fontSize="lg" fontWeight="bold" color="fg">Börslabbet</Text>
+        </Flex>
+
+        <VStack gap="4px" align="stretch" flex="1">
+          {navLinks.map(link => (
             <NavLink key={link.to} to={link.to}>
               {({ isActive }) => (
                 <Flex
@@ -181,9 +85,9 @@ export function Navigation() {
                   px="16px"
                   py="10px"
                   borderRadius="8px"
-                  bg={isActive ? 'brand.500' : 'transparent'}
-                  color={isActive ? 'white' : 'gray.100'}
-                  _hover={{ bg: isActive ? 'brand.600' : 'gray.600' }}
+                  bg={isActive ? 'brand.solid' : 'transparent'}
+                  color={isActive ? 'white' : 'fg.muted'}
+                  _hover={{ bg: isActive ? 'brand.solid' : 'bg.muted' }}
                   transition="all 150ms"
                 >
                   {link.icon}
@@ -192,27 +96,7 @@ export function Navigation() {
               )}
             </NavLink>
           ))}
-          <StrategyGroup />
-          {navLinks.slice(2).map(link => (
-            <NavLink key={link.to} to={link.to}>
-              {({ isActive }) => (
-                <Flex
-                  align="center"
-                  gap="12px"
-                  px="16px"
-                  py="10px"
-                  borderRadius="8px"
-                  bg={isActive ? 'brand.500' : 'transparent'}
-                  color={isActive ? 'white' : 'gray.100'}
-                  _hover={{ bg: isActive ? 'brand.600' : 'gray.600' }}
-                  transition="all 150ms"
-                >
-                  {link.icon}
-                  <Text fontSize="sm" fontWeight="medium">{link.label}</Text>
-                </Flex>
-              )}
-            </NavLink>
-          ))}
+
           {isAdmin && (
             <NavLink to="/data">
               {({ isActive }) => (
@@ -222,9 +106,9 @@ export function Navigation() {
                   px="16px"
                   py="10px"
                   borderRadius="8px"
-                  bg={isActive ? 'brand.500' : 'transparent'}
-                  color={isActive ? 'white' : 'gray.100'}
-                  _hover={{ bg: isActive ? 'brand.600' : 'gray.600' }}
+                  bg={isActive ? 'brand.solid' : 'transparent'}
+                  color={isActive ? 'white' : 'fg.muted'}
+                  _hover={{ bg: isActive ? 'brand.solid' : 'bg.muted' }}
                   transition="all 150ms"
                 >
                   <DataIcon />
@@ -234,143 +118,154 @@ export function Navigation() {
             </NavLink>
           )}
         </VStack>
+
+        <Box mt="auto" pt="16px" borderTopWidth="1px" borderColor="border">
+          <DataIntegrityIndicator />
+          <Flex align="center" gap="8px" px="8px" mt="12px">
+            <Box w="28px" h="28px" borderRadius="full" bg="brand.solid/20" display="flex" alignItems="center" justifyContent="center">
+              <Text fontSize="xs" fontWeight="bold" color="brand.fg">{user?.email?.[0]?.toUpperCase() || 'U'}</Text>
+            </Box>
+            <Text fontSize="xs" color="fg.muted" flex="1" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{user?.email}</Text>
+            <Box as="button" onClick={logout} color="fg.subtle" _hover={{ color: 'fg.muted' }} title="Logga ut">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+            </Box>
+          </Flex>
+        </Box>
       </Box>
 
-      {/* Mobile/Tablet Header - hidden from lg */}
+      {/* Mobile Header */}
       <Box
-        as="header"
-        position="sticky"
-        top={0}
-        bg="gray.700"
-        borderBottom="1px solid"
-        borderColor="gray.600"
-        zIndex={50}
-        hideFrom="lg"
+        display={{ base: 'flex', lg: 'none' }}
+        position="fixed"
+        top="0"
+        left="0"
+        right="0"
+        h="56px"
+        bg="bg.subtle"
+        borderBottomWidth="1px"
+        borderColor="border"
+        px="16px"
+        alignItems="center"
+        justifyContent="space-between"
+        zIndex="100"
       >
-        <Flex px="16px" py="12px" align="center" justify="space-between">
-          <NavLink to="/">
-            <Text fontSize="lg" fontWeight="semibold" color="brand.500">Börslabbet</Text>
-          </NavLink>
-          <IconButton
-            aria-label="Menu"
-            variant="ghost"
-            size="sm"
-            onClick={() => setMenuOpen(true)}
-          >
-            <MenuIcon />
-          </IconButton>
+        <Flex align="center" gap="8px">
+          <Box w="28px" h="28px" borderRadius="6px" bg="brand.solid" display="flex" alignItems="center" justifyContent="center">
+            <Text fontSize="md" fontWeight="bold" color="white">B</Text>
+          </Box>
+          <Text fontSize="md" fontWeight="bold" color="fg">Börslabbet</Text>
         </Flex>
+        <IconButton
+          aria-label="Menu"
+          variant="ghost"
+          size="sm"
+          onClick={() => setMenuOpen(!menuOpen)}
+        >
+          {menuOpen ? <CloseIcon /> : <MenuIcon />}
+        </IconButton>
       </Box>
 
-      {/* Mobile Drawer */}
+      {/* Mobile Menu Overlay */}
       {menuOpen && (
-        <Box position="fixed" inset={0} zIndex={60} hideFrom="lg">
-          <Box position="absolute" inset={0} bg="blackAlpha.600" onClick={() => setMenuOpen(false)} />
-          <Box
-            position="absolute"
-            top={0}
-            left={0}
-            bottom={0}
-            w="280px"
-            bg="gray.700"
-            borderRight="1px solid"
-            borderColor="gray.600"
-          >
-            <Flex p="24px" borderBottom="1px solid" borderColor="gray.600" justify="space-between" align="center">
-              <Text fontSize="lg" fontWeight="semibold" color="brand.500">Börslabbet</Text>
-              <IconButton aria-label="Close" variant="ghost" size="sm" onClick={() => setMenuOpen(false)}>
-                <CloseIcon />
-              </IconButton>
-            </Flex>
-            <VStack gap="4px" align="stretch" p="16px">
-              {navLinks.slice(0, 2).map(link => (
-                <NavLink key={link.to} to={link.to} onClick={() => setMenuOpen(false)}>
-                  {({ isActive }) => (
-                    <Flex
-                      align="center"
-                      gap="12px"
-                      px="16px"
-                      py="10px"
-                      borderRadius="8px"
-                      bg={isActive ? 'brand.500' : 'transparent'}
-                      color={isActive ? 'white' : 'gray.100'}
-                      _hover={{ bg: isActive ? 'brand.600' : 'gray.600' }}
-                    >
-                      {link.icon}
-                      <Text fontSize="sm" fontWeight="medium">{link.label}</Text>
-                    </Flex>
-                  )}
-                </NavLink>
-              ))}
-              <StrategyGroup onClick={() => setMenuOpen(false)} />
-              {navLinks.slice(2).map(link => (
-                <NavLink key={link.to} to={link.to} onClick={() => setMenuOpen(false)}>
-                  {({ isActive }) => (
-                    <Flex
-                      align="center"
-                      gap="12px"
-                      px="16px"
-                      py="10px"
-                      borderRadius="8px"
-                      bg={isActive ? 'brand.500' : 'transparent'}
-                      color={isActive ? 'white' : 'gray.100'}
-                      _hover={{ bg: isActive ? 'brand.600' : 'gray.600' }}
-                    >
-                      {link.icon}
-                      <Text fontSize="sm" fontWeight="medium">{link.label}</Text>
-                    </Flex>
-                  )}
-                </NavLink>
-              ))}
-              {isAdmin && (
-                <NavLink to="/data" onClick={() => setMenuOpen(false)}>
-                  {({ isActive }) => (
-                    <Flex
-                      align="center"
-                      gap="12px"
-                      px="16px"
-                      py="10px"
-                      borderRadius="8px"
-                      bg={isActive ? 'brand.500' : 'transparent'}
-                      color={isActive ? 'white' : 'gray.100'}
-                      _hover={{ bg: isActive ? 'brand.600' : 'gray.600' }}
-                    >
-                      <DataIcon />
-                      <Text fontSize="sm" fontWeight="medium">Data</Text>
-                    </Flex>
-                  )}
-                </NavLink>
-              )}
-            </VStack>
-          </Box>
+        <Box
+          display={{ base: 'block', lg: 'none' }}
+          position="fixed"
+          top="56px"
+          left="0"
+          right="0"
+          bottom="0"
+          bg="bg"
+          zIndex="99"
+          p="16px"
+        >
+          <VStack gap="8px" align="stretch">
+            {navLinks.map(link => (
+              <NavLink key={link.to} to={link.to} onClick={() => setMenuOpen(false)}>
+                {({ isActive }) => (
+                  <Flex
+                    align="center"
+                    gap="12px"
+                    px="16px"
+                    py="12px"
+                    borderRadius="8px"
+                    bg={isActive ? 'brand.solid' : 'transparent'}
+                    color={isActive ? 'white' : 'fg'}
+                  >
+                    {link.icon}
+                    <Text fontSize="md" fontWeight="medium">{link.label}</Text>
+                  </Flex>
+                )}
+              </NavLink>
+            ))}
+            {isAdmin && (
+              <NavLink to="/data" onClick={() => setMenuOpen(false)}>
+                {({ isActive }) => (
+                  <Flex
+                    align="center"
+                    gap="12px"
+                    px="16px"
+                    py="12px"
+                    borderRadius="8px"
+                    bg={isActive ? 'brand.solid' : 'transparent'}
+                    color={isActive ? 'white' : 'fg'}
+                  >
+                    <DataIcon />
+                    <Text fontSize="md" fontWeight="medium">Data</Text>
+                  </Flex>
+                )}
+              </NavLink>
+            )}
+            <Box pt="16px" borderTopWidth="1px" borderColor="border" mt="8px">
+              <Flex align="center" justify="space-between" px="16px">
+                <Text fontSize="sm" color="fg.muted">{user?.email}</Text>
+                <Box as="button" onClick={logout} color="fg.subtle" _hover={{ color: 'fg.muted' }}>
+                  <Text fontSize="sm">Logga ut</Text>
+                </Box>
+              </Flex>
+            </Box>
+          </VStack>
         </Box>
       )}
 
-      {/* Mobile Bottom Tab Bar - hidden from md */}
+      {/* Mobile Bottom Nav */}
       <Box
+        display={{ base: 'flex', lg: 'none' }}
         position="fixed"
-        bottom={0}
-        left={0}
-        right={0}
-        bg="gray.700"
-        borderTop="1px solid"
-        borderColor="gray.600"
-        zIndex={40}
-        hideFrom="md"
+        bottom="0"
+        left="0"
+        right="0"
+        h="64px"
+        bg="bg.subtle"
+        borderTopWidth="1px"
+        borderColor="border"
+        justifyContent="space-around"
+        alignItems="center"
+        zIndex="100"
+        px="8px"
       >
-        <Flex justify="space-around" py="8px">
-          {mobileLinks.map(link => (
-            <NavLink key={link.to} to={link.to}>
-              {({ isActive }) => (
-                <VStack gap="4px" minW="60px" color={isActive ? 'brand.500' : 'gray.200'}>
-                  {link.icon}
-                  <Text fontSize="xs" fontWeight="medium">{link.label}</Text>
-                </VStack>
-              )}
-            </NavLink>
-          ))}
-        </Flex>
+        {mobileLinks.map(link => (
+          <NavLink key={link.to} to={link.to}>
+            {({ isActive }) => (
+              <Flex
+                direction="column"
+                align="center"
+                gap="4px"
+                py="8px"
+                px="16px"
+                color={isActive ? 'brand.fg' : 'fg.muted'}
+              >
+                {link.icon}
+                <Text fontSize="xs">{link.label}</Text>
+              </Flex>
+            )}
+          </NavLink>
+        ))}
       </Box>
+
+      {/* Spacer for mobile header */}
+      <Box display={{ base: 'block', lg: 'none' }} h="56px" />
     </>
   );
 }
