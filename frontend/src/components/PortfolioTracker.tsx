@@ -52,28 +52,30 @@ const HISTORY_KEY = 'borslabbet_transaction_history';
 const QUARTERLY_MONTHS = [3, 6, 9, 12];
 const MONTHLY_MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
 
-function getRebalanceMonths(): number[] {
+function getRebalanceSettings(): { months: number[]; day: number } {
   try {
     const saved = localStorage.getItem('notification_settings');
     if (saved) {
       const settings = JSON.parse(saved);
-      if (settings.rebalanceFrequency === 'monthly') return MONTHLY_MONTHS;
+      const months = settings.rebalanceFrequency === 'monthly' ? MONTHLY_MONTHS : QUARTERLY_MONTHS;
+      const day = settings.rebalanceDay || 15;
+      return { months, day };
     }
   } catch {}
-  return QUARTERLY_MONTHS;
+  return { months: QUARTERLY_MONTHS, day: 15 };
 }
 
 function getNextRebalanceDate(): Date {
   const now = new Date();
-  const months = getRebalanceMonths();
+  const { months, day } = getRebalanceSettings();
   
   for (let offset = 0; offset < 12; offset++) {
-    const check = new Date(now.getFullYear(), now.getMonth() + offset, 15);
+    const check = new Date(now.getFullYear(), now.getMonth() + offset, day);
     if (months.includes(check.getMonth() + 1) && check > now) {
       return check;
     }
   }
-  return new Date(now.getFullYear() + 1, 2, 15);
+  return new Date(now.getFullYear() + 1, 2, day);
 }
 
 function isHighVolumeWarning(): boolean {

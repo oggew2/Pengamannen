@@ -1,4 +1,4 @@
-import { Box, VStack, HStack, Text, Switch } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Switch, Input } from '@chakra-ui/react';
 import { useState, useEffect } from 'react';
 
 interface NotificationSettings {
@@ -7,6 +7,7 @@ interface NotificationSettings {
   rankingChanges: boolean;
   weeklyDigest: boolean;
   rebalanceFrequency: 'quarterly' | 'monthly';
+  rebalanceDay: number;
 }
 
 const DEFAULT_SETTINGS: NotificationSettings = {
@@ -15,6 +16,7 @@ const DEFAULT_SETTINGS: NotificationSettings = {
   rankingChanges: true,
   weeklyDigest: false,
   rebalanceFrequency: 'quarterly',
+  rebalanceDay: 15,
 };
 
 export function NotificationSettings() {
@@ -43,6 +45,13 @@ export function NotificationSettings() {
   
   const setFrequency = (freq: 'quarterly' | 'monthly') => {
     const updated = { ...settings, rebalanceFrequency: freq };
+    setSettings(updated);
+    localStorage.setItem('notification_settings', JSON.stringify(updated));
+  };
+
+  const setDay = (day: number) => {
+    const clamped = Math.max(1, Math.min(28, day));
+    const updated = { ...settings, rebalanceDay: clamped };
     setSettings(updated);
     localStorage.setItem('notification_settings', JSON.stringify(updated));
   };
@@ -84,6 +93,18 @@ export function NotificationSettings() {
               ? 'Mars, juni, september, december (rekommenderat)' 
               : 'Varje månad (högre avgifter)'}
           </Text>
+          <HStack mt="8px" gap="8px" align="center">
+            <Text fontSize="sm">Dag i månaden:</Text>
+            <Input
+              type="number"
+              value={settings.rebalanceDay}
+              onChange={e => setDay(parseInt(e.target.value) || 15)}
+              min={1}
+              max={28}
+              size="sm"
+              w="60px"
+            />
+          </HStack>
         </Box>
         
         {options.map(opt => (
