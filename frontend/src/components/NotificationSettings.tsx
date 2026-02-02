@@ -21,8 +21,17 @@ export function NotificationSettings() {
   const [settings, setSettings] = useState<NotificationSettings>(DEFAULT_SETTINGS);
   
   useEffect(() => {
-    const saved = localStorage.getItem('notification_settings');
-    if (saved) setSettings(JSON.parse(saved));
+    try {
+      const saved = localStorage.getItem('notification_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Merge with defaults to handle new fields
+        setSettings({ ...DEFAULT_SETTINGS, ...parsed });
+      }
+    } catch (e) {
+      console.error('Failed to load notification settings:', e);
+      localStorage.removeItem('notification_settings');
+    }
   }, []);
   
   const toggle = (key: keyof NotificationSettings) => {
