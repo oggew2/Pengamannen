@@ -176,7 +176,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 # Auth middleware - protect all API routes except auth endpoints and health
 class AuthMiddleware(BaseHTTPMiddleware):
-    OPEN_PATHS = {"/v1/auth/login", "/v1/auth/register", "/v1/auth/logout", "/v1/auth/me", "/v1/health", "/health", "/", "/favicon.ico", "/v1/strategies", "/v1/data/status/detailed", "/v1/data/sync-history", "/v1/scheduler-check"}
+    OPEN_PATHS = {"/v1/auth/login", "/v1/auth/register", "/v1/auth/logout", "/v1/auth/me", "/v1/health", "/health", "/", "/favicon.ico", "/v1/strategies", "/v1/data/status/detailed", "/v1/data/sync-history", "/v1/scheduler-check", "/v1/push/vapid-key", "/v1/push/subscribe"}
     OPEN_PREFIXES = ("/v1/strategies/nordic/",)  # All Nordic momentum endpoints
     
     async def dispatch(self, request: Request, call_next):
@@ -2819,6 +2819,82 @@ def scheduler_check_public():
     for job in scheduler.get_jobs():
         jobs.append({"id": job.id, "next": str(job.next_run_time) if job.next_run_time else None})
     return {"running": scheduler.running, "jobs": jobs}
+
+
+# =============================================================================
+# PUSH NOTIFICATIONS
+# =============================================================================
+
+@v1_router.get("/push/vapid-key")
+def get_vapid_public_key():
+    """Get VAPID public key for push subscription."""
+    from services.push_notifications import VAPID_PUBLIC_KEY
+    return {"publicKey": VAPID_PUBLIC_KEY}
+
+
+@v1_router.post("/push/subscribe")
+def subscribe_push(
+    subscription: dict,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Subscribe to push notifications."""
+    from models import PushSubscription
+    from services.auth import get_user_from_cookie
+    
+    user = get_user_from_cookie(request, db)
+    
+    endpoint = subscription.get("endpoint")
+    keys = subscription.get("keys", {})
+    p256dh = keys.get("p256dh")
+    auth = keys.get("auth")
+    
+    if not endpoint or not p256dh or not auth:
+        raise HTTPException(status_code=400, detail="Invalid subscription")
+    
+    # Check if already exists
+    existing = db.query(PushSubscription).filter(PushSubscription.endpoint == endpoint).first()
+    if existing:
+        # Update user_id if now logged in
+        if user and not existing.user_id:
+            existing.user_id = user.id
+            db.commit()
+        return {"status": "already_subscribed"}
+    
+    # Create new subscription
+    sub = PushSubscription(
+        user_id=user.id if user else None,
+        endpoint=endpoint,
+        p256dh=p256dh,
+        auth=auth,
+        user_agent=request.headers.get("user-agent"),
+    )
+    db.add(sub)
+    db.commit()
+    
+    return {"status": "subscribed"}
+
+
+@v1_router.delete("/push/unsubscribe")
+def unsubscribe_push(endpoint: str, db: Session = Depends(get_db)):
+    """Unsubscribe from push notifications."""
+    from models import PushSubscription
+    
+    deleted = db.query(PushSubscription).filter(PushSubscription.endpoint == endpoint).delete()
+    db.commit()
+    
+    return {"status": "unsubscribed", "deleted": deleted}
+
+
+@v1_router.post("/push/test")
+def test_push(request: Request, db: Session = Depends(get_db)):
+    """Send a test notification to current user."""
+    from services.push_notifications import send_to_user
+    from services.auth import require_auth
+    
+    user = require_auth(request, db)
+    sent = send_to_user(db, user.id, "🔔 Test", "Push-notiser fungerar!", "/dashboard")
+    return {"sent": sent}
 
 
 @v1_router.get("/data/freshness")

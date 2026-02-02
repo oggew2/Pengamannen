@@ -28,3 +28,5 @@ pytest-html>=4.0.0
 slowapi>=0.1.9
 psutil
 hypothesis>=6.0.0
+pywebpush
+py-vapid

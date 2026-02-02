@@ -406,3 +406,16 @@ class PortfolioTransactionImported(Base):
     hash = Column(String, unique=True, index=True)  # For duplicate detection
     imported_at = Column(DateTime, default=func.now())
     source = Column(String, default='avanza_csv')
+
+
+class PushSubscription(Base):
+    """Web push notification subscriptions."""
+    __tablename__ = "push_subscriptions"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=True)
+    endpoint = Column(String, unique=True, index=True)
+    p256dh = Column(String)
+    auth = Column(String)
+    created_at = Column(DateTime, default=func.now())
+    last_used = Column(DateTime, nullable=True)
+    user_agent = Column(String, nullable=True)

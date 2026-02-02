@@ -3,6 +3,7 @@ import { AlertsBanner } from '../components/AlertsBanner';
 import { DataIntegrityBanner } from '../components/DataIntegrityBanner';
 import { PortfolioTracker } from '../components/PortfolioTracker';
 import { DailyStats } from '../components/DailyStats';
+import { PushNotificationToggle } from '../components/PushNotificationToggle';
 import { StaggerContainer, StaggerItem } from '../components/Animations';
 import { useState, useEffect } from 'react';
 
@@ -26,7 +27,7 @@ function RebalanceFrequencyToggle() {
       const settings = saved ? JSON.parse(saved) : {};
       settings.rebalanceFrequency = f;
       localStorage.setItem('notification_settings', JSON.stringify(settings));
-      window.location.reload(); // Refresh to update countdown
+      window.location.reload();
     } catch {}
   };
 
@@ -73,7 +74,13 @@ export function Dashboard() {
           <PortfolioTracker />
         </StaggerItem>
         <StaggerItem>
-          <RebalanceFrequencyToggle />
+          <Box bg="bg" borderRadius="8px" p="12px" borderWidth="1px" borderColor="border">
+            <VStack gap="8px" align="stretch">
+              <Text fontSize="sm" fontWeight="semibold" color="fg.muted">⚙️ Inställningar</Text>
+              <RebalanceFrequencyToggle />
+              <PushNotificationToggle />
+            </VStack>
+          </Box>
         </StaggerItem>
       </VStack>
     </StaggerContainer>

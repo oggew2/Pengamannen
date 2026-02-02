@@ -493,6 +493,33 @@ def cleanup_old_data_job():
         db.close()
 
 
+def rebalance_reminder_job():
+    """Send push notifications for upcoming rebalance dates."""
+    logger.info("Checking rebalance reminders")
+    db = SessionLocal()
+    try:
+        from datetime import date
+        from services.push_notifications import notify_rebalance_reminder
+        
+        today = date.today()
+        # Quarterly rebalance dates: March 15, June 15, Sep 15, Dec 15
+        rebalance_months = [3, 6, 9, 12]
+        
+        for month in rebalance_months:
+            rebalance_date = date(today.year if month >= today.month else today.year + 1, month, 15)
+            days_until = (rebalance_date - today).days
+            
+            if days_until in [3, 1, 0]:
+                sent = notify_rebalance_reminder(db, days_until)
+                logger.info(f"Sent {sent} rebalance reminders ({days_until} days until)")
+                break  # Only send one reminder per day
+                
+    except Exception as e:
+        logger.error(f"Rebalance reminder job failed: {e}")
+    finally:
+        db.close()
+
+
 def start_scheduler():
     """Start the APScheduler with configured jobs."""
     settings = get_settings()
@@ -530,6 +557,14 @@ def start_scheduler():
         cleanup_old_data_job,
         CronTrigger(day_of_week="sun", hour=4, minute=0),
         id="weekly_cleanup",
+        replace_existing=True
+    )
+    
+    # Rebalance reminder check daily at 7 AM UTC
+    scheduler.add_job(
+        rebalance_reminder_job,
+        CronTrigger(hour=7, minute=0),
+        id="rebalance_reminder",
         replace_existing=True
     )
     
