@@ -263,13 +263,18 @@ class DataIntegrityChecker:
     def _check_critical_fields(self) -> Dict:
         """Check that critical fields for strategies are populated."""
         from models import Fundamentals
+        import os
         
-        # Fields needed for each strategy
-        momentum_fields = ['market_cap']  # For filtering, F-score uses multiple
-        value_fields = ['pe', 'pb', 'ps', 'ev_ebitda', 'dividend_yield', 'market_cap']
-        quality_fields = ['roe', 'roa', 'roic', 'fcfroe', 'market_cap']
+        # For TradingView/momentum, only market_cap is truly critical
+        # Other fields are nice-to-have but not blocking
+        data_source = os.getenv('DATA_SOURCE', 'tradingview')
         
-        all_critical = set(momentum_fields + value_fields + quality_fields)
+        if data_source == 'tradingview':
+            # Momentum strategy only needs market_cap for filtering
+            critical_fields = ['market_cap']
+        else:
+            # Full field check for Avanza source
+            critical_fields = ['pe', 'pb', 'ps', 'market_cap']
         
         total = self.db.query(Fundamentals).count()
         if total == 0:
@@ -278,7 +283,7 @@ class DataIntegrityChecker:
         field_coverage = {}
         missing_fields = []
         
-        for field in all_critical:
+        for field in critical_fields:
             if hasattr(Fundamentals, field):
                 non_null = self.db.query(Fundamentals).filter(
                     getattr(Fundamentals, field) != None
