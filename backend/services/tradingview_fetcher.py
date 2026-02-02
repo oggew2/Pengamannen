@@ -29,14 +29,14 @@ class TradingViewFetcher:
     FINANCIAL_SECTORS = ["Finance"]
     
     COLUMNS = [
-        "name", "description", "close", "market_cap_basic", "sector", "type",
+        "name", "description", "close", "change", "market_cap_basic", "sector", "type",
         "isin",  # ISIN for CSV import matching
         "price_earnings_ttm", "price_book_ratio", "price_sales_ratio",
         "price_free_cash_flow_ttm", "enterprise_value_ebitda_ttm",
         "net_income_ttm", "total_equity_fq", "total_assets_fq",
         "return_on_invested_capital", "free_cash_flow_ttm",
         "dividends_yield_current",  # Better match to Börslabbet (MAE 0.17 vs 0.36)
-        "Perf.1M", "Perf.3M", "Perf.6M", "Perf.Y",
+        "Perf.W", "Perf.1M", "Perf.3M", "Perf.6M", "Perf.Y",
         "piotroski_f_score_ttm", "piotroski_f_score_fy",
         "net_income_fq", "cash_f_operating_activities_ttm",
         "total_debt_fq", "current_ratio_fq", "gross_margin_ttm",
@@ -149,6 +149,9 @@ class TradingViewFetcher:
                 'name': row.get('description') or row.get('name'),
                 'isin': row.get('isin'),  # ISIN for CSV import matching
                 'close': row.get('close'),  # Current price
+                'change_1d': row.get('change'),  # Daily change %
+                'change_1w': row.get('Perf.W'),  # Weekly change %
+                'change_1m': row.get('Perf.1M'),  # Monthly change %
                 'market_cap': row.get('market_cap_basic'),
                 'sector': row.get('sector'),
                 'stock_type': row.get('type'),

@@ -4518,7 +4518,17 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
         ticker_to_data = {}
     
     def get_stock_data(ticker: str):
-        return ticker_to_data.get(ticker, {})
+        # Try exact match first, then with underscore/space conversion
+        if ticker in ticker_to_data:
+            return ticker_to_data[ticker]
+        # Holdings use space (VOLV B), TradingView uses underscore (VOLV_B)
+        alt = ticker.replace(' ', '_')
+        if alt in ticker_to_data:
+            return ticker_to_data[alt]
+        alt = ticker.replace('_', ' ')
+        if alt in ticker_to_data:
+            return ticker_to_data[alt]
+        return {}
     
     # Calculate current value and collect performance data
     total_value = 0
