@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/auth.py
+# hypothesis_version: 6.141.1
+
+[400, 401, 403, '@', 'Account disabled', 'Email is required', 'Invalid credentials', 'Invalid invite code', 'email', 'invite_code', 'is_admin', 'lax', 'name', 'session_token', 'user_id']

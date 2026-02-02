@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/audit.py
+# hypothesis_version: 6.141.1
+
+['FAILED', 'SUCCESS', 'audit', 'audit.log']

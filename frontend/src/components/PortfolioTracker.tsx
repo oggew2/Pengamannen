@@ -140,10 +140,28 @@ export function PortfolioTracker() {
   
   // Next rebalance countdown
   const { data: rebalanceDates } = useRebalanceDates();
+  
+  // Check if user has monthly rebalance setting
+  const isMonthlyRebalance = useMemo(() => {
+    try {
+      const saved = localStorage.getItem('notification_settings');
+      if (saved) {
+        const settings = JSON.parse(saved);
+        return settings.rebalanceFrequency === 'monthly';
+      }
+    } catch {}
+    return false;
+  }, []);
+  
   const nextRebalance = useMemo(() => {
+    // If monthly, always use local calculation
+    if (isMonthlyRebalance) {
+      return getNextRebalanceDate();
+    }
+    // Otherwise use backend (quarterly)
     const momentum = rebalanceDates?.find(d => d.strategy_name === 'sammansatt_momentum');
     return momentum ? new Date(momentum.next_date) : getNextRebalanceDate();
-  }, [rebalanceDates]);
+  }, [rebalanceDates, isMonthlyRebalance]);
   
   const daysUntil = useMemo(() => {
     const diff = nextRebalance.getTime() - Date.now();

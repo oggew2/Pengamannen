@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/models.py
+# hypothesis_version: 6.141.1
+
+['Default', 'SEK', 'active', 'avanza', 'avanza_csv', 'avanza_imports', 'backtest_results', 'banding_holdings', 'custom_strategies', 'daily_prices', 'data_alerts', 'dividend_events', 'full', 'fundamentals', 'index_prices', 'isin_lookup', 'name', 'portfolio_holdings', 'portfolio_snapshots', 'push_subscriptions', 'quarterly', 'rankings_snapshots', 'rebalance_history', 'regular', 'saved_combinations', 'snapshot_date', 'stock', 'stockholmsborsen', 'stocks', 'strategy_signals', 'sweden', 'sync_logs', 'ticker', 'user_goals', 'user_id', 'user_portfolios', 'user_sessions', 'users', 'users.id', 'watchlist_items', 'watchlists']

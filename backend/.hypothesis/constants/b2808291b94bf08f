@@ -1,0 +1,4 @@
+# file: /Users/ewreosk/Kiro/borslabbet-app/backend/services/csv_import.py
+# hypothesis_version: 6.141.1
+
+[0.0, 1.0, 1.55, 10.5, 11.5, ',', '.', '0', ';', 'Antal', 'BUY', 'Buy', 'Courtage', 'DKK', 'Datum', 'EUR', 'ISIN', 'Instrumentvaluta', 'Kurs', 'Köp', 'NOK', 'SEK', 'SELL', 'Sälj', 'Transaktionsvaluta', 'Typ av transaktion', 'USD', 'Valutakurs', 'Värdepapper', 'avg_price_local', 'avg_price_sek', 'buy', 'currency', 'date', 'fee', 'first_buy_date', 'fx_rate', 'hash', 'isin', 'kop', 'köp', 'name', 'negative_position', 'price_local', 'price_sek', 'salj', 'sell', 'shares', 'sälj', 'ticker', 'total_cost', 'total_cost_local', 'total_fees', 'type', 'warning', '\ufeff']
