@@ -135,6 +135,7 @@ export function PortfolioTracker() {
   const [manualTicker, setManualTicker] = useState('');
   const [manualShares, setManualShares] = useState('');
   const [manualPrice, setManualPrice] = useState('');
+  const [manualDate, setManualDate] = useState('');
   
   // Next rebalance countdown
   const { data: rebalanceDates } = useRebalanceDates();
@@ -361,46 +362,82 @@ export function PortfolioTracker() {
   };
 
   const addManualHolding = () => {
-    const ticker = manualTicker.trim().toUpperCase();
+    // Try to match from rankings first (user may have selected from dropdown)
+    const selectedRanking = rankings.find(r => 
+      r.ticker.toUpperCase() === manualTicker.trim().toUpperCase() ||
+      r.name?.toLowerCase().includes(manualTicker.trim().toLowerCase())
+    );
+    
+    const ticker = selectedRanking?.ticker.toUpperCase() || manualTicker.trim().toUpperCase();
     const shares = parseInt(manualShares) || 0;
     const price = parseFloat(manualPrice) || 0;
+    const buyDate = manualDate || new Date().toISOString().split('T')[0];
     
-    if (!ticker || shares <= 0 || price <= 0) return;
-    
-    // Check if already exists
-    if (holdings.some(h => h.ticker === ticker)) {
-      toaster.error({ title: 'Aktien finns redan', description: 'Redigera befintligt innehav istället' });
+    if (!ticker || shares <= 0 || price <= 0) {
+      toaster.error({ title: 'Fyll i alla fält', description: 'Ticker, antal och pris krävs' });
       return;
     }
     
-    // Find ISIN from rankings if available
-    const rankingMatch = rankings.find(r => r.ticker.toUpperCase() === ticker);
-    
-    const newHolding: LockedHolding = {
-      ticker,
-      shares,
-      buyPrice: price,
-      buyDate: new Date().toISOString(),
-      rankAtPurchase: rankingMatch?.rank || 0,
-      isin: rankingMatch?.isin,
-      fees: calculateFee(shares * price),
-    };
-    
-    const newHoldings = [...holdings, newHolding];
-    const newHistory = addTransaction({ type: 'BUY', ticker, shares, price, fee: newHolding.fees || 0 });
-    
-    setHoldings(newHoldings);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newHoldings));
-    saveToDatabase(newHoldings, newHistory);
+    // Check if already exists - offer to add to position
+    const existing = holdings.find(h => h.ticker === ticker);
+    if (existing) {
+      // Calculate new average price
+      const totalShares = existing.shares + shares;
+      const totalCost = (existing.shares * existing.buyPrice) + (shares * price);
+      const avgPrice = totalCost / totalShares;
+      
+      const newHoldings = holdings.map(h => 
+        h.ticker === ticker 
+          ? { ...h, shares: totalShares, buyPrice: avgPrice, fees: (h.fees || 0) + calculateFee(shares * price) }
+          : h
+      );
+      const newHistory = addTransaction({ type: 'BUY', ticker, shares, price, fee: calculateFee(shares * price) });
+      
+      setHoldings(newHoldings);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newHoldings));
+      saveToDatabase(newHoldings, newHistory);
+      
+      toaster.success({ 
+        title: `${ticker} uppdaterad`, 
+        description: `+${shares} st, nytt snitt: ${avgPrice.toFixed(2)} kr` 
+      });
+    } else {
+      const newHolding: LockedHolding = {
+        ticker,
+        shares,
+        buyPrice: price,
+        buyDate: new Date(buyDate).toISOString(),
+        rankAtPurchase: selectedRanking?.rank || 0,
+        isin: selectedRanking?.isin,
+        fees: calculateFee(shares * price),
+      };
+      
+      const newHoldings = [...holdings, newHolding];
+      const newHistory = addTransaction({ type: 'BUY', ticker, shares, price, fee: newHolding.fees || 0 });
+      
+      setHoldings(newHoldings);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newHoldings));
+      saveToDatabase(newHoldings, newHistory);
+      
+      toaster.success({ title: `${ticker} tillagd`, description: `${shares} st @ ${price} kr` });
+    }
     
     // Reset form
     setManualTicker('');
     setManualShares('');
     setManualPrice('');
+    setManualDate('');
     setShowAddManual(false);
-    
-    toaster.success({ title: `${ticker} tillagd`, description: `${shares} st @ ${price} kr` });
   };
+
+  // Filter rankings for autocomplete
+  const filteredRankings = useMemo(() => {
+    if (!manualTicker || manualTicker.length < 1) return [];
+    const search = manualTicker.toLowerCase();
+    return rankings
+      .filter(r => r.ticker.toLowerCase().includes(search) || r.name?.toLowerCase().includes(search))
+      .slice(0, 5);
+  }, [manualTicker, rankings]);
 
   const deleteHolding = (ticker: string) => {
     if (!confirm(`Ta bort ${ticker} från portföljen?`)) return;
@@ -909,12 +946,46 @@ export function PortfolioTracker() {
             <Box w="100%" maxW="320px" bg="bg" p="16px" borderRadius="md" borderWidth="1px" borderColor="border">
               <VStack gap="12px" align="stretch">
                 <Text fontWeight="semibold" fontSize="sm">Lägg till innehav</Text>
-                <Input
-                  placeholder="Ticker (t.ex. VOLV B)"
-                  value={manualTicker}
-                  onChange={e => setManualTicker(e.target.value)}
-                  size="sm"
-                />
+                <Box position="relative">
+                  <Input
+                    placeholder="Sök aktie (t.ex. Volvo, VOLV B)"
+                    value={manualTicker}
+                    onChange={e => setManualTicker(e.target.value)}
+                    size="sm"
+                  />
+                  {filteredRankings.length > 0 && (
+                    <Box 
+                      position="absolute" 
+                      top="100%" 
+                      left="0" 
+                      right="0" 
+                      bg="bg" 
+                      borderWidth="1px" 
+                      borderColor="border" 
+                      borderRadius="md" 
+                      mt="2px" 
+                      zIndex="10"
+                      shadow="lg"
+                    >
+                      {filteredRankings.map(r => (
+                        <Box 
+                          key={r.ticker} 
+                          px="12px" 
+                          py="8px" 
+                          cursor="pointer"
+                          _hover={{ bg: 'bg.subtle' }}
+                          onClick={() => setManualTicker(r.ticker)}
+                        >
+                          <HStack justify="space-between">
+                            <Text fontSize="sm" fontWeight="medium">{r.ticker}</Text>
+                            <Text fontSize="xs" color="fg.muted">Rank {r.rank}</Text>
+                          </HStack>
+                          {r.name && <Text fontSize="xs" color="fg.muted">{r.name}</Text>}
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+                </Box>
                 <HStack gap="8px">
                   <Input
                     type="number"
@@ -931,6 +1002,13 @@ export function PortfolioTracker() {
                     size="sm"
                   />
                 </HStack>
+                <Input
+                  type="date"
+                  value={manualDate}
+                  onChange={e => setManualDate(e.target.value)}
+                  size="sm"
+                  max={new Date().toISOString().split('T')[0]}
+                />
                 <HStack gap="8px">
                   <Button size="sm" colorPalette="blue" onClick={addManualHolding} flex="1">
                     Lägg till
@@ -1012,34 +1090,89 @@ export function PortfolioTracker() {
           {/* Manual add form */}
           {showAddManual && (
             <Box bg="bg" borderRadius="md" p="12px" borderWidth="1px" borderColor="border">
-              <HStack gap="8px" flexWrap="wrap">
-                <Input
-                  placeholder="Ticker"
-                  value={manualTicker}
-                  onChange={e => setManualTicker(e.target.value)}
-                  size="sm"
-                  w="100px"
-                />
-                <Input
-                  type="number"
-                  placeholder="Antal"
-                  value={manualShares}
-                  onChange={e => setManualShares(e.target.value)}
-                  size="sm"
-                  w="80px"
-                />
-                <Input
-                  type="number"
-                  placeholder="Pris"
-                  value={manualPrice}
-                  onChange={e => setManualPrice(e.target.value)}
-                  size="sm"
-                  w="80px"
-                />
-                <Button size="sm" colorPalette="blue" onClick={addManualHolding}>
-                  Lägg till
-                </Button>
-              </HStack>
+              <VStack gap="8px" align="stretch">
+                <Box position="relative">
+                  <Input
+                    placeholder="Sök aktie..."
+                    value={manualTicker}
+                    onChange={e => setManualTicker(e.target.value)}
+                    size="sm"
+                  />
+                  {filteredRankings.length > 0 && (
+                    <Box 
+                      position="absolute" 
+                      top="100%" 
+                      left="0" 
+                      right="0" 
+                      bg="bg" 
+                      borderWidth="1px" 
+                      borderColor="border" 
+                      borderRadius="md" 
+                      mt="2px" 
+                      zIndex="10"
+                      shadow="lg"
+                      maxH="200px"
+                      overflowY="auto"
+                    >
+                      {filteredRankings.map(r => (
+                        <Box 
+                          key={r.ticker} 
+                          px="12px" 
+                          py="8px" 
+                          cursor="pointer"
+                          _hover={{ bg: 'bg.subtle' }}
+                          onClick={() => setManualTicker(r.ticker)}
+                        >
+                          <HStack justify="space-between">
+                            <Text fontSize="sm" fontWeight="medium">{r.ticker}</Text>
+                            <Text fontSize="xs" color={r.rank <= 10 ? 'green.400' : r.rank <= 20 ? 'yellow.400' : 'fg.muted'}>
+                              #{r.rank}
+                            </Text>
+                          </HStack>
+                          {r.name && <Text fontSize="xs" color="fg.muted" truncate>{r.name}</Text>}
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+                <HStack gap="8px">
+                  <Input
+                    type="number"
+                    placeholder="Antal"
+                    value={manualShares}
+                    onChange={e => setManualShares(e.target.value)}
+                    size="sm"
+                    flex="1"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Pris (kr)"
+                    value={manualPrice}
+                    onChange={e => setManualPrice(e.target.value)}
+                    size="sm"
+                    flex="1"
+                  />
+                  <Input
+                    type="date"
+                    value={manualDate}
+                    onChange={e => setManualDate(e.target.value)}
+                    size="sm"
+                    flex="1"
+                    max={new Date().toISOString().split('T')[0]}
+                  />
+                </HStack>
+                <HStack gap="8px">
+                  <Button size="sm" colorPalette="blue" onClick={addManualHolding} flex="1">
+                    Lägg till
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowAddManual(false)}>
+                    Avbryt
+                  </Button>
+                </HStack>
+                <Text fontSize="xs" color="fg.muted">
+                  💡 Finns aktien redan? Den läggs till befintligt innehav med nytt snittpris.
+                </Text>
+              </VStack>
             </Box>
           )}
 
