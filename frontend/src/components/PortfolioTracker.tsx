@@ -87,7 +87,6 @@ export function PortfolioTracker() {
   const [transactionHistory, setTransactionHistory] = useState<Transaction[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  const [showPerformance, setShowPerformance] = useState(false);
   const [rebalanceData, setRebalanceData] = useState<{
     sells: RebalanceStock[];
     holds: RebalanceStock[];
@@ -669,6 +668,11 @@ export function PortfolioTracker() {
         </VStack>
       ) : (
         <VStack align="stretch" gap="16px">
+          {/* Performance Overview - always visible when holdings exist */}
+          <Box bg="bg" borderRadius="md" p="12px" borderWidth="1px" borderColor="border">
+            <PerformanceChart />
+          </Box>
+
           {/* Current holdings summary */}
           <HStack gap="24px" flexWrap="wrap" justify="space-between">
             <HStack gap="24px" flexWrap="wrap">
@@ -690,9 +694,6 @@ export function PortfolioTracker() {
               </Box>
             </HStack>
             <HStack gap="4px">
-              <Button size="xs" variant="ghost" onClick={() => setShowPerformance(!showPerformance)}>
-                📊 {showPerformance ? 'Dölj' : 'Översikt'}
-              </Button>
               <Button size="xs" variant="ghost" onClick={() => setShowImport(!showImport)}>
                 📥 {showImport ? 'Dölj' : 'Import'}
               </Button>
@@ -701,13 +702,6 @@ export function PortfolioTracker() {
               </Button>
             </HStack>
           </HStack>
-
-          {/* Performance Overview */}
-          {showPerformance && (
-            <Box bg="bg" borderRadius="md" p="12px" borderWidth="1px" borderColor="border">
-              <PerformanceChart />
-            </Box>
-          )}
 
           {/* CSV Import */}
           {showImport && (

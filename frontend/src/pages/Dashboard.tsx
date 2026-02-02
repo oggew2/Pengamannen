@@ -7,6 +7,7 @@ import { api } from '../api/client';
 import { useStrategies, useRebalanceDates, queryKeys } from '../api/hooks';
 import { AlertsBanner } from '../components/AlertsBanner';
 import { DataIntegrityBanner } from '../components/DataIntegrityBanner';
+import { PerformanceChart } from '../components/PerformanceChart';
 import type { StrategyMeta } from '../types';
 import { tokens } from '../theme/tokens';
 
@@ -184,23 +185,30 @@ export function Dashboard() {
 
       {/* Compact Holdings Preview */}
       {momentumHoldings.length > 0 && (
-        <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="20px">
-          <Flex justify="space-between" align="center" mb="12px">
-            <Text fontSize="md" fontWeight="semibold" color="fg">Dina innehav</Text>
-            <Link to="/strategies/momentum"><Button size="xs" variant="ghost" color="brand.fg">Visa alla</Button></Link>
-          </Flex>
-          <VStack align="stretch" gap="8px">
-            {momentumHoldings.slice(0, 5).map(h => (
-              <Flex key={h.ticker} justify="space-between" align="center">
-                <Text fontSize="sm" color="fg" fontFamily={tokens.fonts.mono}>{h.ticker}</Text>
-                <Text fontSize="sm" color="fg.muted">{h.shares} st @ {h.buyPrice.toFixed(0)} kr</Text>
-              </Flex>
-            ))}
-            {momentumHoldings.length > 5 && (
-              <Text fontSize="xs" color="fg.subtle" textAlign="center">+{momentumHoldings.length - 5} fler innehav</Text>
+        <>
+          {/* Performance Overview */}
+          <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="20px">
+            <PerformanceChart />
+          </Box>
+
+          <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="20px">
+            <Flex justify="space-between" align="center" mb="12px">
+              <Text fontSize="md" fontWeight="semibold" color="fg">Dina innehav</Text>
+              <Link to="/strategies/momentum"><Button size="xs" variant="ghost" color="brand.fg">Visa alla</Button></Link>
+            </Flex>
+            <VStack align="stretch" gap="8px">
+              {momentumHoldings.slice(0, 5).map(h => (
+                <Flex key={h.ticker} justify="space-between" align="center">
+                  <Text fontSize="sm" color="fg" fontFamily={tokens.fonts.mono}>{h.ticker}</Text>
+                  <Text fontSize="sm" color="fg.muted">{h.shares} st @ {h.buyPrice.toFixed(0)} kr</Text>
+                </Flex>
+              ))}
+              {momentumHoldings.length > 5 && (
+                <Text fontSize="xs" color="fg.subtle" textAlign="center">+{momentumHoldings.length - 5} fler innehav</Text>
             )}
           </VStack>
         </Box>
+        </>
       )}
 
       {/* Essential Actions */}
