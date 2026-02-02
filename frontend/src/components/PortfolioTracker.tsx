@@ -188,8 +188,8 @@ export function PortfolioTracker() {
     
     loadHoldings();
     
-    // Load rankings
-    fetch('/v1/strategies/sammansatt_momentum', { credentials: 'include' })
+    // Load Nordic momentum rankings (public endpoint)
+    fetch('/v1/strategies/nordic/momentum')
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (data?.rankings) setRankings(data.rankings.slice(0, 40));
@@ -211,14 +211,14 @@ export function PortfolioTracker() {
     
     const fetchRankings = async () => {
       try {
-        const res = await fetch('/v1/strategies/sammansatt_momentum');
+        const res = await fetch('/v1/strategies/nordic/momentum');
         if (!res.ok) return;
         const data = await res.json();
-        const rankMap = new Map(data.stocks?.map((s: { ticker: string }, i: number) => [s.ticker, i + 1]) || []);
+        const rankMap = new Map(data.rankings?.map((s: { ticker: string; rank: number }) => [s.ticker, s.rank]) || []);
         
         setHoldings(prev => prev.map(h => ({
           ...h,
-          currentRank: (rankMap.get(h.ticker) as number) || 0
+          currentRank: (rankMap.get(h.ticker) as number) || null
         })));
       } catch { /* ignore */ }
     };
