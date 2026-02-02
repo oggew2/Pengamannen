@@ -4453,11 +4453,16 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
     month_ago = today - timedelta(days=30)
     
     def get_price_at_date(ticker: str, d: date):
-        price = db.query(DailyPrice).filter(
-            DailyPrice.ticker == ticker,
-            DailyPrice.date <= d
-        ).order_by(DailyPrice.date.desc()).first()
-        return price.close if price else None
+        # Try multiple ticker formats
+        formats = [ticker, ticker.replace(' ', '_'), ticker.replace(' ', '-'), f"{ticker}.ST"]
+        for fmt in formats:
+            price = db.query(DailyPrice).filter(
+                DailyPrice.ticker == fmt,
+                DailyPrice.date <= d
+            ).order_by(DailyPrice.date.desc()).first()
+            if price:
+                return price.close
+        return None
     
     def get_portfolio_value(d: date):
         total = 0
