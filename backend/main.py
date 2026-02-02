@@ -4523,46 +4523,80 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
         fetcher = TradingViewFetcher()
         stocks_data = fetcher.fetch_nordic(min_market_cap_sek=2e9)
         fx_rates = getattr(fetcher, '_fx_rates', {'EUR': 11.5, 'NOK': 1.0, 'DKK': 1.55, 'SEK': 1.0})
-        ticker_to_currency = {s['ticker']: s.get('currency', 'SEK') for s in stocks_data} if stocks_data else {}
-        ticker_to_price = {s['ticker']: s.get('close', 0) for s in stocks_data} if stocks_data else {}
+        ticker_to_data = {s['ticker']: s for s in stocks_data} if stocks_data else {}
     except:
         fx_rates = {'SEK': 1.0, 'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0}
-        ticker_to_currency = {}
-        ticker_to_price = {}
+        ticker_to_data = {}
     
-    def get_fx_rate(holding: dict):
-        ticker = holding.get('ticker', '')
-        if ticker in ticker_to_currency:
-            currency = ticker_to_currency[ticker]
-            return fx_rates.get(currency, 1.0)
-        return 1.0  # Assume SEK
+    def get_stock_data(ticker: str):
+        return ticker_to_data.get(ticker, {})
     
-    def get_live_price(holding: dict):
-        ticker = holding.get('ticker', '')
-        return ticker_to_price.get(ticker)
-    
-    # Calculate current value using live prices
+    # Calculate current value and collect performance data
     total_value = 0
+    total_value_yesterday = 0
+    performers = []
+    
     for h in holdings:
+        ticker = h.get('ticker', '')
         shares = h.get('shares', 0)
         buy_price = h.get('buyPrice', 0)
-        fx = get_fx_rate(h)
-        live_price = get_live_price(h)
-        if live_price:
-            total_value += shares * live_price * fx
+        
+        stock = get_stock_data(ticker)
+        if stock:
+            price = stock.get('close', 0)
+            currency = stock.get('currency', 'SEK')
+            fx = fx_rates.get(currency, 1.0)
+            value = shares * price * fx
+            total_value += value
+            
+            # Calculate yesterday's value using today's change
+            change_1d = stock.get('change_1d', 0) or 0
+            if change_1d != 0:
+                yesterday_price = price / (1 + change_1d / 100)
+                total_value_yesterday += shares * yesterday_price * fx
+            else:
+                total_value_yesterday += value
+            
+            # Track performer
+            performers.append({'ticker': ticker, 'change_pct': round(change_1d, 2)})
         else:
-            total_value += shares * buy_price  # Fallback to buy price (already in SEK)
+            # Fallback to buy price
+            total_value += shares * buy_price
+            total_value_yesterday += shares * buy_price
     
-    # For daily/weekly/monthly changes, we don't have historical live data
-    # So just show current value with 0% changes
+    # Calculate changes
+    today_change = total_value - total_value_yesterday
+    today_pct = (today_change / total_value_yesterday * 100) if total_value_yesterday > 0 else 0
+    
+    # Get week/month changes from weighted average of holdings
+    week_pct = 0
+    month_pct = 0
+    if total_value > 0:
+        for h in holdings:
+            ticker = h.get('ticker', '')
+            shares = h.get('shares', 0)
+            stock = get_stock_data(ticker)
+            if stock:
+                price = stock.get('close', 0)
+                currency = stock.get('currency', 'SEK')
+                fx = fx_rates.get(currency, 1.0)
+                weight = (shares * price * fx) / total_value
+                week_pct += weight * (stock.get('change_1w', 0) or 0)
+                month_pct += weight * (stock.get('change_1m', 0) or 0)
+    
+    # Best/worst performers
+    performers.sort(key=lambda x: x['change_pct'], reverse=True)
+    best = performers[0] if performers and performers[0]['change_pct'] != 0 else None
+    worst = performers[-1] if performers and performers[-1]['change_pct'] != 0 else None
+    
     return {
         "total_value": round(total_value, 2),
-        "today_change": 0,
-        "today_change_pct": 0,
-        "week_change_pct": 0,
-        "month_change_pct": 0,
-        "best_performer": None,
-        "worst_performer": None,
+        "today_change": round(today_change, 2),
+        "today_change_pct": round(today_pct, 2),
+        "week_change_pct": round(week_pct, 2),
+        "month_change_pct": round(month_pct, 2),
+        "best_performer": best,
+        "worst_performer": worst,
         "holdings_count": len(holdings),
     }
 
