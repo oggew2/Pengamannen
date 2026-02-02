@@ -4270,10 +4270,13 @@ async def import_csv_preview(file: UploadFile = File(...), db: Session = Depends
     }
 
 
+class ImportConfirmRequest(BaseModel):
+    transactions: List[dict]
+    mode: str = "add_new"
+
 @v1_router.post("/portfolio/import-confirm")
 async def import_csv_confirm(
-    transactions: List[dict],
-    mode: str = "add_new",
+    request: ImportConfirmRequest,
     db: Session = Depends(get_db)
 ):
     """
@@ -4285,6 +4288,9 @@ async def import_csv_confirm(
     """
     from models import PortfolioTransactionImported
     from datetime import datetime
+    
+    transactions = request.transactions
+    mode = request.mode
     
     if mode == "replace":
         db.query(PortfolioTransactionImported).delete()

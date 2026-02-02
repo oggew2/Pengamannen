@@ -83,13 +83,14 @@ export function CsvImporter({ onImportComplete, onSyncComplete }: {
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.detail || 'Import failed');
+        throw new Error(typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail) || 'Import failed');
       }
 
       const data: ImportPreview = await res.json();
       setPreview(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to parse CSV');
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg === '[object Object]' ? 'Import failed - check file format' : msg);
     } finally {
       setLoading(false);
     }
