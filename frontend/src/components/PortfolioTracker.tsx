@@ -812,7 +812,7 @@ export function PortfolioTracker() {
                               <Button size="xs" variant="ghost" onClick={() => adjustBuyShares(b.ticker, -1)}>−</Button>
                               <Text minW="50px" textAlign="center">{shares} st</Text>
                               <Button size="xs" variant="ghost" onClick={() => adjustBuyShares(b.ticker, 1)}>+</Button>
-                              <Text color="fg.muted" minW="70px" textAlign="right">{formatSEK(value)}</Text>
+                              <Text color="fg.muted" minW="80px" textAlign="right">{formatPrice(value, b.currency)}</Text>
                             </HStack>
                           </HStack>
                         </Box>
