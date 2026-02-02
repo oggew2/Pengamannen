@@ -187,13 +187,14 @@ export function PortfolioTracker() {
   const saveToDatabase = async (newHoldings: LockedHolding[], newHistory?: Transaction[]) => {
     const historyToSave = newHistory || transactionHistory;
     try {
-      await fetch('/v1/user/momentum-portfolio', {
+      const res = await fetch('/v1/user/momentum-portfolio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ holdings: newHoldings, history: historyToSave })
       });
-    } catch { /* ignore - localStorage is backup */ }
+      if (!res.ok) console.error('Failed to save portfolio:', res.status);
+    } catch (e) { console.error('Failed to save portfolio:', e); }
   };
 
   const addTransaction = (tx: Omit<Transaction, 'date'>) => {
