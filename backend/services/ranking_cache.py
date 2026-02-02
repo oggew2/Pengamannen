@@ -450,6 +450,7 @@ def compute_nordic_momentum(db=None) -> dict:
         results.append({
             'rank': rank,
             'ticker': row['ticker'],
+            'isin': row.get('isin'),  # ISIN for reliable matching
             'name': row['name'],
             'market': row['market'],
             'currency': row['currency'],

@@ -1787,9 +1787,19 @@ def get_momentum_portfolio(request: Request, db: Session = Depends(get_db)):
     try:
         rankings_result = compute_nordic_momentum()
         if 'rankings' in rankings_result:
-            rank_map = {r['ticker']: r['rank'] for r in rankings_result['rankings']}
+            # Build lookup maps - prefer ISIN, fallback to ticker
+            isin_map = {r.get('isin'): r['rank'] for r in rankings_result['rankings'] if r.get('isin')}
+            ticker_map = {r['ticker'].replace('_', ' ').upper(): r['rank'] for r in rankings_result['rankings']}
+            
             for h in holdings:
-                h['currentRank'] = rank_map.get(h.get('ticker'))
+                # Try ISIN first, then normalized ticker
+                rank = None
+                if h.get('isin') and h['isin'] in isin_map:
+                    rank = isin_map[h['isin']]
+                elif h.get('ticker'):
+                    normalized = h['ticker'].replace('_', ' ').upper()
+                    rank = ticker_map.get(normalized)
+                h['currentRank'] = rank
     except:
         pass  # If rankings fail, just return holdings without current ranks
     
@@ -4533,6 +4543,10 @@ def sync_imported_to_holdings(request: Request, db: Session = Depends(get_db)):
     # Convert to holdings format expected by PortfolioTracker
     holdings = []
     unmapped = []
+    
+    # Build reverse ISIN lookup (ticker -> isin)
+    ticker_to_isin = {r.ticker: r.isin for r in db.query(IsinLookup).all()}
+    
     for key, pos in positions.items():
         if pos['shares'] > 0:  # Only include active positions
             # Check if key is ISIN (not a ticker)
@@ -4543,6 +4557,7 @@ def sync_imported_to_holdings(request: Request, db: Session = Depends(get_db)):
             
             holdings.append({
                 'ticker': key,
+                'isin': ticker_to_isin.get(key) or pos.get('isin'),  # Include ISIN for reliable matching
                 'shares': round(pos['shares']),
                 'buyPrice': round(pos['avg_price_sek'], 2),
                 'buyPriceLocal': round(pos.get('avg_price_local', pos['avg_price_sek']), 2),

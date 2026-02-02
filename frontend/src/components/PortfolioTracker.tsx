@@ -10,6 +10,7 @@ import { toaster } from './toaster';
 
 interface LockedHolding {
   ticker: string;
+  isin?: string;  // ISIN for reliable matching
   shares: number;
   buyPrice: number;  // In SEK
   buyPriceLocal?: number;  // In original currency
@@ -215,16 +216,21 @@ export function PortfolioTracker() {
         if (!res.ok) return;
         const data = await res.json();
         
-        // Normalize ticker for matching (SAAB_B -> SAAB B, etc)
+        // Build lookup maps - prefer ISIN, fallback to normalized ticker
         const normalize = (t: string) => t.replace(/_/g, ' ').toUpperCase();
-        const rankMap = new Map(
-          data.rankings?.map((s: { ticker: string; rank: number }) => [normalize(s.ticker), s.rank]) || []
-        );
+        const isinMap = new Map<string, number>();
+        const tickerMap = new Map<string, number>();
         
-        setHoldings(prev => prev.map(h => ({
-          ...h,
-          currentRank: (rankMap.get(normalize(h.ticker)) as number) || null
-        })));
+        for (const r of data.rankings || []) {
+          if (r.isin) isinMap.set(r.isin, r.rank);
+          tickerMap.set(normalize(r.ticker), r.rank);
+        }
+        
+        setHoldings(prev => prev.map(h => {
+          // Try ISIN first (most reliable), then normalized ticker
+          const rank = (h.isin && isinMap.get(h.isin)) || tickerMap.get(normalize(h.ticker)) || null;
+          return { ...h, currentRank: rank };
+        }));
       } catch { /* ignore */ }
     };
     
