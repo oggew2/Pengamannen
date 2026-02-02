@@ -214,11 +214,16 @@ export function PortfolioTracker() {
         const res = await fetch('/v1/strategies/nordic/momentum');
         if (!res.ok) return;
         const data = await res.json();
-        const rankMap = new Map(data.rankings?.map((s: { ticker: string; rank: number }) => [s.ticker, s.rank]) || []);
+        
+        // Normalize ticker for matching (SAAB_B -> SAAB B, etc)
+        const normalize = (t: string) => t.replace(/_/g, ' ').toUpperCase();
+        const rankMap = new Map(
+          data.rankings?.map((s: { ticker: string; rank: number }) => [normalize(s.ticker), s.rank]) || []
+        );
         
         setHoldings(prev => prev.map(h => ({
           ...h,
-          currentRank: (rankMap.get(h.ticker) as number) || null
+          currentRank: (rankMap.get(normalize(h.ticker)) as number) || null
         })));
       } catch { /* ignore */ }
     };
