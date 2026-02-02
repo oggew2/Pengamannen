@@ -912,168 +912,109 @@ export function PortfolioTracker() {
       </Box>
 
       {holdings.length === 0 ? (
-        <VStack gap="24px" py="40px" textAlign="center">
-          {/* Animated chart illustration */}
-          <Box position="relative" w="120px" h="80px">
-            <svg viewBox="0 0 120 80" fill="none">
-              <path d="M10 60 L30 45 L50 50 L70 30 L90 35 L110 15" stroke="#3B82F6" strokeWidth="3" strokeLinecap="round" opacity="0.3">
-                <animate attributeName="opacity" values="0.3;0.6;0.3" dur="2s" repeatCount="indefinite" />
-              </path>
-              <path d="M10 60 L30 45 L50 50 L70 30 L90 35 L110 15" stroke="#3B82F6" strokeWidth="3" strokeLinecap="round" strokeDasharray="200" strokeDashoffset="200">
-                <animate attributeName="stroke-dashoffset" from="200" to="0" dur="1.5s" fill="freeze" />
-              </path>
-              <circle cx="110" cy="15" r="4" fill="#10B981">
-                <animate attributeName="r" values="4;6;4" dur="1s" repeatCount="indefinite" />
-              </circle>
-            </svg>
-          </Box>
-          
-          <VStack gap="8px">
-            <Text fontSize="xl" fontWeight="semibold" color="fg">Välkommen till Börslabbet</Text>
-            <Text color="fg.muted" maxW="360px" fontSize="sm">
-              Spåra din momentumportfölj och få smarta ombalanseringsförslag baserat på Börslabbets beprövade strategi.
-            </Text>
-          </VStack>
-          
-          <VStack gap="12px" w="100%" maxW="320px">
-            <Button 
-              size="lg" 
-              colorPalette="blue"
-              w="100%"
-              onClick={() => setShowImport(true)}
-              _hover={{ transform: 'translateY(-2px)', shadow: 'lg' }}
-              transition="all 0.2s"
-            >
-              📥 Importera från Avanza
-            </Button>
-            
-            <HStack gap="8px" color="fg.subtle" fontSize="xs">
-              <Text>1. Logga in på Avanza</Text>
-              <Text>→</Text>
-              <Text>2. Transaktioner</Text>
-              <Text>→</Text>
-              <Text>3. Exportera CSV</Text>
+        <Box 
+          bg="bg" 
+          borderRadius="8px" 
+          borderWidth="1px" 
+          borderColor={showImport ? 'blue.500' : 'border'}
+          overflow="hidden"
+          onDragOver={(e) => { e.preventDefault(); setShowImport(true); }}
+          onDrop={(e) => { e.preventDefault(); setShowImport(true); }}
+        >
+          {/* Collapsible header */}
+          <HStack 
+            justify="space-between" 
+            p="12px" 
+            cursor="pointer" 
+            onClick={() => setShowImport(!showImport)}
+            _hover={{ bg: 'bg.subtle' }}
+          >
+            <HStack gap="8px">
+              <Text fontSize="sm" fontWeight="semibold">📊 Börja spåra din portfölj</Text>
             </HStack>
-            
-            <Text color="fg.muted" fontSize="xs">eller</Text>
-            
-            <Button 
-              size="md" 
-              variant="outline"
-              w="100%"
-              onClick={() => setShowAddManual(true)}
-            >
-              ✏️ Lägg till manuellt
-            </Button>
-          </VStack>
+            <Text fontSize="xs" color="fg.muted">{showImport ? '▲' : '▼'}</Text>
+          </HStack>
           
-          {/* Manual add form */}
-          {showAddManual && (
-            <Box w="100%" maxW="320px" bg="bg" p="16px" borderRadius="md" borderWidth="1px" borderColor="border">
-              <VStack gap="12px" align="stretch">
-                <Text fontWeight="semibold" fontSize="sm">Lägg till innehav</Text>
-                <Box position="relative">
-                  <Input
-                    placeholder="Sök aktie (t.ex. Volvo, VOLV B)"
-                    value={manualTicker}
-                    onChange={e => { setManualTicker(e.target.value); setShowAutocomplete(true); }}
-                    onFocus={() => setShowAutocomplete(true)}
-                    size="sm"
-                  />
-                  {filteredRankings.length > 0 && (
-                    <Box 
-                      position="absolute" 
-                      top="100%" 
-                      left="0" 
-                      right="0" 
-                      bg="bg" 
-                      borderWidth="1px" 
-                      borderColor="border" 
-                      borderRadius="md" 
-                      mt="2px" 
-                      zIndex="10"
-                      shadow="lg"
-                    >
-                      {filteredRankings.map(r => (
-                        <Box 
-                          key={r.ticker} 
-                          px="12px" 
-                          py="8px" 
-                          cursor="pointer"
-                          _hover={{ bg: 'bg.subtle' }}
-                          onClick={() => selectStock(r.ticker)}
-                        >
-                          <HStack justify="space-between">
-                            <Text fontSize="sm" fontWeight="medium">{r.ticker}</Text>
-                            <Text fontSize="xs" color="fg.muted">Rank {r.rank}</Text>
-                          </HStack>
-                          {r.name && <Text fontSize="xs" color="fg.muted">{r.name}</Text>}
-                        </Box>
-                      ))}
-                    </Box>
-                  )}
-                </Box>
-                <HStack gap="8px">
-                  <Input
-                    type="number"
-                    placeholder="Antal"
-                    value={manualShares}
-                    onChange={e => setManualShares(e.target.value)}
-                    size="sm"
-                  />
-                  <Input
-                    type="number"
-                    placeholder="Pris (kr)"
-                    value={manualPrice}
-                    onChange={e => setManualPrice(e.target.value)}
-                    size="sm"
-                  />
-                </HStack>
-                <Input
-                  type="date"
-                  value={manualDate}
-                  onChange={e => setManualDate(e.target.value)}
-                  size="sm"
-                  max={new Date().toISOString().split('T')[0]}
+          {showImport && (
+            <Box p="16px" pt="0">
+              <VStack gap="16px" align="stretch">
+                <Text color="fg.muted" fontSize="sm">
+                  Dra och släpp din Avanza CSV-fil här, eller använd knapparna nedan.
+                </Text>
+                
+                <CsvImporter 
+                  onImportComplete={() => {}}
+                  onSyncComplete={(newHoldings) => {
+                    const holdings: LockedHolding[] = newHoldings.map(h => ({
+                      ticker: h.ticker,
+                      shares: h.shares,
+                      buyPrice: h.buyPrice,
+                      buyDate: new Date().toISOString(),
+                      rankAtPurchase: 0,
+                    }));
+                    setHoldings(holdings);
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(holdings));
+                    saveToDatabase(holdings, []);
+                    setShowImport(false);
+                    toaster.success({
+                      title: '🎉 Portfölj importerad!',
+                      description: `${holdings.length} innehav tillagda`,
+                    });
+                  }}
                 />
-                <HStack gap="8px">
-                  <Button size="sm" colorPalette="blue" onClick={addManualHolding} flex="1">
-                    Lägg till
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setShowAddManual(false)}>
-                    Avbryt
-                  </Button>
+                
+                <HStack gap="8px" justify="center">
+                  <Text color="fg.muted" fontSize="xs">eller</Text>
                 </HStack>
+                
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => setShowAddManual(true)}
+                >
+                  ✏️ Lägg till manuellt
+                </Button>
+                
+                {/* Manual add form */}
+                {showAddManual && (
+                  <Box bg="bg.subtle" p="12px" borderRadius="md">
+                    <VStack gap="8px" align="stretch">
+                      <Box position="relative">
+                        <Input
+                          placeholder="Sök aktie..."
+                          value={manualTicker}
+                          onChange={e => { setManualTicker(e.target.value); setShowAutocomplete(true); }}
+                          onFocus={() => setShowAutocomplete(true)}
+                          size="sm"
+                        />
+                        {filteredRankings.length > 0 && (
+                          <Box position="absolute" top="100%" left="0" right="0" bg="bg" borderWidth="1px" borderColor="border" borderRadius="md" mt="2px" zIndex="10" shadow="lg">
+                            {filteredRankings.map(r => (
+                              <Box key={r.ticker} px="12px" py="8px" cursor="pointer" _hover={{ bg: 'bg.subtle' }} onClick={() => selectStock(r.ticker)}>
+                                <HStack justify="space-between">
+                                  <Text fontSize="sm" fontWeight="medium">{r.ticker}</Text>
+                                  <Text fontSize="xs" color="fg.muted">#{r.rank}</Text>
+                                </HStack>
+                              </Box>
+                            ))}
+                          </Box>
+                        )}
+                      </Box>
+                      <HStack gap="8px">
+                        <Input type="number" placeholder="Antal" value={manualShares} onChange={e => setManualShares(e.target.value)} size="sm" flex="1" />
+                        <Input type="number" placeholder="Pris" value={manualPrice} onChange={e => setManualPrice(e.target.value)} size="sm" flex="1" />
+                      </HStack>
+                      <HStack gap="8px">
+                        <Button size="sm" colorPalette="blue" onClick={addManualHolding} flex="1">Lägg till</Button>
+                        <Button size="sm" variant="ghost" onClick={() => setShowAddManual(false)}>Avbryt</Button>
+                      </HStack>
+                    </VStack>
+                  </Box>
+                )}
               </VStack>
             </Box>
           )}
-          
-          {showImport && (
-            <Box w="100%" mt="16px">
-              <CsvImporter 
-                onImportComplete={() => {}}
-                onSyncComplete={(newHoldings) => {
-                  const holdings: LockedHolding[] = newHoldings.map(h => ({
-                    ticker: h.ticker,
-                    shares: h.shares,
-                    buyPrice: h.buyPrice,
-                    buyDate: new Date().toISOString(),
-                    rankAtPurchase: 0,
-                  }));
-                  setHoldings(holdings);
-                  localStorage.setItem(STORAGE_KEY, JSON.stringify(holdings));
-                  setShowImport(false);
-                  
-                  // Welcome toast
-                  toaster.success({
-                    title: '🎉 Portfölj importerad!',
-                    description: `${holdings.length} innehav tillagda`,
-                  });
-                }}
-              />
-            </Box>
-          )}
-        </VStack>
+        </Box>
       ) : (
         <VStack align="stretch" gap="16px">
           {/* Performance Overview - always visible when holdings exist */}
