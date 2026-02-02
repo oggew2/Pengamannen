@@ -4297,6 +4297,7 @@ class ImportConfirmRequest(BaseModel):
 
 @v1_router.post("/portfolio/import-confirm")
 async def import_csv_confirm(
+    http_request: Request,
     request: ImportConfirmRequest,
     db: Session = Depends(get_db)
 ):
@@ -4308,23 +4309,28 @@ async def import_csv_confirm(
     - add_new: Skip duplicates, add new only
     """
     from models import PortfolioTransactionImported
+    from services.auth import require_auth
     from datetime import datetime
+    
+    user = require_auth(http_request, db)
     
     transactions = request.transactions
     mode = request.mode
     
     if mode == "replace":
-        db.query(PortfolioTransactionImported).delete()
+        db.query(PortfolioTransactionImported).filter(PortfolioTransactionImported.user_id == user.id).delete()
     
     imported = 0
     for txn in transactions:
-        # Skip if hash already exists
+        # Skip if hash already exists for this user
         if db.query(PortfolioTransactionImported).filter(
-            PortfolioTransactionImported.hash == txn.get('hash')
+            PortfolioTransactionImported.hash == txn.get('hash'),
+            PortfolioTransactionImported.user_id == user.id
         ).first():
             continue
         
         record = PortfolioTransactionImported(
+            user_id=user.id,
             date=datetime.strptime(txn['date'], '%Y-%m-%d').date() if txn.get('date') else None,
             ticker=txn.get('ticker'),
             isin=txn.get('isin'),
@@ -4348,6 +4354,7 @@ async def import_csv_confirm(
 
 @v1_router.get("/portfolio/transactions")
 def get_portfolio_transactions(
+    request: Request,
     ticker: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
@@ -4355,9 +4362,14 @@ def get_portfolio_transactions(
 ):
     """Get imported transactions with optional filters."""
     from models import PortfolioTransactionImported
+    from services.auth import get_user_from_cookie
     from datetime import datetime
     
-    query = db.query(PortfolioTransactionImported)
+    user = get_user_from_cookie(request, db)
+    if not user:
+        return {"transactions": [], "count": 0}
+    
+    query = db.query(PortfolioTransactionImported).filter(PortfolioTransactionImported.user_id == user.id)
     
     if ticker:
         query = query.filter(PortfolioTransactionImported.ticker == ticker)
@@ -4389,13 +4401,18 @@ def get_portfolio_transactions(
 
 
 @v1_router.get("/portfolio/daily-stats")
-def get_portfolio_daily_stats(db: Session = Depends(get_db)):
+def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
     """Get daily portfolio stats for dashboard card."""
     from models import PortfolioTransactionImported, DailyPrice, IsinLookup
     from services.csv_import import calculate_positions
+    from services.auth import get_user_from_cookie
     from datetime import date, timedelta
     
-    transactions = db.query(PortfolioTransactionImported).all()
+    user = get_user_from_cookie(request, db)
+    if not user:
+        return {"total_value": 0, "today_change": 0, "today_change_pct": 0, "week_change_pct": 0, "month_change_pct": 0, "best_performer": None, "worst_performer": None}
+    
+    transactions = db.query(PortfolioTransactionImported).filter(PortfolioTransactionImported.user_id == user.id).all()
     if not transactions:
         return {"total_value": 0, "today_change": 0, "today_change_pct": 0, "week_change_pct": 0, "month_change_pct": 0, "best_performer": None, "worst_performer": None}
     
@@ -4462,12 +4479,17 @@ def get_portfolio_daily_stats(db: Session = Depends(get_db)):
 
 
 @v1_router.get("/portfolio/achievements")
-def get_portfolio_achievements(db: Session = Depends(get_db)):
+def get_portfolio_achievements(request: Request, db: Session = Depends(get_db)):
     """Get user achievements based on portfolio activity."""
     from models import PortfolioTransactionImported
     from services.csv_import import calculate_positions
+    from services.auth import get_user_from_cookie
     
-    transactions = db.query(PortfolioTransactionImported).all()
+    user = get_user_from_cookie(request, db)
+    if not user:
+        return {"unlocked": [], "progress": {}, "streak": 0}
+    
+    transactions = db.query(PortfolioTransactionImported).filter(PortfolioTransactionImported.user_id == user.id).all()
     unlocked = []
     progress = {}
     
@@ -4520,6 +4542,7 @@ def get_portfolio_achievements(db: Session = Depends(get_db)):
 
 @v1_router.get("/portfolio/performance")
 def get_portfolio_performance_data(
+    request: Request,
     period: str = "1Y",
     db: Session = Depends(get_db)
 ):
@@ -4530,11 +4553,18 @@ def get_portfolio_performance_data(
     """
     from models import PortfolioTransactionImported, DailyPrice
     from services.csv_import import calculate_positions
+    from services.auth import get_user_from_cookie
     from datetime import datetime, timedelta, date
     from sqlalchemy import func
     
-    # Get all transactions
-    transactions = db.query(PortfolioTransactionImported).order_by(
+    user = get_user_from_cookie(request, db)
+    if not user:
+        return {"data_points": [], "summary": None, "message": "Not logged in"}
+    
+    # Get all transactions for this user
+    transactions = db.query(PortfolioTransactionImported).filter(
+        PortfolioTransactionImported.user_id == user.id
+    ).order_by(
         PortfolioTransactionImported.date
     ).all()
     
@@ -4752,8 +4782,10 @@ def sync_imported_to_holdings(request: Request, db: Session = Depends(get_db)):
     
     user = require_auth(request, db)
     
-    # Get all imported transactions
-    transactions = db.query(PortfolioTransactionImported).order_by(
+    # Get all imported transactions for this user
+    transactions = db.query(PortfolioTransactionImported).filter(
+        PortfolioTransactionImported.user_id == user.id
+    ).order_by(
         PortfolioTransactionImported.date
     ).all()
     
