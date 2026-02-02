@@ -904,7 +904,19 @@ def calculate_rebalance_with_banding(
         name = name_lookup.get(ticker, '')
         currency = currency_lookup.get(ticker, 'SEK')
         
-        if rank is None:
+        # In add_only mode (sell_threshold >= 9999), keep everything
+        if sell_threshold >= 9999:
+            hold.append({
+                'ticker': ticker,
+                'name': name,
+                'shares': shares,
+                'price': price,
+                'value': value,
+                'currency': currency,
+                'rank': rank,
+            })
+            current_value += value
+        elif rank is None:
             # Stock not in universe - sell
             sell.append({
                 'ticker': ticker,
@@ -1004,19 +1016,32 @@ def calculate_rebalance_with_banding(
                 total_cash -= value
                 slots_to_fill -= 1
     
-    # Calculate final portfolio
+    # Calculate final portfolio with drift analysis
     final_portfolio = []
     total_value = current_value + sum(b['value'] for b in buy)
+    target_weight = 100.0 / len(hold) if hold else 10.0  # Equal weight target
     
+    drift_analysis = []
     for h in hold:
         weight = (h['value'] / total_value * 100) if total_value > 0 else 0
-        final_portfolio.append({**h, 'action': 'HOLD', 'weight': round(weight, 1)})
+        drift = weight - target_weight
+        drift_analysis.append({
+            'ticker': h['ticker'],
+            'current_weight': round(weight, 1),
+            'target_weight': round(target_weight, 1),
+            'drift': round(drift, 1),
+            'value': h['value'],
+        })
+        final_portfolio.append({**h, 'action': 'HOLD', 'weight': round(weight, 1), 'drift': round(drift, 1)})
     
     for b in buy:
         weight = (b['value'] / total_value * 100) if total_value > 0 else 0
-        final_portfolio.append({**b, 'action': 'BUY', 'weight': round(weight, 1)})
+        final_portfolio.append({**b, 'action': 'BUY', 'weight': round(weight, 1), 'drift': 0})
     
     final_portfolio.sort(key=lambda x: x.get('rank') or 999)
+    
+    # Calculate max drift for alerts
+    max_drift = max(abs(d['drift']) for d in drift_analysis) if drift_analysis else 0
     
     return {
         'mode': 'banding',
@@ -1025,6 +1050,8 @@ def calculate_rebalance_with_banding(
         'sell': sell,
         'buy': buy,
         'final_portfolio': final_portfolio,
+        'drift_analysis': drift_analysis,
+        'max_drift': round(max_drift, 1),
         'summary': {
             'stocks_held': len(hold),
             'stocks_sold': len(sell),

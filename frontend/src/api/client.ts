@@ -53,8 +53,8 @@ export const api = {
     postJson<AllocationResponse>('/strategies/nordic/momentum/allocate', { amount, excluded_tickers: excludedTickers || [], force_include_tickers: forceIncludeTickers || [] }),
   
   // Nordic rebalance (banding mode)
-  calculateRebalance: (holdings: { ticker: string; shares: number }[], newInvestment: number) =>
-    postJson<RebalanceResponse>('/strategies/nordic/momentum/rebalance', { holdings, new_investment: newInvestment }),
+  calculateRebalance: (holdings: { ticker: string; shares: number }[], newInvestment: number, mode: 'full' | 'add_only' | 'fix_drift' = 'full') =>
+    postJson<RebalanceResponse>('/strategies/nordic/momentum/rebalance', { holdings, new_investment: newInvestment, mode }),
 };
 
 // Allocation types
@@ -118,12 +118,14 @@ export interface RebalanceBuy {
 }
 
 export interface RebalanceResponse {
-  mode: 'banding';
+  mode: 'banding' | 'full' | 'add_only' | 'fix_drift';
   current_holdings_count: number;
   hold: RebalanceHolding[];
   sell: RebalanceSell[];
   buy: RebalanceBuy[];
-  final_portfolio: Array<RebalanceHolding & { action: 'HOLD' | 'BUY'; weight: number }>;
+  final_portfolio: Array<RebalanceHolding & { action: 'HOLD' | 'BUY'; weight: number; drift?: number }>;
+  drift_analysis?: Array<{ ticker: string; current_weight: number; target_weight: number; drift: number; value: number }>;
+  max_drift?: number;
   summary: {
     stocks_held: number;
     stocks_sold: number;

@@ -9,6 +9,7 @@ interface LockedHolding {
   buyPrice: number;
   buyDate: string;
   rankAtPurchase: number;
+  currentRank?: number | null;  // Dynamic rank from API
 }
 
 interface RebalanceStock {
@@ -80,6 +81,7 @@ export function PortfolioTracker() {
   const [lastChecked, setLastChecked] = useState<string | null>(null);
   const [executedTrades, setExecutedTrades] = useState<{ sells: string[]; buys: string[] }>({ sells: [], buys: [] });
   const [newCapital, setNewCapital] = useState<string>('');
+  const [rebalanceMode, setRebalanceMode] = useState<'full' | 'add_only' | 'fix_drift'>('full');
   const [buyAdjustments, setBuyAdjustments] = useState<Record<string, number>>({});
   
   // Next rebalance countdown
@@ -95,6 +97,21 @@ export function PortfolioTracker() {
   }, [nextRebalance]);
   
   const showVolumeWarning = isHighVolumeWarning();
+
+  // Calculate drift for each holding (based on buy price, not current price)
+  const driftData = useMemo(() => {
+    if (holdings.length === 0) return { holdings: [], maxDrift: 0 };
+    const total = holdings.reduce((sum, h) => sum + h.shares * h.buyPrice, 0);
+    const targetWeight = 100 / holdings.length;
+    const result = holdings.map(h => {
+      const value = h.shares * h.buyPrice;
+      const weight = total > 0 ? (value / total) * 100 : 0;
+      const drift = weight - targetWeight;
+      return { ticker: h.ticker, weight, drift };
+    });
+    const maxDrift = Math.max(...result.map(d => Math.abs(d.drift)));
+    return { holdings: result, maxDrift };
+  }, [holdings]);
 
   // Load holdings from database (with localStorage fallback)
   useEffect(() => {
@@ -164,7 +181,7 @@ export function PortfolioTracker() {
     try {
       const holdingsForApi = holdings.map(h => ({ ticker: h.ticker, shares: h.shares }));
       const newInvestment = parseFloat(newCapital) || 0;
-      const res: RebalanceResponse = await api.calculateRebalance(holdingsForApi, newInvestment);
+      const res: RebalanceResponse = await api.calculateRebalance(holdingsForApi, newInvestment, rebalanceMode);
       
       const sells: RebalanceStock[] = res.sell.map(s => ({
         ticker: s.ticker,
@@ -328,23 +345,80 @@ export function PortfolioTracker() {
           {holdings.length > 0 && <Text fontSize="xs" color="green.400" title="Synkad till ditt konto">☁️</Text>}
         </HStack>
         {holdings.length > 0 && (
-          <HStack gap="8px">
-            <Input
-              type="number"
-              placeholder="Nytt kapital"
-              value={newCapital}
-              onChange={e => setNewCapital(e.target.value)}
-              size="xs"
-              width="100px"
-              bg="bg"
-            />
-            <Button size="xs" variant="outline" colorPalette="blue" onClick={checkRebalance} loading={loading}>
-              🔄 Kolla
-            </Button>
-            <Button size="xs" variant="ghost" colorPalette="red" onClick={clearHoldings}>
-              Rensa
-            </Button>
-          </HStack>
+          <VStack gap="8px" align="flex-end">
+            <HStack gap="8px">
+              <Input
+                type="number"
+                placeholder="Nytt kapital (SEK)"
+                value={newCapital}
+                onChange={e => setNewCapital(e.target.value)}
+                size="xs"
+                width="120px"
+                bg="bg"
+              />
+              <Button size="xs" variant="solid" colorPalette="blue" onClick={checkRebalance} loading={loading}>
+                🔄 Kolla ombalansering
+              </Button>
+              <Button size="xs" variant="ghost" colorPalette="red" onClick={clearHoldings}>
+                Rensa
+              </Button>
+            </HStack>
+            {/* Segmented control for rebalance mode */}
+            <HStack 
+              gap="0" 
+              bg="bg" 
+              borderRadius="md" 
+              borderWidth="1px" 
+              borderColor="border"
+              overflow="hidden"
+            >
+              <Box
+                px="12px"
+                py="4px"
+                bg={rebalanceMode === 'full' ? 'blue.600' : 'transparent'}
+                color={rebalanceMode === 'full' ? 'white' : 'fg.muted'}
+                fontWeight={rebalanceMode === 'full' ? 'semibold' : 'normal'}
+                fontSize="xs"
+                cursor="pointer"
+                onClick={() => setRebalanceMode('full')}
+                title="Sälj aktier under rank 20, köp nya topp-aktier"
+                _hover={{ bg: rebalanceMode === 'full' ? 'blue.600' : 'bg.subtle' }}
+              >
+                Full ombalansering
+              </Box>
+              <Box
+                px="12px"
+                py="4px"
+                bg={rebalanceMode === 'fix_drift' ? 'blue.600' : 'transparent'}
+                color={rebalanceMode === 'fix_drift' ? 'white' : 'fg.muted'}
+                fontWeight={rebalanceMode === 'fix_drift' ? 'semibold' : 'normal'}
+                fontSize="xs"
+                cursor="pointer"
+                borderLeftWidth="1px"
+                borderRightWidth="1px"
+                borderColor="border"
+                onClick={() => setRebalanceMode('fix_drift')}
+                title="Sälj och återbalansera befintliga (köp inga nya)"
+                _hover={{ bg: rebalanceMode === 'fix_drift' ? 'blue.600' : 'bg.subtle' }}
+              >
+                ⚖️ Fix drift
+              </Box>
+              <Box
+                px="12px"
+                py="4px"
+                bg={rebalanceMode === 'add_only' ? 'blue.600' : 'transparent'}
+                color={rebalanceMode === 'add_only' ? 'white' : 'fg.muted'}
+                fontWeight={rebalanceMode === 'add_only' ? 'semibold' : 'normal'}
+                fontSize="xs"
+                cursor="pointer"
+                onClick={() => setRebalanceMode('add_only')}
+                title="Lägg bara till nya positioner (sälj inget)"
+                _hover={{ bg: rebalanceMode === 'add_only' ? 'blue.600' : 'bg.subtle' }}
+              >
+                + Bara köp
+              </Box>
+            </HStack>
+          </VStack>
         )}
       </HStack>
 
@@ -400,13 +474,36 @@ export function PortfolioTracker() {
 
           {/* Holdings list */}
           <Box fontSize="sm">
+            {driftData.maxDrift > 2 && (
+              <Text fontSize="xs" color="orange.400" mb="8px">
+                ⚠️ Portföljen har driftat {driftData.maxDrift.toFixed(1)}% från målvikt. Överväg "Fix drift".
+              </Text>
+            )}
             <HStack gap="8px" flexWrap="wrap">
-              {holdings.map(h => (
-                <Box key={h.ticker} bg="bg" px="8px" py="4px" borderRadius="md" borderWidth="1px" borderColor="border">
-                  <Text fontWeight="medium">{h.ticker}</Text>
-                  <Text fontSize="xs" color="fg.muted">{h.shares} st · #{h.rankAtPurchase}</Text>
-                </Box>
-              ))}
+              {holdings.map(h => {
+                const rank = h.currentRank ?? h.rankAtPurchase;
+                const isInDanger = rank && rank > 15;
+                const isSellZone = rank && rank > 20;
+                const drift = driftData.holdings.find(d => d.ticker === h.ticker)?.drift ?? 0;
+                const hasDrift = Math.abs(drift) > 2;
+                return (
+                  <Box 
+                    key={h.ticker} 
+                    bg={isSellZone ? 'red.900/20' : isInDanger ? 'orange.900/20' : 'bg'} 
+                    px="8px" 
+                    py="4px" 
+                    borderRadius="md" 
+                    borderWidth="1px" 
+                    borderColor={isSellZone ? 'red.500' : isInDanger ? 'orange.500' : 'border'}
+                  >
+                    <Text fontWeight="medium">{h.ticker}</Text>
+                    <Text fontSize="xs" color={isSellZone ? 'red.400' : isInDanger ? 'orange.400' : 'fg.muted'}>
+                      {h.shares} st · #{rank}{rank !== h.rankAtPurchase && ` (var #${h.rankAtPurchase})`}
+                      {hasDrift && <Text as="span" color={drift > 0 ? 'green.400' : 'red.400'}> ({drift > 0 ? '+' : ''}{drift.toFixed(1)}%)</Text>}
+                    </Text>
+                  </Box>
+                );
+              })}
             </HStack>
           </Box>
 

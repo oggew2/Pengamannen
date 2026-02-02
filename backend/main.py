@@ -683,8 +683,13 @@ def rebalance_nordic_momentum(request: dict, response: Response):
     
     Input: {
         "holdings": [{"ticker": "BITTI", "shares": 100}, ...],
-        "new_investment": 50000
+        "new_investment": 50000,
+        "mode": "full" | "add_only"  // Optional, default "full"
     }
+    
+    Modes:
+    - "full": Standard banding rebalance (sell below rank 20, buy to fill)
+    - "add_only": Only buy new positions with new_investment, don't sell existing
     
     Returns hold/sell/buy recommendations with share counts.
     """
@@ -697,6 +702,7 @@ def rebalance_nordic_momentum(request: dict, response: Response):
     try:
         holdings = request.get('holdings', [])
         new_investment = request.get('new_investment', 0)
+        mode = request.get('mode', 'full')  # 'full', 'add_only', or 'fix_drift'
         
         if not holdings and new_investment <= 0:
             raise HTTPException(status_code=400, detail="Need holdings or new investment")
@@ -709,7 +715,32 @@ def rebalance_nordic_momentum(request: dict, response: Response):
             raise HTTPException(status_code=500, detail="No data available")
         
         df = pd.DataFrame(stocks)
+        
+        # ========== FILTERS (same as compute_nordic_momentum) ==========
+        # 1. Finance sector
         df = df[df['sector'] != 'Finance']
+        
+        # 2. Preference shares
+        df = df[~df['ticker'].str.contains('PREF', case=False, na=False)]
+        
+        # 3. Investment/capital companies
+        def is_investment_company(name):
+            name_lower = name.lower()
+            name_clean = name_lower.replace(' class a', '').replace(' class b', '').replace(' ser. a', '').replace(' ser. b', '').strip()
+            if 'investment ab' in name_lower or 'investment a/s' in name_lower:
+                return True
+            if 'invest ab' in name_lower:
+                return True
+            if name_clean.endswith('capital ab') or name_clean.endswith('capital a/s'):
+                return True
+            return False
+        
+        df = df[~df['name'].apply(is_investment_company)]
+        
+        # 4. Momentum confirmation filter
+        df = df[~((df['perf_3m'] < 0) & (df['perf_6m'] < 0))]
+        
+        # Calculate momentum and apply F-Score filter
         df['momentum'] = (df['perf_3m'].fillna(0) + df['perf_6m'].fillna(0) + df['perf_12m'].fillna(0)) / 3
         df = df[df['piotroski_f_score'].fillna(0) >= 5]
         df = df.sort_values('momentum', ascending=False)
@@ -719,14 +750,89 @@ def rebalance_nordic_momentum(request: dict, response: Response):
         price_lookup = {s['ticker']: s.get('close', 0) for s in stocks}
         currency_lookup = {s['ticker']: s.get('currency', 'SEK') for s in stocks}
         
-        rebalance = calculate_rebalance_with_banding(
-            current_holdings=holdings,
-            new_investment=new_investment,
-            ranked_stocks=ranked_stocks,
-            price_lookup=price_lookup,
-            currency_lookup=currency_lookup,
-        )
+        if mode == 'add_only':
+            # In add_only mode, set sell_threshold very high so nothing gets sold
+            rebalance = calculate_rebalance_with_banding(
+                current_holdings=holdings,
+                new_investment=new_investment,
+                ranked_stocks=ranked_stocks,
+                price_lookup=price_lookup,
+                currency_lookup=currency_lookup,
+                sell_threshold=9999,
+            )
+        elif mode == 'fix_drift':
+            # First get standard rebalance to identify sells
+            rebalance = calculate_rebalance_with_banding(
+                current_holdings=holdings,
+                new_investment=new_investment,
+                ranked_stocks=ranked_stocks,
+                price_lookup=price_lookup,
+                currency_lookup=currency_lookup,
+            )
+            
+            # In fix_drift mode, use sell proceeds + new investment to rebalance existing holdings
+            if rebalance['hold']:
+                sell_proceeds = sum(s['value'] for s in rebalance['sell'])
+                total_cash = new_investment + sell_proceeds
+                
+                if total_cash > 0:
+                    # Calculate target value per holding after sells
+                    hold_value = sum(h['value'] for h in rebalance['hold'])
+                    target_total = hold_value + total_cash
+                    target_per_stock = target_total / len(rebalance['hold'])
+                    
+                    # Calculate buys needed to fix drift (buy underweight holdings)
+                    drift_buys = []
+                    for h in rebalance['hold']:
+                        deficit = target_per_stock - h['value']
+                        if deficit > 100:  # Only buy if deficit > 100 SEK
+                            price = price_lookup.get(h['ticker'], 0)
+                            if price > 0:
+                                shares = int(deficit // price)
+                                if shares > 0:
+                                    drift_buys.append({
+                                        'ticker': h['ticker'],
+                                        'name': h.get('name', ''),
+                                        'rank': h.get('rank'),
+                                        'price': price,
+                                        'shares': shares,
+                                        'value': shares * price,
+                                        'currency': h.get('currency', 'SEK'),
+                                        'reason': 'fix_drift',
+                                    })
+                    
+                    rebalance['buy'] = drift_buys
+                    
+                    # Recalculate final portfolio
+                    final_portfolio = []
+                    new_total = hold_value + sum(b['value'] for b in drift_buys)
+                    target_weight = 100.0 / len(rebalance['hold'])
+                    
+                    for h in rebalance['hold']:
+                        buy_add = next((b['value'] for b in drift_buys if b['ticker'] == h['ticker']), 0)
+                        new_value = h['value'] + buy_add
+                        weight = (new_value / new_total * 100) if new_total > 0 else 0
+                        drift = weight - target_weight
+                        final_portfolio.append({
+                            **h,
+                            'action': 'HOLD' if buy_add == 0 else 'BUY',
+                            'weight': round(weight, 1),
+                            'drift': round(drift, 1),
+                        })
+                    
+                    rebalance['final_portfolio'] = sorted(final_portfolio, key=lambda x: x.get('rank') or 999)
+                    rebalance['summary']['stocks_bought'] = len(drift_buys)
+                    rebalance['summary']['total_cash_used'] = sum(b['value'] for b in drift_buys)
+        else:
+            rebalance = calculate_rebalance_with_banding(
+                current_holdings=holdings,
+                new_investment=new_investment,
+                ranked_stocks=ranked_stocks,
+                price_lookup=price_lookup,
+                currency_lookup=currency_lookup,
+            )
         
+        rebalance['mode'] = mode
         response.headers["Cache-Control"] = "no-cache"
         return rebalance
         
@@ -1676,9 +1782,10 @@ def add_to_watchlist(request: Request, watchlist_id: int, ticker: str, notes: st
 # Momentum Portfolio - persistent storage for locked-in holdings
 @v1_router.get("/user/momentum-portfolio")
 def get_momentum_portfolio(request: Request, db: Session = Depends(get_db)):
-    """Get user's saved momentum portfolio holdings."""
+    """Get user's saved momentum portfolio holdings with current ranks."""
     from services.auth import require_auth
     from models import UserPortfolio
+    from services.ranking_cache import compute_nordic_momentum
     import json
     
     user = require_auth(request, db)
@@ -1696,6 +1803,16 @@ def get_momentum_portfolio(request: Request, db: Session = Depends(get_db)):
         holdings = json.loads(portfolio.holdings)
     except:
         holdings = []
+    
+    # Get current rankings to update ranks dynamically
+    try:
+        rankings_result = compute_nordic_momentum()
+        if 'rankings' in rankings_result:
+            rank_map = {r['ticker']: r['rank'] for r in rankings_result['rankings']}
+            for h in holdings:
+                h['currentRank'] = rank_map.get(h.get('ticker'))
+    except:
+        pass  # If rankings fail, just return holdings without current ranks
     
     return {
         "holdings": holdings,
