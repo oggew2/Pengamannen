@@ -4517,8 +4517,13 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
         isin_to_ticker = {l.isin: l.ticker for l in lookups}
         isin_to_currency = {l.isin: l.currency for l in lookups}
     
-    # Currency conversion rates to SEK
-    fx_rates = {'SEK': 1.0, 'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0, 'USD': 10.5}
+    # Get live FX rates from TradingView fetcher (or use defaults)
+    try:
+        from services.tradingview_fetcher import TradingViewFetcher
+        fetcher = TradingViewFetcher()
+        fx_rates = getattr(fetcher, '_fx_rates', None) or {'SEK': 1.0, 'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0}
+    except:
+        fx_rates = {'SEK': 1.0, 'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0}
     
     def get_fx_rate(holding: dict):
         isin = holding.get('isin')
