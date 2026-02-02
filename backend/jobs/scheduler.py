@@ -494,25 +494,48 @@ def cleanup_old_data_job():
 
 
 def rebalance_reminder_job():
-    """Send push notifications for upcoming rebalance dates."""
+    """Send push notifications for upcoming rebalance dates based on user preferences."""
     logger.info("Checking rebalance reminders")
     db = SessionLocal()
     try:
         from datetime import date
-        from services.push_notifications import notify_rebalance_reminder
+        from models import User, PushSubscription
+        from services.push_notifications import send_to_user
         
         today = date.today()
-        # Quarterly rebalance dates: March 15, June 15, Sep 15, Dec 15
-        rebalance_months = [3, 6, 9, 12]
         
-        for month in rebalance_months:
-            rebalance_date = date(today.year if month >= today.month else today.year + 1, month, 15)
-            days_until = (rebalance_date - today).days
+        # Get all users with push subscriptions
+        users_with_push = db.query(User).join(PushSubscription).distinct().all()
+        
+        for user in users_with_push:
+            freq = user.rebalance_frequency or "quarterly"
+            day = user.rebalance_day or 15
             
-            if days_until in [3, 1, 0]:
-                sent = notify_rebalance_reminder(db, days_until)
-                logger.info(f"Sent {sent} rebalance reminders ({days_until} days until)")
-                break  # Only send one reminder per day
+            # Determine rebalance months
+            if freq == "monthly":
+                months = list(range(1, 13))
+            else:
+                months = [3, 6, 9, 12]
+            
+            # Find next rebalance date for this user
+            for month in months:
+                year = today.year if month >= today.month else today.year + 1
+                rebalance_date = date(year, month, day)
+                if rebalance_date > today:
+                    days_until = (rebalance_date - today).days
+                    
+                    if days_until in [3, 1, 0]:
+                        if days_until == 3:
+                            title, body = "📅 Ombalansering om 3 dagar", f"Dags att förbereda din portfölj ({rebalance_date.strftime('%d %b')})"
+                        elif days_until == 1:
+                            title, body = "⏰ Ombalansering imorgon!", "Glöm inte att ombalansera din portfölj"
+                        else:
+                            title, body = "🔔 Dags att ombalansera!", "Idag är det ombalanseringsdag"
+                        
+                        sent = send_to_user(db, user.id, title, body, "/dashboard")
+                        if sent:
+                            logger.info(f"Sent reminder to user {user.id} ({days_until} days)")
+                    break  # Only check next upcoming date
                 
     except Exception as e:
         logger.error(f"Rebalance reminder job failed: {e}")

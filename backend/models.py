@@ -18,6 +18,8 @@ class User(Base):
     invited_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     invite_code = Column(String, unique=True, nullable=True)  # Code others use to register
     market_filter = Column(String, default="stockholmsborsen")  # stockholmsborsen, first_north, both
+    rebalance_frequency = Column(String, default="quarterly")  # quarterly or monthly
+    rebalance_day = Column(Integer, default=15)  # Day of month (1-28)
     
     @staticmethod
     def hash_password(password: str) -> str:

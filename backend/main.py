@@ -281,8 +281,24 @@ def get_me(request: Request, db: Session = Depends(get_db)):
         "name": user.name,
         "is_admin": user.is_admin,
         "invite_code": user.invite_code,
-        "market_filter": user.market_filter
+        "market_filter": user.market_filter,
+        "rebalance_frequency": user.rebalance_frequency or "quarterly",
+        "rebalance_day": user.rebalance_day or 15,
     }
+
+@v1_router.put("/auth/rebalance-settings")
+def update_rebalance_settings(request: Request, frequency: str = "quarterly", day: int = 15, db: Session = Depends(get_db)):
+    """Update user's rebalance preferences."""
+    from services.auth import require_auth
+    user = require_auth(request, db)
+    if frequency not in ["quarterly", "monthly"]:
+        raise HTTPException(status_code=400, detail="Invalid frequency")
+    if day < 1 or day > 28:
+        raise HTTPException(status_code=400, detail="Day must be 1-28")
+    user.rebalance_frequency = frequency
+    user.rebalance_day = day
+    db.commit()
+    return {"rebalance_frequency": frequency, "rebalance_day": day}
 
 @v1_router.put("/auth/market-filter")
 def update_market_filter(request: Request, market_filter: str, db: Session = Depends(get_db)):

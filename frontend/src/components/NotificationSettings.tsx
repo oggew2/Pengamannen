@@ -47,6 +47,10 @@ export function NotificationSettings() {
     const updated = { ...settings, rebalanceFrequency: freq };
     setSettings(updated);
     localStorage.setItem('notification_settings', JSON.stringify(updated));
+    // Sync to backend for push notifications
+    fetch('/v1/auth/rebalance-settings?frequency=' + freq + '&day=' + updated.rebalanceDay, {
+      method: 'PUT', credentials: 'include'
+    }).catch(() => {});
   };
 
   const setDay = (day: number) => {
@@ -54,6 +58,10 @@ export function NotificationSettings() {
     const updated = { ...settings, rebalanceDay: clamped };
     setSettings(updated);
     localStorage.setItem('notification_settings', JSON.stringify(updated));
+    // Sync to backend for push notifications
+    fetch('/v1/auth/rebalance-settings?frequency=' + updated.rebalanceFrequency + '&day=' + clamped, {
+      method: 'PUT', credentials: 'include'
+    }).catch(() => {});
   };
 
   const options = [
