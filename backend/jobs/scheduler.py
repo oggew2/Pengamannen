@@ -124,6 +124,25 @@ async def tradingview_sync(db, force_refresh: bool = False) -> dict:
             
             updated += 1
         
+        # Save daily prices for portfolio tracking
+        from models import DailyPrice
+        prices_saved = 0
+        for stock_data in stocks:
+            close_price = stock_data.get('close')
+            if not close_price:
+                continue
+            db_ticker = stock_data['db_ticker']
+            # Upsert: update if exists, insert if not
+            existing = db.query(DailyPrice).filter(
+                DailyPrice.ticker == db_ticker,
+                DailyPrice.date == today
+            ).first()
+            if existing:
+                existing.close = close_price
+            else:
+                db.add(DailyPrice(ticker=db_ticker, date=today, close=close_price))
+                prices_saved += 1
+        
         # Update ISIN lookup table for CSV import matching
         from models import IsinLookup
         isin_updated = 0
@@ -175,6 +194,7 @@ async def tradingview_sync(db, force_refresh: bool = False) -> dict:
             "stocks_updated": updated,
             "isin_updated": isin_updated,
             "snapshots_saved": snapshots_saved,
+            "prices_saved": prices_saved,
             "source": "tradingview",
             "duration_seconds": round(elapsed, 2),
             "rankings": rankings_result
