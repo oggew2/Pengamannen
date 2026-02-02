@@ -8,6 +8,7 @@ import { PerformanceChart } from './PerformanceChart';
 import { Confetti, AnimatedNumber, HealthBadge, usePullToRefresh } from './FintechEffects';
 import { InfoTooltip } from './InfoTooltip';
 import { HealthScore } from './HealthScore';
+import { getRebalanceFrequency } from './NotificationSettings';
 import { toaster } from './toaster';
 
 interface LockedHolding {
@@ -47,18 +48,21 @@ interface RebalanceStock {
 const STORAGE_KEY = 'borslabbet_locked_holdings';
 const HISTORY_KEY = 'borslabbet_transaction_history';
 
-// Quarterly momentum rebalance months (mid-month ~15th)
-const REBALANCE_MONTHS = [3, 6, 9, 12];
+// Rebalance months based on frequency setting
+const QUARTERLY_MONTHS = [3, 6, 9, 12];
 
 function getNextRebalanceDate(): Date {
   const now = new Date();
+  const freq = getRebalanceFrequency();
+  const months = freq === 'monthly' ? [1,2,3,4,5,6,7,8,9,10,11,12] : QUARTERLY_MONTHS;
+  
   for (let offset = 0; offset < 12; offset++) {
     const check = new Date(now.getFullYear(), now.getMonth() + offset, 15);
-    if (REBALANCE_MONTHS.includes(check.getMonth() + 1) && check > now) {
+    if (months.includes(check.getMonth() + 1) && check > now) {
       return check;
     }
   }
-  return new Date(now.getFullYear() + 1, 2, 15); // March next year
+  return new Date(now.getFullYear() + 1, 2, 15);
 }
 
 function isHighVolumeWarning(): boolean {
@@ -66,7 +70,7 @@ function isHighVolumeWarning(): boolean {
   const day = now.getDate();
   const month = now.getMonth() + 1;
   // High volume: first/last week of month, or near quarterly rebalance
-  return day <= 5 || day >= 25 || REBALANCE_MONTHS.includes(month);
+  return day <= 5 || day >= 25 || QUARTERLY_MONTHS.includes(month);
 }
 
 function generateICS(nextDate: Date): string {

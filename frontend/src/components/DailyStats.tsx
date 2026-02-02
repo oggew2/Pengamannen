@@ -80,15 +80,8 @@ export function DailyStats() {
             >
               {isPositive ? '+' : ''}{data.today_change.toLocaleString('sv-SE')} kr
             </Text>
-            <Text 
-              fontSize="sm" 
-              color={isPositive ? 'green.400' : 'red.400'}
-              bg={isPositive ? 'green.900' : 'red.900'}
-              px={2}
-              py={0.5}
-              borderRadius="full"
-            >
-              {isPositive ? '↑' : '↓'} {Math.abs(data.today_change_pct).toFixed(2)}%
+            <Text fontSize="xs" color="fg.muted" bg="gray.700" px={2} py={0.5} borderRadius="full">
+              idag
             </Text>
           </HStack>
         </VStack>

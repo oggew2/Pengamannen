@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Box, Text, Button, VStack, HStack, Badge } from '@chakra-ui/react';
 
 interface PerformanceSummary {
@@ -93,15 +93,15 @@ export function PerformanceChart() {
     }
   };
 
-  // Chart scrubbing handler
-  const handleScrub = (e: React.TouchEvent | React.MouseEvent) => {
+  // Chart scrubbing handler - throttled
+  const handleScrub = useCallback((e: React.TouchEvent | React.MouseEvent) => {
     if (!chartRef.current || !data?.chart_data) return;
     const rect = chartRef.current.getBoundingClientRect();
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const x = (clientX - rect.left) / rect.width;
     const idx = Math.round(x * (data.chart_data.length - 1));
     setScrubIndex(Math.max(0, Math.min(data.chart_data.length - 1, idx)));
-  };
+  }, [data?.chart_data]);
 
   if (loading) return <ChartSkeleton />;
 
@@ -137,6 +137,29 @@ export function PerformanceChart() {
   const { summary, positions } = data;
   const returnPct = showNet ? summary.net_return_pct : summary.gross_return_pct;
   const isPositive = returnPct >= 0;
+
+  // Memoize chart path calculations
+  const chartPaths = useMemo(() => {
+    if (!data.chart_data || data.chart_data.length < 2) return null;
+    const pts = data.chart_data;
+    const vals = pts.map(p => p.value);
+    const min = Math.min(...vals) * 0.98;
+    const max = Math.max(...vals) * 1.02;
+    const range = max - min || 1;
+    
+    const getY = (v: number) => 100 - ((v - min) / range) * 85;
+    const getX = (i: number) => (i / (pts.length - 1)) * 290 + 5;
+    
+    let linePath = `M ${getX(0)},${getY(vals[0])}`;
+    for (let i = 1; i < pts.length; i++) {
+      const x0 = getX(i - 1), y0 = getY(vals[i - 1]);
+      const x1 = getX(i), y1 = getY(vals[i]);
+      const cpx = (x0 + x1) / 2;
+      linePath += ` C ${cpx},${y0} ${cpx},${y1} ${x1},${y1}`;
+    }
+    
+    return { linePath, areaPath: linePath + ` L 295,110 L 5,110 Z`, vals, getX, getY };
+  }, [data.chart_data]);
 
   return (
     <VStack gap={4} align="stretch">
@@ -216,37 +239,18 @@ export function PerformanceChart() {
                 <stop offset="100%" stopColor={isPositive ? '#48BB78' : '#F56565'} stopOpacity="0" />
               </linearGradient>
             </defs>
-            {(() => {
-              const pts = data.chart_data!;
-              const vals = pts.map(p => p.value);
-              const min = Math.min(...vals) * 0.98;
-              const max = Math.max(...vals) * 1.02;
-              const range = max - min || 1;
-              
-              const getY = (v: number) => 100 - ((v - min) / range) * 85;
-              const getX = (i: number) => (i / (pts.length - 1)) * 290 + 5;
-              
-              let linePath = `M ${getX(0)},${getY(vals[0])}`;
-              for (let i = 1; i < pts.length; i++) {
-                const x0 = getX(i - 1), y0 = getY(vals[i - 1]);
-                const x1 = getX(i), y1 = getY(vals[i]);
-                const cpx = (x0 + x1) / 2;
-                linePath += ` C ${cpx},${y0} ${cpx},${y1} ${x1},${y1}`;
-              }
-              
-              const areaPath = linePath + ` L 295,110 L 5,110 Z`;
+            {chartPaths && (() => {
+              const { linePath, areaPath, vals, getX, getY } = chartPaths;
               const color = isPositive ? '#48BB78' : '#F56565';
-              const activeIdx = scrubIndex ?? pts.length - 1;
+              const activeIdx = scrubIndex ?? vals.length - 1;
               
               return (
                 <>
                   <path d={areaPath} fill="url(#areaGradient)" />
                   <path d={linePath} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
-                  {/* Scrub indicator line */}
                   {scrubIndex !== null && (
                     <line x1={getX(scrubIndex)} y1="10" x2={getX(scrubIndex)} y2="110" stroke="white" strokeWidth="1" opacity="0.5" />
                   )}
-                  {/* Active dot */}
                   <circle cx={getX(activeIdx)} cy={getY(vals[activeIdx])} r="5" fill={color} />
                   <circle cx={getX(activeIdx)} cy={getY(vals[activeIdx])} r="10" fill={color} opacity="0.2" />
                 </>

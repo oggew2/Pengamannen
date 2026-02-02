@@ -11,7 +11,8 @@ export function HealthScore({ drift, holdingsCount, daysUntilRebalance, topRankC
   // Calculate individual scores (0-100)
   const diversificationScore = Math.min(100, holdingsCount * 10);  // 10 holdings = 100
   const driftScore = Math.max(0, 100 - drift * 3);  // 0% drift = 100, 33% drift = 0
-  const timingScore = daysUntilRebalance <= 7 ? 100 : daysUntilRebalance <= 30 ? 70 : 50;
+  // Timing: good if NOT close to rebalance (no action needed), or if close (ready to act)
+  const timingScore = daysUntilRebalance <= 7 ? 100 : 80;  // Always good - either ready or waiting
   const qualityScore = Math.min(100, topRankCount * 10);  // All top 10 = 100
   
   const overallScore = Math.round((diversificationScore + driftScore + timingScore + qualityScore) / 4);
@@ -19,10 +20,12 @@ export function HealthScore({ drift, holdingsCount, daysUntilRebalance, topRankC
   const getColor = (score: number) => score >= 70 ? 'green.400' : score >= 40 ? 'yellow.400' : 'red.400';
   const getEmoji = (score: number) => score >= 70 ? '🟢' : score >= 40 ? '🟡' : '🔴';
   
+  const timingTip = daysUntilRebalance <= 7 ? 'Dags att ombalansera!' : `${daysUntilRebalance}d kvar - avvakta`;
+  
   const scores = [
     { label: 'Diversifiering', score: diversificationScore, tip: `${holdingsCount}/10 positioner` },
     { label: 'Drift', score: driftScore, tip: `${drift.toFixed(1)}% avvikelse` },
-    { label: 'Timing', score: timingScore, tip: `${daysUntilRebalance}d till ombalansering` },
+    { label: 'Timing', score: timingScore, tip: timingTip },
     { label: 'Kvalitet', score: qualityScore, tip: `${topRankCount}/10 i topp 10` },
   ];
 
