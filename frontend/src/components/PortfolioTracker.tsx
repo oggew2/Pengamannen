@@ -27,7 +27,8 @@ interface RebalanceStock {
   shares: number;
   currentRank: number | null;
   previousRank: number;
-  value: number;
+  value: number;  // In local currency
+  valueSek: number;  // In SEK
   currency: string;
   action: 'SELL' | 'HOLD' | 'BUY';
   reason?: string;
@@ -288,7 +289,8 @@ export function PortfolioTracker() {
         currentRank: s.rank,
         previousRank: holdings.find(h => h.ticker === s.ticker)?.rankAtPurchase || 0,
         value: s.value,
-        currency: (s as any).currency || 'SEK',
+        valueSek: s.value_sek ?? s.value,
+        currency: s.currency || 'SEK',
         action: 'SELL' as const,
         reason: s.rank && s.rank > 20 ? `Rank sjönk till ${s.rank}` : 'Ej längre i universum'
       }));
@@ -301,7 +303,8 @@ export function PortfolioTracker() {
           currentRank: p.rank,
           previousRank: holdings.find(h => h.ticker === p.ticker)?.rankAtPurchase || 0,
           value: p.value,
-          currency: (p as any).currency || 'SEK',
+          valueSek: p.value_sek ?? p.value,
+          currency: p.currency || 'SEK',
           action: 'HOLD' as const
         }));
 
@@ -313,7 +316,8 @@ export function PortfolioTracker() {
         currentRank: b.rank,
         previousRank: holdings.find(h => h.ticker === b.ticker)?.rankAtPurchase || 0,
         value: b.value,
-        currency: (b as any).currency || 'SEK',
+        valueSek: b.value_sek ?? b.value,
+        currency: b.currency || 'SEK',
         action: 'BUY' as const,
         reason: heldTickers.has(b.ticker) ? 'undervikt' : 'ny'
       }));
@@ -357,13 +361,13 @@ export function PortfolioTracker() {
     const lines: string[] = [];
     if (rebalanceData.sells.length) {
       lines.push('SÄLJ:');
-      rebalanceData.sells.forEach(s => lines.push(`${s.ticker}\t${s.shares} st\t${formatPrice(s.value, s.currency)}`));
+      rebalanceData.sells.forEach(s => lines.push(`${s.ticker}\t${s.shares} st\t${formatPrice(s.value, s.currency, s.valueSek)}`));
     }
     if (rebalanceData.buys.length) {
       lines.push('', 'KÖP:');
       rebalanceData.buys.forEach(b => {
         const tag = b.reason === 'undervikt' ? ' (fyll på)' : '';
-        lines.push(`${b.ticker}${tag}\t${b.shares} st\t${formatPrice(b.value, b.currency)}`);
+        lines.push(`${b.ticker}${tag}\t${b.shares} st\t${formatPrice(b.value, b.currency, b.valueSek)}`);
       });
     }
     try {
@@ -375,10 +379,11 @@ export function PortfolioTracker() {
     }
   };
 
-  const formatPrice = (v: number, currency: string = 'SEK') => {
-    const formatted = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(v);
-    if (currency === 'SEK') return `${formatted} kr`;
-    return `${formatted} ${currency} (≈SEK)`;
+  const formatPrice = (valueLocal: number, currency: string, valueSek: number) => {
+    const sekFormatted = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(valueSek);
+    if (currency === 'SEK') return `${sekFormatted} kr`;
+    const localFormatted = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(valueLocal);
+    return `${localFormatted} ${currency} (≈${sekFormatted} kr)`;
   };
   const formatSEK = (v: number) => new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(v) + ' kr';
   
@@ -801,8 +806,10 @@ export function PortfolioTracker() {
                   <VStack gap="4px" align="stretch">
                     {rebalanceData.buys.map(b => {
                       const shares = getBuyShares(b.ticker, b.shares);
-                      const price = b.shares > 0 ? b.value / b.shares : 0;
-                      const value = shares * price;
+                      const priceLocal = b.shares > 0 ? b.value / b.shares : 0;
+                      const priceSek = b.shares > 0 ? b.valueSek / b.shares : 0;
+                      const valueLocal = shares * priceLocal;
+                      const valueSek = shares * priceSek;
                       const isTopup = b.reason === 'undervikt';
                       return (
                         <Box key={b.ticker} p="8px" bg={executedTrades.buys.includes(b.ticker) ? 'green.900/30' : 'bg'} borderRadius="4px">
@@ -830,7 +837,7 @@ export function PortfolioTracker() {
                               <Button size="xs" variant="ghost" onClick={() => adjustBuyShares(b.ticker, -1)}>−</Button>
                               <Text minW="50px" textAlign="center">{shares} st</Text>
                               <Button size="xs" variant="ghost" onClick={() => adjustBuyShares(b.ticker, 1)}>+</Button>
-                              <Text color="fg.muted" minW="80px" textAlign="right">{formatPrice(value, b.currency)}</Text>
+                              <Text color="fg.muted" minW="80px" textAlign="right">{formatPrice(valueLocal, b.currency, valueSek)}</Text>
                             </HStack>
                           </HStack>
                         </Box>

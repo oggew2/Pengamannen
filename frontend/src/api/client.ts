@@ -100,7 +100,9 @@ export interface RebalanceHolding {
   ticker: string;
   shares: number;
   price: number;
-  value: number;
+  value: number;  // In local currency
+  value_sek?: number;  // In SEK
+  currency?: string;  // EUR, NOK, DKK, SEK
   rank: number | null;
 }
 
@@ -114,7 +116,9 @@ export interface RebalanceBuy {
   rank: number;
   price: number;
   shares: number;
-  value: number;
+  value: number;  // In local currency
+  value_sek?: number;  // In SEK
+  currency?: string;  // EUR, NOK, DKK, SEK
 }
 
 export interface RebalanceResponse {
