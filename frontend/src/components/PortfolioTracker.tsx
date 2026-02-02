@@ -84,8 +84,7 @@ export function PortfolioTracker() {
   const [rebalanceData, setRebalanceData] = useState<{
     sells: RebalanceStock[];
     holds: RebalanceStock[];
-    buys: RebalanceStock[];
-    topups: RebalanceStock[];  // Underweight holdings to top up
+    buys: RebalanceStock[];  // Includes both topups (reason='undervikt') and new (reason='ny')
     summary: string;
     costs?: { courtage: number; spread: number; total: number };
   } | null>(null);
@@ -93,7 +92,7 @@ export function PortfolioTracker() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
-  const [executedTrades, setExecutedTrades] = useState<{ sells: string[]; buys: string[]; topups: string[] }>({ sells: [], buys: [], topups: [] });
+  const [executedTrades, setExecutedTrades] = useState<{ sells: string[]; buys: string[] }>({ sells: [], buys: [] });
   const [newCapital, setNewCapital] = useState<string>('');
   const [rebalanceMode, setRebalanceMode] = useState<'full' | 'add_only' | 'fix_drift'>('full');
   const [buyAdjustments, setBuyAdjustments] = useState<Record<string, number>>({});
@@ -341,9 +340,9 @@ export function PortfolioTracker() {
       const costs = { courtage: Math.round(courtage), spread: Math.round(spread), total: Math.round(courtage + spread) };
 
       console.log('Rebalance result:', { sells: sells.length, holds: holds.length, buys: allBuys.length });
-      setRebalanceData({ sells, holds, buys: allBuys, topups: [], summary, costs });
+      setRebalanceData({ sells, holds, buys: allBuys, summary, costs });
       setBuyAdjustments({});  // Reset adjustments
-      setExecutedTrades({ sells: [], buys: [], topups: [] });
+      setExecutedTrades({ sells: [], buys: [] });
       setLastChecked(new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
       console.error('Rebalance check failed:', err);
@@ -383,7 +382,7 @@ export function PortfolioTracker() {
   };
   const formatSEK = (v: number) => new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 }).format(v) + ' kr';
   
-  const toggleExecuted = (type: 'sells' | 'buys' | 'topups', ticker: string) => {
+  const toggleExecuted = (type: 'sells' | 'buys', ticker: string) => {
     setExecutedTrades(prev => ({
       ...prev,
       [type]: prev[type].includes(ticker)
@@ -394,8 +393,7 @@ export function PortfolioTracker() {
 
   const adjustBuyShares = (ticker: string, delta: number) => {
     setBuyAdjustments(prev => {
-      const base = rebalanceData?.buys.find(b => b.ticker === ticker)?.shares 
-        || rebalanceData?.topups.find(b => b.ticker === ticker)?.shares || 0;
+      const base = rebalanceData?.buys.find(b => b.ticker === ticker)?.shares || 0;
       const current = prev[ticker] ?? base;
       const newVal = Math.max(0, current + delta);
       return { ...prev, [ticker]: newVal };
@@ -468,7 +466,7 @@ export function PortfolioTracker() {
     setHoldings(newHoldings);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newHoldings));
     saveToDatabase(newHoldings, newHistory);
-    setExecutedTrades({ sells: [], buys: [], topups: [] });
+    setExecutedTrades({ sells: [], buys: [] });
     setBuyAdjustments({});
     setRebalanceData(null);
     window.dispatchEvent(new Event('portfolio-locked-in'));
@@ -803,7 +801,7 @@ export function PortfolioTracker() {
                   <VStack gap="4px" align="stretch">
                     {rebalanceData.buys.map(b => {
                       const shares = getBuyShares(b.ticker, b.shares);
-                      const price = b.value / b.shares;
+                      const price = b.shares > 0 ? b.value / b.shares : 0;
                       const value = shares * price;
                       const isTopup = b.reason === 'undervikt';
                       return (
