@@ -178,6 +178,20 @@ async def tradingview_sync(db, force_refresh: bool = False) -> dict:
                 lookup.market = stock_data.get('market', 'nordic')
                 lookup.updated_at = datetime.now()
                 isin_updated += 1
+                
+                # Save daily price for Nordic stocks too
+                close_price = stock_data.get('close')
+                ticker = stock_data.get('ticker', stock_data.get('db_ticker'))
+                if close_price and ticker:
+                    existing = db.query(DailyPrice).filter(
+                        DailyPrice.ticker == ticker,
+                        DailyPrice.date == today
+                    ).first()
+                    if existing:
+                        existing.close = close_price
+                    else:
+                        db.add(DailyPrice(ticker=ticker, date=today, close=close_price))
+                        prices_saved += 1
         except Exception as e:
             logger.warning(f"Nordic ISIN sync failed: {e}")
         
