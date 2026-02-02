@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Box, Text, Button, VStack, HStack, Spinner, Badge } from '@chakra-ui/react';
+import { useState, useEffect, useRef } from 'react';
+import { Box, Text, Button, VStack, HStack, Badge } from '@chakra-ui/react';
 
 interface PerformanceSummary {
   total_invested: number;
@@ -37,12 +37,33 @@ interface PerformanceData {
 
 type Period = '1M' | '3M' | '6M' | 'YTD' | '1Y' | 'ALL';
 
+// Skeleton loader component
+function ChartSkeleton() {
+  return (
+    <Box p={6}>
+      <HStack justify="space-between" mb={4}>
+        <VStack align="start" gap={2}>
+          <Box w="80px" h="14px" bg="gray.700" borderRadius="md" className="skeleton-pulse" />
+          <Box w="120px" h="32px" bg="gray.700" borderRadius="md" className="skeleton-pulse" />
+        </VStack>
+        <Box w="100px" h="32px" bg="gray.700" borderRadius="md" className="skeleton-pulse" />
+      </HStack>
+      <Box w="100%" h="120px" bg="gray.700" borderRadius="lg" className="skeleton-pulse" />
+      <HStack gap={4} mt={4}>
+        {[1,2,3,4].map(i => <Box key={i} flex="1" h="60px" bg="gray.700" borderRadius="md" className="skeleton-pulse" />)}
+      </HStack>
+    </Box>
+  );
+}
+
 export function PerformanceChart() {
   const [data, setData] = useState<PerformanceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<Period>('1Y');
   const [showNet, setShowNet] = useState(true);
+  const [scrubIndex, setScrubIndex] = useState<number | null>(null);
+  const chartRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
     fetchPerformance();
@@ -70,14 +91,17 @@ export function PerformanceChart() {
     }
   };
 
-  if (loading) {
-    return (
-      <Box p={6} textAlign="center">
-        <Spinner size="lg" color="blue.400" />
-        <Text mt={2} color="gray.400">Laddar...</Text>
-      </Box>
-    );
-  }
+  // Chart scrubbing handler
+  const handleScrub = (e: React.TouchEvent | React.MouseEvent) => {
+    if (!chartRef.current || !data?.chart_data) return;
+    const rect = chartRef.current.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const x = (clientX - rect.left) / rect.width;
+    const idx = Math.round(x * (data.chart_data.length - 1));
+    setScrubIndex(Math.max(0, Math.min(data.chart_data.length - 1, idx)));
+  };
+
+  if (loading) return <ChartSkeleton />;
 
   if (error) {
     return (
@@ -90,10 +114,19 @@ export function PerformanceChart() {
 
   if (!data?.summary) {
     return (
-      <Box p={6} bg="gray.800" borderRadius="lg" textAlign="center">
-        <Text color="gray.400">Inga transaktioner importerade ännu.</Text>
+      <Box p={8} bg="gray.800" borderRadius="lg" textAlign="center">
+        {/* Empty state illustration */}
+        <svg width="120" height="80" viewBox="0 0 120 80" style={{ margin: '0 auto 16px' }}>
+          <rect x="10" y="50" width="20" height="25" rx="2" fill="#2D3748" />
+          <rect x="35" y="35" width="20" height="40" rx="2" fill="#2D3748" />
+          <rect x="60" y="20" width="20" height="55" rx="2" fill="#2D3748" />
+          <rect x="85" y="10" width="20" height="65" rx="2" fill="#48BB78" opacity="0.6" />
+          <path d="M15 45 L45 30 L75 15 L105 5" stroke="#48BB78" strokeWidth="2" fill="none" strokeLinecap="round" />
+          <circle cx="105" cy="5" r="4" fill="#48BB78" />
+        </svg>
+        <Text color="gray.300" fontWeight="medium">Börja spåra din portfölj</Text>
         <Text color="gray.500" fontSize="sm" mt={2}>
-          Importera en CSV-fil för att se din portföljutveckling.
+          Importera en CSV-fil från Avanza för att se din utveckling över tid.
         </Text>
       </Box>
     );
@@ -156,10 +189,25 @@ export function PerformanceChart() {
         </HStack>
       </Box>
 
-      {/* Line chart */}
+      {/* Line chart with scrubbing */}
       {data.chart_data && data.chart_data.length > 1 && (
         <Box bg="gray.800" p={4} borderRadius="lg" overflow="hidden">
-          <svg viewBox="0 0 300 120" style={{ width: '100%', height: '140px' }}>
+          {/* Scrub value display */}
+          {scrubIndex !== null && (
+            <HStack justify="center" mb={2}>
+              <Text fontSize="sm" color="gray.400">{data.chart_data[scrubIndex].date}</Text>
+              <Text fontSize="sm" fontWeight="bold">{data.chart_data[scrubIndex].value.toLocaleString('sv-SE')} kr</Text>
+            </HStack>
+          )}
+          <svg 
+            ref={chartRef}
+            viewBox="0 0 300 120" 
+            style={{ width: '100%', height: '140px', touchAction: 'none', cursor: 'crosshair' }}
+            onMouseMove={handleScrub}
+            onMouseLeave={() => setScrubIndex(null)}
+            onTouchMove={handleScrub}
+            onTouchEnd={() => setScrubIndex(null)}
+          >
             <defs>
               <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={isPositive ? '#48BB78' : '#F56565'} stopOpacity="0.3" />
@@ -173,11 +221,9 @@ export function PerformanceChart() {
               const max = Math.max(...vals) * 1.02;
               const range = max - min || 1;
               
-              // Build smooth curve path
               const getY = (v: number) => 100 - ((v - min) / range) * 85;
               const getX = (i: number) => (i / (pts.length - 1)) * 290 + 5;
               
-              // Create smooth bezier curve
               let linePath = `M ${getX(0)},${getY(vals[0])}`;
               for (let i = 1; i < pts.length; i++) {
                 const x0 = getX(i - 1), y0 = getY(vals[i - 1]);
@@ -186,20 +232,21 @@ export function PerformanceChart() {
                 linePath += ` C ${cpx},${y0} ${cpx},${y1} ${x1},${y1}`;
               }
               
-              // Area path (close to bottom)
               const areaPath = linePath + ` L 295,110 L 5,110 Z`;
-              
               const color = isPositive ? '#48BB78' : '#F56565';
+              const activeIdx = scrubIndex ?? pts.length - 1;
               
               return (
                 <>
-                  {/* Gradient fill area */}
                   <path d={areaPath} fill="url(#areaGradient)" />
-                  {/* Main line */}
-                  <path d={linePath} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                  {/* End dot with glow */}
-                  <circle cx={getX(pts.length - 1)} cy={getY(vals[vals.length - 1])} r="4" fill={color} />
-                  <circle cx={getX(pts.length - 1)} cy={getY(vals[vals.length - 1])} r="8" fill={color} opacity="0.3" />
+                  <path d={linePath} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+                  {/* Scrub indicator line */}
+                  {scrubIndex !== null && (
+                    <line x1={getX(scrubIndex)} y1="10" x2={getX(scrubIndex)} y2="110" stroke="white" strokeWidth="1" opacity="0.5" />
+                  )}
+                  {/* Active dot */}
+                  <circle cx={getX(activeIdx)} cy={getY(vals[activeIdx])} r="5" fill={color} />
+                  <circle cx={getX(activeIdx)} cy={getY(vals[activeIdx])} r="10" fill={color} opacity="0.2" />
                 </>
               );
             })()}
