@@ -168,25 +168,31 @@ async def tradingview_sync(db, force_refresh: bool = False) -> dict:
                 isin = stock_data.get('isin')
                 if not isin:
                     continue
+                
+                # Use market-prefixed ticker for Nordic to avoid collisions with Swedish
+                market = stock_data.get('market', 'nordic')
+                base_ticker = stock_data.get('ticker', stock_data.get('db_ticker'))
+                market_suffix = {'finland': '.HE', 'denmark': '.CO', 'norway': '.OL'}.get(market, '')
+                prefixed_ticker = f"{base_ticker}{market_suffix}" if market_suffix else base_ticker
+                
                 lookup = db.query(IsinLookup).filter(IsinLookup.isin == isin).first()
                 if not lookup:
                     lookup = IsinLookup(isin=isin)
                     db.add(lookup)
-                lookup.ticker = stock_data.get('ticker', stock_data.get('db_ticker'))
+                lookup.ticker = prefixed_ticker
                 lookup.name = stock_data.get('name')
                 lookup.currency = stock_data.get('currency', 'EUR')
-                lookup.market = stock_data.get('market', 'nordic')
+                lookup.market = market
                 lookup.updated_at = datetime.now()
                 isin_updated += 1
                 
-                # Save daily price for Nordic stocks too
+                # Save daily price for Nordic stocks with market suffix
                 close_price = stock_data.get('close')
-                ticker = stock_data.get('ticker', stock_data.get('db_ticker'))
-                if close_price and ticker:
+                if close_price and prefixed_ticker:
                     db.execute(text("""
                         INSERT INTO daily_prices (ticker, date, close) VALUES (:ticker, :date, :close)
                         ON CONFLICT(ticker, date) DO UPDATE SET close = :close
-                    """), {"ticker": ticker, "date": today, "close": close_price})
+                    """), {"ticker": prefixed_ticker, "date": today, "close": close_price})
                     prices_saved += 1
         except Exception as e:
             logger.warning(f"Nordic ISIN sync failed: {e}")

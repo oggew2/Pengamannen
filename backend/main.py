@@ -4406,8 +4406,15 @@ def get_portfolio_performance_data(
     # Calculate positions at start
     positions = calculate_positions([t for t in txn_list if t['date'] and t['date'] <= start_date.isoformat()])
     
-    # Get unique tickers
-    tickers = list(set(t.ticker for t in transactions if t.ticker))
+    # Build ISIN to ticker mapping from IsinLookup (for price lookups)
+    from models import IsinLookup
+    isins = list(set(t.isin for t in transactions if t.isin))
+    isin_lookups = db.query(IsinLookup).filter(IsinLookup.isin.in_(isins)).all()
+    isin_to_ticker = {l.isin: l.ticker for l in isin_lookups}
+    isin_to_currency = {l.isin: l.currency for l in isin_lookups}
+    
+    # Get unique tickers (from ISIN lookup, not transactions - handles Nordic suffixes)
+    tickers = list(set(isin_to_ticker.values())) + list(set(t.ticker for t in transactions if t.ticker))
     
     # Get prices for date range
     prices_query = db.query(DailyPrice).filter(
@@ -4431,27 +4438,29 @@ def get_portfolio_performance_data(
     current_positions = calculate_positions(txn_list)
     
     # Currency conversion rates (approximate)
-    from models import IsinLookup
     currency_rates = {'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0, 'SEK': 1.0}
     
-    # Build ticker to currency map
-    ticker_currency = {}
-    for ticker in current_positions.keys():
-        lookup = db.query(IsinLookup).filter(IsinLookup.ticker == ticker).first()
-        ticker_currency[ticker] = lookup.currency if lookup else 'SEK'
-    
-    # Get latest prices for current value
+    # Get latest prices for current value (use ISIN to find correct ticker)
     total_value = 0
     total_cost = 0
     missing_prices = []
     for ticker, pos in current_positions.items():
-        if ticker in price_lookup and price_lookup[ticker]:
-            latest_date = max(price_lookup[ticker].keys())
-            latest_price = price_lookup[ticker][latest_date]
+        # Try to find price via ISIN first (handles Nordic stocks with suffixes)
+        isin = pos.get('isin')
+        lookup_ticker = isin_to_ticker.get(isin, ticker) if isin else ticker
+        currency = isin_to_currency.get(isin, 'SEK') if isin else 'SEK'
+        
+        if lookup_ticker in price_lookup and price_lookup[lookup_ticker]:
+            latest_date = max(price_lookup[lookup_ticker].keys())
+            latest_price = price_lookup[lookup_ticker][latest_date]
             # Convert to SEK
-            currency = ticker_currency.get(ticker, 'SEK')
             rate = currency_rates.get(currency, 1.0)
             total_value += pos['shares'] * latest_price * rate
+        elif ticker in price_lookup and price_lookup[ticker]:
+            # Fallback to original ticker
+            latest_date = max(price_lookup[ticker].keys())
+            latest_price = price_lookup[ticker][latest_date]
+            total_value += pos['shares'] * latest_price
         else:
             # No price data - use cost as fallback value
             total_value += pos['total_cost']
@@ -4478,16 +4487,21 @@ def get_portfolio_performance_data(
         "period": period,
     }
     
-    # Build positions with current value and return (reuse ticker_currency from above)
+    # Build positions with current value and return (use ISIN for lookup)
     for ticker, pos in current_positions.items():
         current_val = pos['total_cost']  # fallback
-        if ticker in price_lookup and price_lookup[ticker]:
-            latest_date = max(price_lookup[ticker].keys())
-            price_local = price_lookup[ticker][latest_date]
-            # Convert to SEK
-            currency = ticker_currency.get(ticker, 'SEK')
+        isin = pos.get('isin')
+        lookup_ticker = isin_to_ticker.get(isin, ticker) if isin else ticker
+        currency = isin_to_currency.get(isin, 'SEK') if isin else 'SEK'
+        
+        if lookup_ticker in price_lookup and price_lookup[lookup_ticker]:
+            latest_date = max(price_lookup[lookup_ticker].keys())
+            price_local = price_lookup[lookup_ticker][latest_date]
             rate = currency_rates.get(currency, 1.0)
             current_val = pos['shares'] * price_local * rate
+        elif ticker in price_lookup and price_lookup[ticker]:
+            latest_date = max(price_lookup[ticker].keys())
+            current_val = pos['shares'] * price_lookup[ticker][latest_date]
         
         return_pct = ((current_val - pos['total_cost']) / pos['total_cost'] * 100) if pos['total_cost'] > 0 else 0
         result["positions"].append({
