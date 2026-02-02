@@ -124,9 +124,13 @@ async def tradingview_sync(db, force_refresh: bool = False) -> dict:
             
             updated += 1
         
+        # Flush fundamentals before prices to avoid batch conflicts
+        db.flush()
+        
         # Save daily prices for portfolio tracking
         from models import DailyPrice
         prices_saved = 0
+        prices_updated = 0
         for stock_data in stocks:
             close_price = stock_data.get('close')
             if not close_price:
@@ -139,6 +143,7 @@ async def tradingview_sync(db, force_refresh: bool = False) -> dict:
             ).first()
             if existing:
                 existing.close = close_price
+                prices_updated += 1
             else:
                 db.add(DailyPrice(ticker=db_ticker, date=today, close=close_price))
                 prices_saved += 1
@@ -233,16 +238,10 @@ def sync_job(is_retry: bool = False):
     sync_success = False
     
     try:
-        # Use TradingView or Avanza based on DATA_SOURCE
-        if DATA_SOURCE == 'tradingview':
-            result = asyncio.run(tradingview_sync(db))
-            if result.get('status') == 'ERROR':
-                logger.warning("TradingView failed, falling back to Avanza")
-                from services.avanza_fetcher_v2 import avanza_sync
-                result = asyncio.run(avanza_sync(db, region="sweden", market_cap="large"))
-        else:
-            from services.avanza_fetcher_v2 import avanza_sync
-            result = asyncio.run(avanza_sync(db, region="sweden", market_cap="large"))
+        # TradingView is the only data source - no fallback
+        result = asyncio.run(tradingview_sync(db))
+        if result.get('status') == 'ERROR':
+            raise Exception(f"TradingView sync failed: {result.get('message', 'Unknown error')}")
         
         logger.info(f"Sync complete: {result}")
         sync_success = True
