@@ -4402,50 +4402,64 @@ def get_portfolio_transactions(
 
 @v1_router.get("/portfolio/daily-stats")
 def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
-    """Get daily portfolio stats for dashboard card."""
-    from models import PortfolioTransactionImported, DailyPrice, IsinLookup
-    from services.csv_import import calculate_positions
+    """Get daily portfolio stats for dashboard card - uses momentum portfolio holdings."""
+    from models import UserPortfolio, DailyPrice
     from services.auth import get_user_from_cookie
     from datetime import date, timedelta
+    import json
+    
+    empty_response = {"total_value": 0, "today_change": 0, "today_change_pct": 0, "week_change_pct": 0, "month_change_pct": 0, "best_performer": None, "worst_performer": None}
     
     user = get_user_from_cookie(request, db)
     if not user:
-        return {"total_value": 0, "today_change": 0, "today_change_pct": 0, "week_change_pct": 0, "month_change_pct": 0, "best_performer": None, "worst_performer": None}
+        return empty_response
     
-    transactions = db.query(PortfolioTransactionImported).filter(PortfolioTransactionImported.user_id == user.id).all()
-    if not transactions:
-        return {"total_value": 0, "today_change": 0, "today_change_pct": 0, "week_change_pct": 0, "month_change_pct": 0, "best_performer": None, "worst_performer": None}
+    # Get holdings from momentum_locked portfolio (same as PortfolioTracker)
+    portfolio = db.query(UserPortfolio).filter(
+        UserPortfolio.user_id == user.id,
+        UserPortfolio.name == "momentum_locked"
+    ).first()
     
-    txn_list = [{'date': t.date.isoformat() if t.date else None, 'ticker': t.ticker, 'isin': t.isin, 'type': t.type, 'shares': t.shares, 'price_sek': t.price_sek, 'fee': t.fee or 0} for t in transactions]
-    positions = calculate_positions(txn_list)
+    if not portfolio or not portfolio.holdings:
+        return empty_response
+    
+    try:
+        holdings = json.loads(portfolio.holdings)
+    except:
+        return empty_response
+    
+    if not holdings:
+        return empty_response
     
     today = date.today()
     yesterday = today - timedelta(days=1)
     week_ago = today - timedelta(days=7)
     month_ago = today - timedelta(days=30)
     
-    # Get ISIN mappings
-    isins = [t.isin for t in transactions if t.isin]
-    isin_lookups = {l.isin: (l.ticker, l.currency) for l in db.query(IsinLookup).filter(IsinLookup.isin.in_(isins)).all()}
-    currency_rates = {'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0, 'SEK': 1.0}
+    def get_price_at_date(ticker: str, d: date):
+        price = db.query(DailyPrice).filter(
+            DailyPrice.ticker == ticker,
+            DailyPrice.date <= d
+        ).order_by(DailyPrice.date.desc()).first()
+        return price.close if price else None
     
-    def get_value_at_date(d):
+    def get_portfolio_value(d: date):
         total = 0
-        for ticker, pos in positions.items():
-            isin = pos.get('isin')
-            lookup_ticker, currency = isin_lookups.get(isin, (ticker, 'SEK')) if isin else (ticker, 'SEK')
-            price = db.query(DailyPrice).filter(DailyPrice.ticker.in_([lookup_ticker, ticker]), DailyPrice.date <= d).order_by(DailyPrice.date.desc()).first()
+        for h in holdings:
+            ticker = h.get('ticker', '')
+            shares = h.get('shares', 0)
+            buy_price = h.get('buyPrice', 0)
+            price = get_price_at_date(ticker, d)
             if price:
-                rate = currency_rates.get(currency, 1.0)
-                total += pos['shares'] * price.close * rate
+                total += shares * price
             else:
-                total += pos['total_cost']
+                total += shares * buy_price  # Fallback to buy price
         return total
     
-    current_value = get_value_at_date(today)
-    yesterday_value = get_value_at_date(yesterday)
-    week_value = get_value_at_date(week_ago)
-    month_value = get_value_at_date(month_ago)
+    current_value = get_portfolio_value(today)
+    yesterday_value = get_portfolio_value(yesterday)
+    week_value = get_portfolio_value(week_ago)
+    month_value = get_portfolio_value(month_ago)
     
     today_change = current_value - yesterday_value
     today_pct = (today_change / yesterday_value * 100) if yesterday_value > 0 else 0
@@ -4454,14 +4468,13 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
     
     # Find best/worst performers today
     performers = []
-    for ticker, pos in positions.items():
-        isin = pos.get('isin')
-        lookup_ticker, currency = isin_lookups.get(isin, (ticker, 'SEK')) if isin else (ticker, 'SEK')
-        today_price = db.query(DailyPrice).filter(DailyPrice.ticker.in_([lookup_ticker, ticker]), DailyPrice.date == today).first()
-        yest_price = db.query(DailyPrice).filter(DailyPrice.ticker.in_([lookup_ticker, ticker]), DailyPrice.date == yesterday).first()
-        if today_price and yest_price and yest_price.close > 0:
-            change_pct = (today_price.close - yest_price.close) / yest_price.close * 100
-            performers.append({'ticker': ticker, 'change_pct': change_pct})
+    for h in holdings:
+        ticker = h.get('ticker', '')
+        today_price = get_price_at_date(ticker, today)
+        yest_price = get_price_at_date(ticker, yesterday)
+        if today_price and yest_price and yest_price > 0:
+            change_pct = (today_price - yest_price) / yest_price * 100
+            performers.append({'ticker': ticker, 'change_pct': round(change_pct, 2)})
     
     performers.sort(key=lambda x: x['change_pct'], reverse=True)
     best = performers[0] if performers else None
