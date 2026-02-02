@@ -1,9 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Box, Text, Button, VStack, HStack, SimpleGrid, Input, Skeleton } from '@chakra-ui/react';
 import { api, type RebalanceResponse } from '../api/client';
 import { useRebalanceDates } from '../api/hooks';
 import { CsvImporter } from './CsvImporter';
 import { PerformanceChart } from './PerformanceChart';
+import { Confetti, AnimatedNumber, HealthBadge, usePullToRefresh } from './FintechEffects';
+import { toaster } from './toaster';
 
 interface LockedHolding {
   ticker: string;
@@ -107,6 +109,7 @@ export function PortfolioTracker() {
   const [editingTicker, setEditingTicker] = useState<string | null>(null);
   const [editShares, setEditShares] = useState<string>('');
   const [editPrice, setEditPrice] = useState<string>('');
+  const [showConfetti, setShowConfetti] = useState(false);
   
   // Next rebalance countdown
   const { data: rebalanceDates } = useRebalanceDates();
@@ -518,6 +521,14 @@ export function PortfolioTracker() {
     setExecutedTrades({ sells: [], buys: [] });
     setBuyAdjustments({});
     setRebalanceData(null);
+    
+    // Celebration!
+    setShowConfetti(true);
+    toaster.success({
+      title: '🎉 Ombalansering klar!',
+      description: 'Din portfölj har uppdaterats',
+    });
+    
     window.dispatchEvent(new Event('portfolio-locked-in'));
   };
   
@@ -535,12 +546,32 @@ export function PortfolioTracker() {
 
   const totalValue = holdings.reduce((sum, h) => sum + (h.shares * h.buyPrice), 0);
 
+  // Pull to refresh
+  const handleRefresh = useCallback(async () => {
+    await checkRebalance();
+  }, []);
+  const { containerRef, refreshing } = usePullToRefresh(handleRefresh);
+
   return (
-    <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="20px">
+    <Box ref={containerRef} bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="20px">
+      <Confetti active={showConfetti} onComplete={() => setShowConfetti(false)} />
+      
+      {refreshing && (
+        <Box textAlign="center" py="8px" mb="8px">
+          <Text fontSize="xs" color="fg.muted">Uppdaterar...</Text>
+        </Box>
+      )}
+      
       <HStack justify="space-between" mb="16px">
         <HStack gap="8px">
           <Text fontSize="lg" fontWeight="semibold">Min Portfölj</Text>
-          {holdings.length > 0 && <Text fontSize="xs" color="green.400" title="Synkad till ditt konto">☁️</Text>}
+          {holdings.length > 0 && (
+            <HealthBadge 
+              drift={driftData.maxDrift} 
+              holdingsCount={holdings.length} 
+              daysUntilRebalance={daysUntil} 
+            />
+          )}
         </HStack>
         {holdings.length > 0 && (
           <VStack gap="8px" align="flex-end">
@@ -640,21 +671,50 @@ export function PortfolioTracker() {
       </SimpleGrid>
 
       {holdings.length === 0 ? (
-        <VStack gap="20px" py="32px" textAlign="center">
-          <Text fontSize="lg" fontWeight="medium" color="fg">Kom igång med din portfölj</Text>
-          <Text color="fg.muted" maxW="400px">
-            Importera dina transaktioner från Avanza för att spåra din portfölj och få ombalanseringsförslag.
-          </Text>
-          <Button 
-            size="lg" 
-            colorScheme="blue" 
-            onClick={() => setShowImport(true)}
-          >
-            📥 Importera från Avanza
-          </Button>
-          <Text fontSize="xs" color="fg.subtle">
-            Exportera CSV från Avanza → Mina sidor → Transaktioner → Exportera
-          </Text>
+        <VStack gap="24px" py="40px" textAlign="center">
+          {/* Animated chart illustration */}
+          <Box position="relative" w="120px" h="80px">
+            <svg viewBox="0 0 120 80" fill="none">
+              <path d="M10 60 L30 45 L50 50 L70 30 L90 35 L110 15" stroke="#3B82F6" strokeWidth="3" strokeLinecap="round" opacity="0.3">
+                <animate attributeName="opacity" values="0.3;0.6;0.3" dur="2s" repeatCount="indefinite" />
+              </path>
+              <path d="M10 60 L30 45 L50 50 L70 30 L90 35 L110 15" stroke="#3B82F6" strokeWidth="3" strokeLinecap="round" strokeDasharray="200" strokeDashoffset="200">
+                <animate attributeName="stroke-dashoffset" from="200" to="0" dur="1.5s" fill="freeze" />
+              </path>
+              <circle cx="110" cy="15" r="4" fill="#10B981">
+                <animate attributeName="r" values="4;6;4" dur="1s" repeatCount="indefinite" />
+              </circle>
+            </svg>
+          </Box>
+          
+          <VStack gap="8px">
+            <Text fontSize="xl" fontWeight="semibold" color="fg">Välkommen till Börslabbet</Text>
+            <Text color="fg.muted" maxW="360px" fontSize="sm">
+              Spåra din momentumportfölj och få smarta ombalanseringsförslag baserat på Börslabbets beprövade strategi.
+            </Text>
+          </VStack>
+          
+          <VStack gap="12px" w="100%" maxW="320px">
+            <Button 
+              size="lg" 
+              colorPalette="blue"
+              w="100%"
+              onClick={() => setShowImport(true)}
+              _hover={{ transform: 'translateY(-2px)', shadow: 'lg' }}
+              transition="all 0.2s"
+            >
+              📥 Importera från Avanza
+            </Button>
+            
+            <HStack gap="8px" color="fg.subtle" fontSize="xs">
+              <Text>1. Logga in på Avanza</Text>
+              <Text>→</Text>
+              <Text>2. Transaktioner</Text>
+              <Text>→</Text>
+              <Text>3. Exportera CSV</Text>
+            </HStack>
+          </VStack>
+          
           {showImport && (
             <Box w="100%" mt="16px">
               <CsvImporter 
@@ -670,6 +730,12 @@ export function PortfolioTracker() {
                   setHoldings(holdings);
                   localStorage.setItem(STORAGE_KEY, JSON.stringify(holdings));
                   setShowImport(false);
+                  
+                  // Welcome toast
+                  toaster.success({
+                    title: '🎉 Portfölj importerad!',
+                    description: `${holdings.length} innehav tillagda`,
+                  });
                 }}
               />
             </Box>
@@ -691,11 +757,11 @@ export function PortfolioTracker() {
               </Box>
               <Box>
                 <Text fontSize="xs" color="fg.muted">Inköpsvärde</Text>
-                <Text fontWeight="semibold">{formatSEK(totalValue)}</Text>
+                <Text fontWeight="semibold"><AnimatedNumber value={totalValue} format="currency" /></Text>
               </Box>
               <Box>
                 <Text fontSize="xs" color="fg.muted">Courtage betalt</Text>
-                <Text fontWeight="semibold">{formatSEK(holdings.reduce((sum, h) => sum + (h.fees || 0), 0))}</Text>
+                <Text fontWeight="semibold"><AnimatedNumber value={holdings.reduce((sum, h) => sum + (h.fees || 0), 0)} format="currency" /></Text>
               </Box>
               <Box>
                 <Text fontSize="xs" color="fg.muted">Låst</Text>
