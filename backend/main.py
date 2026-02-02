@@ -1762,7 +1762,7 @@ def get_momentum_portfolio(request: Request, db: Session = Depends(get_db)):
     
     # Check for existing momentum portfolio
     portfolio = db.query(UserPortfolio).filter(
-        UserPortfolio.user_id == str(user.id),
+        UserPortfolio.user_id == user.id,
         UserPortfolio.name == "momentum_locked"
     ).first()
     
@@ -1822,13 +1822,13 @@ def save_momentum_portfolio(request: Request, body: dict, db: Session = Depends(
     
     # Find or create momentum portfolio
     portfolio = db.query(UserPortfolio).filter(
-        UserPortfolio.user_id == str(user.id),
+        UserPortfolio.user_id == user.id,
         UserPortfolio.name == "momentum_locked"
     ).first()
     
     if not portfolio:
         portfolio = UserPortfolio(
-            user_id=str(user.id),
+            user_id=user.id,
             name="momentum_locked",
             description="Locked momentum portfolio for rebalancing"
         )
@@ -4864,13 +4864,13 @@ def sync_imported_to_holdings(request: Request, db: Session = Depends(get_db)):
     
     # Save to UserPortfolio
     portfolio = db.query(UserPortfolio).filter(
-        UserPortfolio.user_id == str(user.id),
+        UserPortfolio.user_id == user.id,
         UserPortfolio.name == "momentum_locked"
     ).first()
     
     if not portfolio:
         portfolio = UserPortfolio(
-            user_id=str(user.id),
+            user_id=user.id,
             name="momentum_locked",
             description="{}"
         )
