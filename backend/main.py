@@ -4233,19 +4233,19 @@ async def import_csv_preview(file: UploadFile = File(...), db: Session = Depends
     existing_hashes = {r.hash for r in db.query(PortfolioTransactionImported.hash).all()}
     new_txns, duplicates = filter_duplicates(transactions, existing_hashes)
     
-    # Calculate positions
-    positions = calculate_positions(new_txns)
+    # Calculate positions from ALL transactions (for preview)
+    positions = calculate_positions(transactions)
     
-    # Find unmatched ISINs
-    unmatched = [t for t in new_txns if not t.get('ticker')]
-    matched = [t for t in new_txns if t.get('ticker')]
+    # Find unmatched ISINs (from all transactions)
+    unmatched = [t for t in transactions if not t.get('ticker')]
+    matched = [t for t in transactions if t.get('ticker')]
     
-    # Calculate totals
-    total_fees = sum(t.get('fee', 0) for t in new_txns)
-    total_invested = sum(t['shares'] * t['price_sek'] for t in new_txns if t['type'] == 'BUY')
+    # Calculate totals from all transactions
+    total_fees = sum(t.get('fee', 0) for t in transactions)
+    total_invested = sum(t['shares'] * t['price_sek'] for t in transactions if t['type'] == 'BUY')
     
-    # Date range
-    dates = [t['date'] for t in new_txns if t.get('date')]
+    # Date range from all transactions
+    dates = [t['date'] for t in transactions if t.get('date')]
     date_range = {'start': min(dates), 'end': max(dates)} if dates else None
     
     return {
@@ -4274,7 +4274,7 @@ async def import_csv_preview(file: UploadFile = File(...), db: Session = Depends
             "unique_stocks": len(positions),
             "date_range": date_range,
         },
-        "transactions": new_txns,  # For confirm step
+        "transactions": transactions,  # All transactions for confirm step
     }
 
 

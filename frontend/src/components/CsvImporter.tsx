@@ -314,6 +314,15 @@ export function CsvImporter({ onImportComplete, onSyncComplete }: {
 
           {error && <Text color="red.400">{error}</Text>}
 
+          {/* All duplicates warning */}
+          {preview.new === 0 && preview.duplicates_skipped > 0 && (
+            <Box bg="yellow.900" p={3} borderRadius="md">
+              <Text color="yellow.200" fontSize="sm">
+                ⚠️ Alla {preview.duplicates_skipped} transaktioner finns redan. Välj "Ersätt allt" för att importera på nytt.
+              </Text>
+            </Box>
+          )}
+
           {/* Actions */}
           <HStack justify="flex-end" gap={2}>
             <Button variant="ghost" onClick={reset}>Avbryt</Button>
@@ -321,9 +330,9 @@ export function CsvImporter({ onImportComplete, onSyncComplete }: {
               colorScheme="blue"
               onClick={confirmImport}
               loading={loading}
-              disabled={preview.new === 0}
+              disabled={preview.new === 0 && mode === 'add_new'}
             >
-              Importera {preview.new} transaktioner
+              {mode === 'replace' ? `Ersätt med ${preview.parsed}` : `Importera ${preview.new}`} transaktioner
             </Button>
           </HStack>
         </VStack>
