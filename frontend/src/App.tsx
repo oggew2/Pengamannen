@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginPage } from './pages/LoginPage';
 import { Toaster } from './components/toaster';
 import { PageTransition } from './components/Animations';
+import { CelebrationProvider } from './components/FintechEffects';
 
 // Lazy load pages
 const StockDetailPage = lazy(() => import('./pages/StockDetailPage'));
@@ -72,8 +73,10 @@ export function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <ProtectedApp />
-        <Toaster />
+        <CelebrationProvider>
+          <ProtectedApp />
+          <Toaster />
+        </CelebrationProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

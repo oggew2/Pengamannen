@@ -2,9 +2,7 @@ version: '3.8'
 
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/ewreosk/borslabbet-app:latest
     ports:
       - "8000:8000"
     environment:
@@ -19,12 +17,28 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
   tunnel:
     image: cloudflare/cloudflared:latest
     command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
       - app
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.docker/config.json:/config.json:ro  # For ghcr.io auth
+    environment:
+      - WATCHTOWER_CLEANUP=true              # Remove old images after update
+      - WATCHTOWER_POLL_INTERVAL=300         # Check every 5 minutes
+      - WATCHTOWER_LABEL_ENABLE=true         # Only update labeled containers
+      - WATCHTOWER_INCLUDE_RESTARTING=true
     restart: unless-stopped
 
 volumes:

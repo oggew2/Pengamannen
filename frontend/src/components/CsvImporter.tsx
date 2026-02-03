@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Box, Text, Button, VStack, HStack, Input, Badge, Spinner } from '@chakra-ui/react';
+import { useCelebration } from './FintechEffects';
 
 interface Transaction {
   date: string;
@@ -56,6 +57,7 @@ export function CsvImporter({ onImportComplete, onSyncComplete }: {
   const [mode, setMode] = useState<ImportMode>('add_new');
   const [importResult, setImportResult] = useState<{ imported: number } | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const { celebrate } = useCelebration();
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -140,6 +142,7 @@ export function CsvImporter({ onImportComplete, onSyncComplete }: {
 
       const data = await res.json();
       setImportResult(data);
+      celebrate('first_import'); // Trigger celebration on successful import
       onImportComplete?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save transactions');

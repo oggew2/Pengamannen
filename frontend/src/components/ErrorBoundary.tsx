@@ -10,6 +10,22 @@ interface State {
   error?: Error;
 }
 
+async function clearAllCaches() {
+  // Clear service worker caches
+  if ('caches' in window) {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => caches.delete(k)));
+  }
+  // Unregister service workers
+  if ('serviceWorker' in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map(r => r.unregister()));
+  }
+  // Clear localStorage
+  localStorage.clear();
+  sessionStorage.clear();
+}
+
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
@@ -22,10 +38,12 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught:', error, errorInfo);
-    // Log to console for debugging
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
   }
+
+  handleHardReset = async () => {
+    await clearAllCaches();
+    window.location.href = '/?cache_bust=' + Date.now();
+  };
 
   render() {
     if (this.state.hasError) {
@@ -34,7 +52,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <VStack gap={4}>
             <Heading size="lg">Något gick fel</Heading>
             <Text color="gray.600">
-              Ett oväntat fel uppstod. Försök ladda om sidan.
+              Ett oväntat fel uppstod.
             </Text>
             {this.state.error && (
               <Text fontSize="xs" color="red.400" fontFamily="mono" maxW="400px" overflow="auto">
@@ -43,6 +61,9 @@ export class ErrorBoundary extends Component<Props, State> {
             )}
             <Button onClick={() => window.location.reload()} colorPalette="blue">
               Ladda om
+            </Button>
+            <Button onClick={this.handleHardReset} variant="outline" size="sm">
+              Rensa cache och ladda om
             </Button>
           </VStack>
         </Box>

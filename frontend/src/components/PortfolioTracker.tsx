@@ -5,7 +5,7 @@ import { api, type RebalanceResponse } from '../api/client';
 import { useRebalanceDates } from '../api/hooks';
 import { CsvImporter } from './CsvImporter';
 import { PerformanceChart } from './PerformanceChart';
-import { Confetti, AnimatedNumber, HealthBadge, usePullToRefresh } from './FintechEffects';
+import { AnimatedNumber, HealthBadge, usePullToRefresh, useCelebration } from './FintechEffects';
 import { InfoTooltip } from './InfoTooltip';
 import { HealthScore } from './HealthScore';
 import { toaster } from './toaster';
@@ -132,13 +132,13 @@ export function PortfolioTracker() {
   const [editingTicker, setEditingTicker] = useState<string | null>(null);
   const [editShares, setEditShares] = useState<string>('');
   const [editPrice, setEditPrice] = useState<string>('');
-  const [showConfetti, setShowConfetti] = useState(false);
   const [showAddManual, setShowAddManual] = useState(false);
   const [manualTicker, setManualTicker] = useState('');
   const [manualShares, setManualShares] = useState('');
   const [manualPrice, setManualPrice] = useState('');
   const [manualDate, setManualDate] = useState('');
   const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const { celebrate } = useCelebration();
   
   // Next rebalance countdown
   const { data: rebalanceDates } = useRebalanceDates();
@@ -279,6 +279,26 @@ export function PortfolioTracker() {
     
     fetchRankings();
   }, [holdings.length]); // Only refetch when holdings count changes
+
+  // Check for first month milestone
+  useEffect(() => {
+    if (holdings.length === 0) return;
+    const firstMonthKey = 'borslabbet_first_month_celebrated';
+    if (localStorage.getItem(firstMonthKey)) return;
+    
+    // Find earliest buy date
+    const earliest = holdings.reduce((min, h) => {
+      const d = new Date(h.buyDate).getTime();
+      return d < min ? d : min;
+    }, Date.now());
+    
+    const daysSinceStart = (Date.now() - earliest) / (1000 * 60 * 60 * 24);
+    if (daysSinceStart >= 30) {
+      localStorage.setItem(firstMonthKey, 'true');
+      celebrate('first_month');
+      toaster.success({ title: '🎉 En månad!', description: 'Du har följt strategin i över en månad' });
+    }
+  }, [holdings, celebrate]);
 
   // Save to database when holdings change
   const saveToDatabase = async (newHoldings: LockedHolding[], newHistory?: Transaction[]) => {
@@ -696,7 +716,7 @@ export function PortfolioTracker() {
     
     // Celebration!
     haptic.success();
-    setShowConfetti(true);
+    celebrate('rebalance_executed');
     toaster.success({
       title: '🎉 Ombalansering klar!',
       description: 'Din portfölj har uppdaterats',
@@ -719,6 +739,24 @@ export function PortfolioTracker() {
 
   const totalValue = holdings.reduce((sum, h) => sum + (h.shares * h.buyPrice), 0);
 
+  // Check for portfolio value milestones
+  useEffect(() => {
+    if (totalValue === 0) return;
+    const milestones = [100000, 500000, 1000000];
+    const celebratedKey = 'borslabbet_milestone_celebrated';
+    const celebrated = parseInt(localStorage.getItem(celebratedKey) || '0');
+    
+    for (const milestone of milestones) {
+      if (totalValue >= milestone && celebrated < milestone) {
+        localStorage.setItem(celebratedKey, milestone.toString());
+        celebrate('goal_reached');
+        const label = milestone >= 1000000 ? `${milestone/1000000}M` : `${milestone/1000}k`;
+        toaster.success({ title: `🎯 ${label} kr!`, description: 'Grattis till milstolpen!' });
+        break;
+      }
+    }
+  }, [totalValue, celebrate]);
+
   // Pull to refresh
   const handleRefresh = useCallback(async () => {
     await checkRebalance();
@@ -735,8 +773,6 @@ export function PortfolioTracker() {
 
   return (
     <Box ref={containerRef} bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="20px" className="animate-fade-in-up">
-      <Confetti active={showConfetti} onComplete={() => setShowConfetti(false)} />
-      
       {refreshing && (
         <Box textAlign="center" py="8px" mb="8px">
           <Text fontSize="xs" color="fg.muted">Uppdaterar...</Text>

@@ -1,5 +1,47 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, createContext, useContext, useCallback, ReactNode } from 'react';
 import { Box, Text } from '@chakra-ui/react';
+
+// ============================================
+// CELEBRATION CONTEXT - Trigger confetti on achievements
+// ============================================
+type CelebrationReason = 'first_import' | 'rebalance_executed' | 'goal_reached' | 'first_month' | 'custom';
+
+interface CelebrationContextType {
+  celebrate: (reason?: CelebrationReason) => void;
+  isActive: boolean;
+}
+
+const CelebrationContext = createContext<CelebrationContextType | null>(null);
+
+export function CelebrationProvider({ children }: { children: ReactNode }) {
+  const [isActive, setIsActive] = useState(false);
+
+  const celebrate = useCallback((_reason?: CelebrationReason) => {
+    setIsActive(true);
+    // Haptic feedback
+    if ('vibrate' in navigator) {
+      navigator.vibrate([50, 30, 50]);
+    }
+    // Auto-dismiss after animation
+    setTimeout(() => setIsActive(false), 2500);
+  }, []);
+
+  return (
+    <CelebrationContext.Provider value={{ celebrate, isActive }}>
+      {children}
+      <Confetti active={isActive} />
+    </CelebrationContext.Provider>
+  );
+}
+
+export function useCelebration() {
+  const context = useContext(CelebrationContext);
+  if (!context) {
+    // Return no-op if used outside provider
+    return { celebrate: () => {}, isActive: false };
+  }
+  return context;
+}
 
 // Confetti animation component
 export function Confetti({ active, onComplete }: { active: boolean; onComplete?: () => void }) {
@@ -57,15 +99,19 @@ export function Confetti({ active, onComplete }: { active: boolean; onComplete?:
   );
 }
 
-// Animated number that counts up
+// Animated number that counts up with optional color + direction arrows
 export function AnimatedNumber({ 
   value, 
   format = 'currency',
-  duration = 600 
+  duration = 600,
+  showDirection = false,
+  colorize = false,
 }: { 
   value: number; 
   format?: 'currency' | 'percent' | 'number';
   duration?: number;
+  showDirection?: boolean;
+  colorize?: boolean;
 }) {
   const [displayValue, setDisplayValue] = useState(value);
   const prevValue = useRef(value);
@@ -79,7 +125,6 @@ export function AnimatedNumber({
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      // Ease out cubic
       const eased = 1 - Math.pow(1 - progress, 3);
       const current = startValue + (endValue - startValue) * eased;
       setDisplayValue(current);
@@ -110,7 +155,10 @@ export function AnimatedNumber({
     }
   })();
 
-  return <>{formatted}</>;
+  const arrow = showDirection ? (value > 0 ? ' ↑' : value < 0 ? ' ↓' : ' →') : '';
+  const color = colorize ? (value > 0 ? 'var(--color-green-400)' : value < 0 ? 'var(--color-red-400)' : 'var(--color-gray-400)') : 'inherit';
+
+  return <span style={{ color }}>{formatted}{arrow}</span>;
 }
 
 // Portfolio health badge
@@ -204,4 +252,78 @@ export function usePullToRefresh(onRefresh: () => Promise<void>) {
   }, [onRefresh, refreshing]);
 
   return { containerRef, refreshing };
+}
+
+// ============================================
+// SKELETON LOADING COMPONENTS
+// ============================================
+
+// Stock card skeleton - matches StockCard layout
+export function StockCardSkeleton() {
+  return (
+    <Box className="skeleton-card" p="16px" borderRadius="12px" bg="bg.subtle">
+      <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb="12px">
+        <Box>
+          <Box className="skeleton" w="80px" h="20px" borderRadius="4px" mb="6px" />
+          <Box className="skeleton" w="120px" h="14px" borderRadius="4px" />
+        </Box>
+        <Box className="skeleton" w="60px" h="24px" borderRadius="6px" />
+      </Box>
+      <Box display="flex" gap="16px">
+        <Box className="skeleton" w="70px" h="14px" borderRadius="4px" />
+        <Box className="skeleton" w="70px" h="14px" borderRadius="4px" />
+      </Box>
+    </Box>
+  );
+}
+
+// Chart skeleton - matches chart area
+export function ChartSkeleton({ height = 200 }: { height?: number }) {
+  return (
+    <Box className="skeleton-card" p="16px" borderRadius="12px" bg="bg.subtle">
+      <Box display="flex" justifyContent="space-between" mb="16px">
+        <Box className="skeleton" w="100px" h="16px" borderRadius="4px" />
+        <Box display="flex" gap="8px">
+          <Box className="skeleton" w="40px" h="24px" borderRadius="4px" />
+          <Box className="skeleton" w="40px" h="24px" borderRadius="4px" />
+        </Box>
+      </Box>
+      <Box className="skeleton" w="100%" h={`${height}px`} borderRadius="8px" />
+    </Box>
+  );
+}
+
+// Table skeleton - matches data table layout
+export function TableSkeleton({ rows = 5 }: { rows?: number }) {
+  return (
+    <Box className="skeleton-card" borderRadius="12px" bg="bg.subtle" overflow="hidden">
+      {/* Header */}
+      <Box display="flex" gap="16px" p="12px 16px" borderBottomWidth="1px" borderColor="border.subtle">
+        <Box className="skeleton" w="30%" h="14px" borderRadius="4px" />
+        <Box className="skeleton" w="20%" h="14px" borderRadius="4px" />
+        <Box className="skeleton" w="20%" h="14px" borderRadius="4px" />
+        <Box className="skeleton" w="20%" h="14px" borderRadius="4px" />
+      </Box>
+      {/* Rows */}
+      {Array.from({ length: rows }).map((_, i) => (
+        <Box key={i} display="flex" gap="16px" p="12px 16px" borderBottomWidth={i < rows - 1 ? '1px' : '0'} borderColor="border.subtle">
+          <Box className="skeleton" w="30%" h="16px" borderRadius="4px" />
+          <Box className="skeleton" w="20%" h="16px" borderRadius="4px" />
+          <Box className="skeleton" w="20%" h="16px" borderRadius="4px" />
+          <Box className="skeleton" w="20%" h="16px" borderRadius="4px" />
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
+// Stats card skeleton
+export function StatsCardSkeleton() {
+  return (
+    <Box className="skeleton-card" p="20px" borderRadius="12px" bg="bg.subtle">
+      <Box className="skeleton" w="80px" h="12px" borderRadius="4px" mb="8px" />
+      <Box className="skeleton" w="120px" h="32px" borderRadius="4px" mb="4px" />
+      <Box className="skeleton" w="60px" h="14px" borderRadius="4px" />
+    </Box>
+  );
 }

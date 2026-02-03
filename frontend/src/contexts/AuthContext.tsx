@@ -30,18 +30,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAuth = async () => {
     try {
       const res = await fetch('/v1/auth/me', { credentials: 'include' });
+      if (!res.ok) {
+        setLoading(false);
+        return;
+      }
       const data = await res.json();
-      if (data.authenticated) {
+      if (data.authenticated && data.user_id) {
         setUser({
           user_id: data.user_id,
-          email: data.email,
-          name: data.name,
-          is_admin: data.is_admin,
-          invite_code: data.invite_code,
+          email: data.email || '',
+          name: data.name || '',
+          is_admin: data.is_admin || false,
+          invite_code: data.invite_code || '',
         });
       }
-    } catch {
-      // Not authenticated
+    } catch (e) {
+      console.error('Auth check failed:', e);
     } finally {
       setLoading(false);
     }

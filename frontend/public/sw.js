@@ -1,9 +1,9 @@
-const CACHE_NAME = 'borslabbet-v2';
-const API_CACHE = 'borslabbet-api-v2';
+const CACHE_NAME = 'borslabbet-v3';
+const API_CACHE = 'borslabbet-api-v3';
 
+// Don't cache index.html - it changes on every deploy and references new JS bundles
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
+  '/icon.svg',
 ];
 
 // Only cache GET requests for these read-only endpoints
@@ -22,7 +22,11 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => 
-      Promise.all(keys.filter(k => !k.startsWith('borslabbet-')).map(k => caches.delete(k)))
+      Promise.all(
+        keys
+          .filter(k => k !== CACHE_NAME && k !== API_CACHE)
+          .map(k => caches.delete(k))
+      )
     )
   );
   self.clients.claim();
@@ -52,13 +56,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
-  // Static assets: cache first
-  if (!url.pathname.startsWith('/v1/')) {
+  // Static assets (not HTML): cache first, then network
+  if (!url.pathname.startsWith('/v1/') && !url.pathname.endsWith('.html') && url.pathname !== '/') {
     event.respondWith(
       caches.match(event.request).then((cached) => cached || fetch(event.request))
     );
   }
-  // All other /v1/ requests: let browser handle (no caching)
+  // HTML and all /v1/ requests: always go to network (no caching)
 });
 
 // Push notification handler
