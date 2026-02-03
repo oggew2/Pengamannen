@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   app:
-    image: ghcr.io/ewreosk/borslabbet-app:latest
+    image: ghcr.io/oggew2/borslabbet-app:latest
     ports:
       - "8000:8000"
     environment:
