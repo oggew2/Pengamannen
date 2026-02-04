@@ -1,7 +1,7 @@
-const CACHE_NAME = 'borslabbet-v3';
-const API_CACHE = 'borslabbet-api-v3';
+const CACHE_NAME = 'borslabbet-v4';
+const API_CACHE = 'borslabbet-api-v4';
 
-// Don't cache index.html - it changes on every deploy and references new JS bundles
+// Only cache truly static assets that never change
 const STATIC_ASSETS = [
   '/icon.svg',
 ];
@@ -33,12 +33,24 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests entirely - never cache POST/PUT/DELETE
-  if (event.request.method !== 'GET') {
-    return; // Let browser handle it normally
-  }
+  // Skip non-GET requests entirely
+  if (event.request.method !== 'GET') return;
   
   const url = new URL(event.request.url);
+  
+  // NEVER cache HTML, JS, or CSS - these change on every deploy
+  // This is the main fix for blank screen issues
+  if (
+    url.pathname === '/' ||
+    url.pathname.endsWith('.html') ||
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.css') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/assets/')
+  ) {
+    // Network only - no caching
+    return;
+  }
   
   // Only cache specific safe API routes
   if (CACHEABLE_API_ROUTES.some(r => url.pathname.startsWith(r))) {
@@ -56,13 +68,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
-  // Static assets (not HTML): cache first, then network
-  if (!url.pathname.startsWith('/v1/') && !url.pathname.endsWith('.html') && url.pathname !== '/') {
+  // Static assets like icons: cache first
+  if (STATIC_ASSETS.some(a => url.pathname === a)) {
     event.respondWith(
       caches.match(event.request).then((cached) => cached || fetch(event.request))
     );
   }
-  // HTML and all /v1/ requests: always go to network (no caching)
+  // Everything else: network only
 });
 
 // Push notification handler

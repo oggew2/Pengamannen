@@ -40,3 +40,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </React.StrictMode>
 );
+
+// Hide the loading screen now that React has mounted
+if (typeof window !== 'undefined' && (window as any).hideAppLoader) {
+  (window as any).hideAppLoader();
+}
