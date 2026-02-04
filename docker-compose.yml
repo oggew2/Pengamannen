@@ -6,7 +6,7 @@ services:
     environment:
       - DATABASE_URL=sqlite:///./data/app.db
       - DATA_SYNC_ENABLED=true
-      - DATA_SYNC_HOUR=18
+      - DATA_SYNC_HOUR=17
     volumes:
       - ./data:/app/data
     restart: unless-stopped
