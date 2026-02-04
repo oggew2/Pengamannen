@@ -74,6 +74,20 @@
         window.location.href = '/?t=' + Date.now();
       };
       
+      // Auto-recover if we detect a stale cache situation
+      // This helps existing PWA users who are stuck
+      (function() {
+        var lastVersion = localStorage.getItem('app_version');
+        var currentVersion = 'v4'; // Bump this on major updates
+        if (lastVersion && lastVersion !== currentVersion) {
+          console.log('Version mismatch, auto-recovering...');
+          localStorage.setItem('app_version', currentVersion);
+          window.recoverApp();
+          return;
+        }
+        localStorage.setItem('app_version', currentVersion);
+      })();
+      
       // Hide loader when React mounts (called from main.tsx)
       window.hideAppLoader = function() {
         clearTimeout(loadTimeout);
