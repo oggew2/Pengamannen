@@ -4,7 +4,17 @@ WORKDIR /frontend
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ ./
+
+# Git info passed as build args
+ARG GIT_COMMIT=unknown
+ARG GIT_DATE=unknown
+ARG BUILD_TIME=unknown
+
 ENV VITE_API_BASE_URL=""
+ENV VITE_GIT_COMMIT=$GIT_COMMIT
+ENV VITE_GIT_DATE=$GIT_DATE
+ENV VITE_BUILD_TIME=$BUILD_TIME
+
 RUN npm run build
 
 # Build backend with frontend

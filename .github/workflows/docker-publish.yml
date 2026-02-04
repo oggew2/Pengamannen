@@ -45,3 +45,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
+            GIT_DATE=${{ github.event.head_commit.timestamp }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp }}
