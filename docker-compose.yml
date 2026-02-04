@@ -30,11 +30,12 @@ services:
       - "com.centurylinklabs.watchtower.enable=false"
 
   watchtower:
-    image: containrrr/watchtower:1.5.3
+    image: containrrr/watchtower:latest
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /root/.docker/config.json:/config.json:ro
     environment:
+      - DOCKER_API_VERSION=1.44
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_POLL_INTERVAL=300
       - WATCHTOWER_LABEL_ENABLE=true
