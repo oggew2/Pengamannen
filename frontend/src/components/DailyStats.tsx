@@ -152,6 +152,11 @@ export function DailyStats() {
             )}
           </HStack>
         )}
+
+        {/* Data source disclaimer */}
+        <Text fontSize="xs" color="fg.muted" textAlign="center" opacity={0.7}>
+          Kurser från TradingView · kan avvika ~1-2% från mäklarvärden
+        </Text>
       </VStack>
     </Box>
   );
