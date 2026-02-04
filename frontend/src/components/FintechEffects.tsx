@@ -156,7 +156,7 @@ export function AnimatedNumber({
   })();
 
   const arrow = showDirection ? (value > 0 ? ' ↑' : value < 0 ? ' ↓' : ' →') : '';
-  const color = colorize ? (value > 0 ? 'var(--color-green-400)' : value < 0 ? 'var(--color-red-400)' : 'var(--color-gray-400)') : 'inherit';
+  const color = colorize ? (value > 0 ? '#4ade80' : value < 0 ? '#f87171' : '#9ca3af') : 'inherit';
 
   return <span style={{ color }}>{formatted}{arrow}</span>;
 }
