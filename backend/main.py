@@ -768,6 +768,8 @@ def rebalance_nordic_momentum(request: dict, response: Response):
         
         # Get FX rates from fetcher
         fx_rates = getattr(fetcher, '_fx_rates', {'EUR': 10.56, 'NOK': 0.93, 'DKK': 1.42, 'SEK': 1})
+        fx_source = getattr(fetcher, '_fx_source', 'fallback')
+        fx_is_fallback = getattr(fetcher, '_fx_is_fallback', True)
         
         if mode == 'add_only':
             # In add_only mode, set sell_threshold very high so nothing gets sold
@@ -801,6 +803,16 @@ def rebalance_nordic_momentum(request: dict, response: Response):
             )
         
         rebalance['mode'] = mode
+        
+        # Add FX alert if using fallback rates
+        if fx_is_fallback:
+            rebalance['fx_alert'] = {
+                "type": "fx_fallback",
+                "message": "Valutakurser kunde inte hämtas live",
+                "rates": {k: v for k, v in fx_rates.items() if k != 'SEK'},
+                "impact": "Köp/sälj-belopp kan avvika ~1-2% från verkligt värde"
+            }
+        
         response.headers["Cache-Control"] = "no-cache"
         return rebalance
         

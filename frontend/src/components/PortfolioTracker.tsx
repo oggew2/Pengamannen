@@ -162,6 +162,7 @@ export function PortfolioTracker() {
     costs?: { courtage: number; spread: number; total: number };
     maxDrift?: number;
     driftRecommendation?: 'low' | 'medium' | 'high';
+    fxAlert?: { type: string; message: string; rates: { EUR?: number; NOK?: number; DKK?: number }; impact: string };
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -626,6 +627,7 @@ export function PortfolioTracker() {
         costs,
         maxDrift: res.max_drift,
         driftRecommendation: res.drift_recommendation,
+        fxAlert: res.fx_alert,
       });
       setBuyAdjustments({});  // Reset adjustments
       setExecutedTrades({ sells: [], buys: [] });
@@ -1396,6 +1398,22 @@ export function PortfolioTracker() {
               transition={{ duration: 0.3, ease: [0.34, 1.56, 0.64, 1] }}
             >
             <VStack align="stretch" gap="12px" mt="8px">
+              {/* FX Alert Banner */}
+              {rebalanceData.fxAlert && (
+                <Box bg="rgba(251, 191, 36, 0.15)" p="12px" borderRadius="md" borderLeft="3px solid" borderColor="yellow.400">
+                  <HStack gap="8px" align="start">
+                    <Text>⚠️</Text>
+                    <VStack align="start" gap="2px">
+                      <Text fontSize="sm" fontWeight="medium" color="yellow.200">{rebalanceData.fxAlert.message}</Text>
+                      <Text fontSize="xs" color="fg.muted">
+                        Kurser: EUR={rebalanceData.fxAlert.rates.EUR?.toFixed(2)}, NOK={rebalanceData.fxAlert.rates.NOK?.toFixed(2)}, DKK={rebalanceData.fxAlert.rates.DKK?.toFixed(2)}
+                      </Text>
+                      <Text fontSize="xs" color="fg.muted">{rebalanceData.fxAlert.impact}</Text>
+                    </VStack>
+                  </HStack>
+                </Box>
+              )}
+
               {/* Drift recommendation */}
               {rebalanceData.driftRecommendation && (
                 <Box 

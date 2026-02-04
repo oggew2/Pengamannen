@@ -892,7 +892,8 @@ def calculate_rebalance_with_banding(
     rank_lookup = {s['ticker']: i + 1 for i, s in enumerate(ranked_stocks)}
     name_lookup = {s['ticker']: s.get('name', '') for s in ranked_stocks}
     currency_lookup = currency_lookup or {}
-    fx_rates = fx_rates or {'EUR': 1, 'NOK': 1, 'DKK': 1, 'SEK': 1}  # Default to 1 if not provided
+    if not fx_rates:
+        raise ValueError("fx_rates is required for multi-currency rebalancing")
     
     def to_sek(amount, currency):
         """Convert amount to SEK"""
