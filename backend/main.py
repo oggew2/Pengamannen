@@ -4597,11 +4597,18 @@ def get_portfolio_daily_stats_debug(request: Request, db: Session = Depends(get_
             weight = debug[i]['value_sek'] / total_value
             weighted_change += weight * (debug[i]['tv_change_1d'] or 0)
     
+    # Find holdings not matched in TradingView
+    unmatched = [d for d in debug if not d['tv_found']]
+    
     return {
         "holdings_count": len(holdings), 
         "total_value": round(total_value, 2),
         "weighted_change_1d": round(weighted_change, 2),
-        "debug": debug
+        "unmatched_count": len(unmatched),
+        "unmatched": unmatched,
+        "fx_rates": fx_rates,
+        "debug": debug,
+        "tip": "Compare total_value with Avanza. Difference may be: 1) missing holding, 2) FX rate diff, 3) cash balance, 4) price timing"
     }
 
 
@@ -5032,16 +5039,47 @@ def get_portfolio_performance_data(
         # Calculate value at this date
         day_value = 0
         for ticker, pos in pos_at_date.items():
-            if ticker in price_lookup:
-                # Find closest price on or before this date
-                valid_dates = [d for d in price_lookup[ticker].keys() if d <= current_date.isoformat()]
-                if valid_dates:
-                    price = price_lookup[ticker][max(valid_dates)]
-                    day_value += pos['shares'] * price
+            isin = pos.get('isin')
+            lookup_ticker = isin_to_ticker.get(isin, ticker) if isin else ticker
+            currency = isin_to_currency.get(isin, 'SEK') if isin else 'SEK'
+            
+            # For today, use live prices; for historical, use DB prices
+            if current_date == today:
+                live_stock = None
+                if isin and isin in live_by_isin:
+                    live_stock = live_by_isin[isin]
+                elif ticker in live_prices:
+                    live_stock = live_prices[ticker]
+                elif ticker.replace(' ', '_') in live_prices:
+                    live_stock = live_prices[ticker.replace(' ', '_')]
+                
+                if live_stock:
+                    price = live_stock.get('close', 0)
+                    currency = live_stock.get('currency', 'SEK')
+                    rate = currency_rates.get(currency, 1.0)
+                    day_value += pos['shares'] * price * rate
+                elif lookup_ticker in price_lookup and price_lookup[lookup_ticker]:
+                    latest = max(price_lookup[lookup_ticker].keys())
+                    day_value += pos['shares'] * price_lookup[lookup_ticker][latest] * currency_rates.get(currency, 1.0)
                 else:
                     day_value += pos['total_cost']
             else:
-                day_value += pos['total_cost']
+                # Historical: use DB prices
+                if lookup_ticker in price_lookup:
+                    valid_dates = [d for d in price_lookup[lookup_ticker].keys() if d <= current_date.isoformat()]
+                    if valid_dates:
+                        price = price_lookup[lookup_ticker][max(valid_dates)]
+                        day_value += pos['shares'] * price * currency_rates.get(currency, 1.0)
+                    else:
+                        day_value += pos['total_cost']
+                elif ticker in price_lookup:
+                    valid_dates = [d for d in price_lookup[ticker].keys() if d <= current_date.isoformat()]
+                    if valid_dates:
+                        day_value += pos['shares'] * price_lookup[ticker][max(valid_dates)]
+                    else:
+                        day_value += pos['total_cost']
+                else:
+                    day_value += pos['total_cost']
         
         if day_value > 0:
             # Deduct cumulative fees/spread up to this date for net value
@@ -5053,9 +5091,15 @@ def get_portfolio_performance_data(
         # Weekly intervals for cleaner chart
         current_date += timedelta(days=7)
     
-    # Add final point for today
-    if chart_data and chart_data[-1]["value"] != round(total_value):
-        chart_data.append({"date": today.strftime("%d %b"), "value": round(total_value)})
+    # Add today if not already included (when today doesn't fall on weekly interval)
+    if chart_data and chart_data[-1]["date"] != today.strftime("%d %b"):
+        # Recalculate today's value with live prices
+        txns_to_date = txn_list
+        pos_at_date = calculate_positions(txns_to_date)
+        fees_to_date = sum(t.get('fee', 0) for t in txns_to_date)
+        spread_to_date = sum((t.get('shares', 0) * t.get('price_sek', 0)) for t in txns_to_date) * 0.003
+        net_today = total_value - fees_to_date - spread_to_date
+        chart_data.append({"date": today.strftime("%d %b"), "value": round(net_today)})
     
     result["chart_data"] = chart_data
     
