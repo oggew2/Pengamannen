@@ -9,12 +9,12 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# Nordic market configuration
+# Nordic market configuration (fx_rate is fallback only - live rates fetched via get_fx_rates())
 NORDIC_MARKETS = {
     'sweden': {'url': 'https://scanner.tradingview.com/sweden/scan', 'currency': 'SEK', 'fx_rate': 1.0},
-    'finland': {'url': 'https://scanner.tradingview.com/finland/scan', 'currency': 'EUR', 'fx_rate': 11.5},
-    'norway': {'url': 'https://scanner.tradingview.com/norway/scan', 'currency': 'NOK', 'fx_rate': 0.85},
-    'denmark': {'url': 'https://scanner.tradingview.com/denmark/scan', 'currency': 'DKK', 'fx_rate': 1.55},
+    'finland': {'url': 'https://scanner.tradingview.com/finland/scan', 'currency': 'EUR', 'fx_rate': 11.4},
+    'norway': {'url': 'https://scanner.tradingview.com/norway/scan', 'currency': 'NOK', 'fx_rate': 0.98},
+    'denmark': {'url': 'https://scanner.tradingview.com/denmark/scan', 'currency': 'DKK', 'fx_rate': 1.53},
 }
 
 # Financial sectors to exclude (TradingView uses English names)
@@ -442,8 +442,8 @@ def get_fx_rates() -> Dict[str, float]:
     
     Returns rates as: 1 local currency = X SEK
     """
-    # Reasonable default rates (updated Jan 2026)
-    default_rates = {'SEK': 1.0, 'EUR': 11.5, 'NOK': 0.92, 'DKK': 1.55}
+    # Reasonable default rates (updated Feb 2026)
+    default_rates = {'SEK': 1.0, 'EUR': 11.4, 'NOK': 0.98, 'DKK': 1.53}
     
     try:
         # Use exchangerate-api.com (free tier)

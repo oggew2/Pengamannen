@@ -4528,7 +4528,7 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
         ticker_to_data = {s['ticker']: s for s in stocks_data} if stocks_data else {}
         isin_to_data = {s['isin']: s for s in stocks_data if s.get('isin')} if stocks_data else {}
     except:
-        fx_rates = {'SEK': 1.0, 'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0}
+        fx_rates = {'SEK': 1.0, 'EUR': 11.4, 'DKK': 1.53, 'NOK': 0.98}
         ticker_to_data = {}
         isin_to_data = {}
     
