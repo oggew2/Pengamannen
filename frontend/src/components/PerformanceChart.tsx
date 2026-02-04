@@ -153,9 +153,13 @@ export function PerformanceChart() {
           <path d="M15 45 L45 30 L75 15 L105 5" stroke="#48BB78" strokeWidth="2" fill="none" strokeLinecap="round" />
           <circle cx="105" cy="5" r="4" fill="#48BB78" />
         </svg>
-        <Text color="gray.300" fontWeight="medium">Börja spåra din portfölj</Text>
+        <Text color="gray.300" fontWeight="medium">
+          {data?.message === 'Not logged in' ? 'Logga in för att se din utveckling' : 'Importera transaktioner'}
+        </Text>
         <Text color="gray.500" fontSize="sm" mt={2}>
-          Importera en CSV-fil från Avanza för att se din utveckling över tid.
+          {data?.message === 'Not logged in' 
+            ? 'Du behöver vara inloggad för att spåra portföljutveckling.'
+            : 'Importera en CSV-fil från Avanza för att se din utveckling över tid.'}
         </Text>
       </Box>
     );
