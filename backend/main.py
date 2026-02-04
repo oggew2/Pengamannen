@@ -4800,8 +4800,11 @@ def get_portfolio_performance_data(
     # Calculate current positions and value
     current_positions = calculate_positions(txn_list)
     
-    # Currency conversion rates (approximate)
-    currency_rates = {'EUR': 11.5, 'DKK': 1.55, 'NOK': 1.0, 'SEK': 1.0}
+    # Get live FX rates
+    from services.tradingview_fetcher import get_fx_rates_with_source
+    fx_result = get_fx_rates_with_source()
+    currency_rates = fx_result.rates
+    fx_is_fallback = fx_result.is_fallback
     
     # Get latest prices for current value (use ISIN to find correct ticker)
     total_value = 0
@@ -4834,6 +4837,16 @@ def get_portfolio_performance_data(
     gross_return_pct = ((total_value - total_cost) / total_cost * 100) if total_cost > 0 else 0
     net_return_pct = ((total_value - total_cost - total_fees - estimated_spread) / total_cost * 100) if total_cost > 0 else 0
     
+    # Build FX alert if using fallback
+    fx_alert = None
+    if fx_is_fallback:
+        fx_alert = {
+            "type": "fx_fallback",
+            "message": "Valutakurser kunde inte hämtas live",
+            "rates": {k: v for k, v in currency_rates.items() if k != 'SEK'},
+            "impact": "Avkastning kan avvika ~1-2% från verkligt värde"
+        }
+    
     result = {
         "summary": {
             "total_invested": round(total_cost, 2),
@@ -4848,6 +4861,7 @@ def get_portfolio_performance_data(
         },
         "positions": [],
         "period": period,
+        "fx_alert": fx_alert,
     }
     
     # Build positions with current value and return (use ISIN for lookup)
