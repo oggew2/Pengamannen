@@ -30,7 +30,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=false"
 
   watchtower:
-    image: containrrr/watchtower:1.7.1
+    image: containrrr/watchtower:1.5.3
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /root/.docker/config.json:/config.json:ro
