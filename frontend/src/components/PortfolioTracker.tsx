@@ -106,7 +106,7 @@ END:VEVENT
 END:VCALENDAR`;
 }
 
-// Swipeable card for holdings (modern UI only)
+// Swipeable card for holdings (touch devices only in modern mode)
 function SwipeableHoldingCard({ 
   children, 
   onDelete, 
@@ -119,6 +119,11 @@ function SwipeableHoldingCard({
   const x = useMotionValue(0);
   const background = useTransform(x, [-100, 0], ['rgba(239, 68, 68, 0.3)', 'rgba(0,0,0,0)']);
   const deleteOpacity = useTransform(x, [-100, -50, 0], [1, 0.5, 0]);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+
+  useEffect(() => {
+    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
+  }, []);
 
   const handleDragEnd = (_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     if (info.offset.x < -100) {
@@ -127,7 +132,8 @@ function SwipeableHoldingCard({
     }
   };
 
-  if (!enabled) return <>{children}</>;
+  // Only enable swipe on touch devices to preserve click on desktop
+  if (!enabled || !isTouchDevice) return <>{children}</>;
 
   return (
     <Box position="relative" overflow="hidden" borderRadius="md">
@@ -138,6 +144,7 @@ function SwipeableHoldingCard({
         drag="x"
         dragConstraints={{ left: -120, right: 0 }}
         dragElastic={0.1}
+        dragSnapToOrigin
         onDragEnd={handleDragEnd}
         style={{ x }}
       >
