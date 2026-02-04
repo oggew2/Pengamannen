@@ -1840,10 +1840,12 @@ def get_momentum_portfolio(request: Request, db: Session = Depends(get_db)):
 
 @v1_router.post("/user/momentum-portfolio")
 def save_momentum_portfolio(request: Request, body: dict, db: Session = Depends(get_db)):
-    """Save user's momentum portfolio holdings."""
+    """Save user's momentum portfolio holdings and sync to transactions."""
     from services.auth import require_auth
-    from models import UserPortfolio
+    from models import UserPortfolio, PortfolioTransactionImported
     import json
+    import hashlib
+    from datetime import datetime
     
     user = require_auth(request, db)
     holdings = body.get("holdings", [])
@@ -1869,9 +1871,112 @@ def save_momentum_portfolio(request: Request, body: dict, db: Session = Depends(
     if history:
         portfolio.description = json.dumps({"history": history})
     
+    # Sync holdings to PortfolioTransactionImported for PerformanceChart
+    # Create BUY transactions for each holding (if not already exists)
+    for h in holdings:
+        ticker = h.get('ticker', '')
+        shares = h.get('shares', 0)
+        buy_price = h.get('buyPrice', 0)
+        buy_date = h.get('buyDate', datetime.now().strftime('%Y-%m-%d'))
+        isin = h.get('isin')
+        currency = h.get('currency', 'SEK')
+        
+        # Create unique hash for this holding
+        hash_str = f"{user.id}:{ticker}:{buy_date}:{shares}:{buy_price}:manual"
+        txn_hash = hashlib.md5(hash_str.encode()).hexdigest()
+        
+        # Check if transaction already exists
+        existing = db.query(PortfolioTransactionImported).filter(
+            PortfolioTransactionImported.user_id == user.id,
+            PortfolioTransactionImported.hash == txn_hash
+        ).first()
+        
+        if not existing and shares > 0:
+            txn = PortfolioTransactionImported(
+                user_id=user.id,
+                date=datetime.strptime(buy_date, '%Y-%m-%d').date() if buy_date else datetime.now().date(),
+                ticker=ticker,
+                isin=isin,
+                type='BUY',
+                shares=shares,
+                price_sek=buy_price,
+                price_local=h.get('buyPriceLocal', buy_price),
+                currency=currency,
+                fee=h.get('fees', 0),
+                fx_rate=h.get('fxRate', 1.0),
+                hash=txn_hash,
+                source='manual',
+            )
+            db.add(txn)
+    
     db.commit()
     
     return {"status": "saved", "count": len(holdings)}
+
+
+@v1_router.post("/user/momentum-portfolio/sync-transactions")
+def sync_momentum_to_transactions(request: Request, db: Session = Depends(get_db)):
+    """
+    Sync existing momentum holdings to PortfolioTransactionImported.
+    Call this once for users who added holdings before transaction sync was implemented.
+    """
+    from services.auth import require_auth
+    from models import UserPortfolio, PortfolioTransactionImported
+    import json
+    import hashlib
+    from datetime import datetime
+    
+    user = require_auth(request, db)
+    
+    portfolio = db.query(UserPortfolio).filter(
+        UserPortfolio.user_id == user.id,
+        UserPortfolio.name == "momentum_locked"
+    ).first()
+    
+    if not portfolio or not portfolio.holdings:
+        return {"synced": 0, "message": "No holdings to sync"}
+    
+    try:
+        holdings = json.loads(portfolio.holdings)
+    except:
+        return {"synced": 0, "message": "Invalid holdings data"}
+    
+    synced = 0
+    for h in holdings:
+        ticker = h.get('ticker', '')
+        shares = h.get('shares', 0)
+        buy_price = h.get('buyPrice', 0)
+        buy_date = h.get('buyDate', datetime.now().strftime('%Y-%m-%d'))
+        
+        hash_str = f"{user.id}:{ticker}:{buy_date}:{shares}:{buy_price}:manual"
+        txn_hash = hashlib.md5(hash_str.encode()).hexdigest()
+        
+        existing = db.query(PortfolioTransactionImported).filter(
+            PortfolioTransactionImported.user_id == user.id,
+            PortfolioTransactionImported.hash == txn_hash
+        ).first()
+        
+        if not existing and shares > 0:
+            txn = PortfolioTransactionImported(
+                user_id=user.id,
+                date=datetime.strptime(buy_date, '%Y-%m-%d').date() if buy_date else datetime.now().date(),
+                ticker=ticker,
+                isin=h.get('isin'),
+                type='BUY',
+                shares=shares,
+                price_sek=buy_price,
+                price_local=h.get('buyPriceLocal', buy_price),
+                currency=h.get('currency', 'SEK'),
+                fee=h.get('fees', 0),
+                fx_rate=h.get('fxRate', 1.0),
+                hash=txn_hash,
+                source='manual',
+            )
+            db.add(txn)
+            synced += 1
+    
+    db.commit()
+    return {"synced": synced, "total_holdings": len(holdings)}
 
 
 # Analytics & Visualization

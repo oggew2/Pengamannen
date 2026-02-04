@@ -142,6 +142,18 @@ export function PerformanceChart() {
   }
 
   if (!data?.summary) {
+    const handleSync = async () => {
+      try {
+        const res = await fetch('/v1/user/momentum-portfolio/sync-transactions', {
+          method: 'POST',
+          credentials: 'include',
+        });
+        if (res.ok) {
+          fetchPerformance(); // Reload after sync
+        }
+      } catch {}
+    };
+
     return (
       <Box p={8} bg="gray.800" borderRadius="lg" textAlign="center">
         {/* Empty state illustration */}
@@ -154,13 +166,18 @@ export function PerformanceChart() {
           <circle cx="105" cy="5" r="4" fill="#48BB78" />
         </svg>
         <Text color="gray.300" fontWeight="medium">
-          {data?.message === 'Not logged in' ? 'Logga in för att se din utveckling' : 'Importera transaktioner'}
+          {data?.message === 'Not logged in' ? 'Logga in för att se din utveckling' : 'Ingen transaktionsdata'}
         </Text>
         <Text color="gray.500" fontSize="sm" mt={2}>
           {data?.message === 'Not logged in' 
             ? 'Du behöver vara inloggad för att spåra portföljutveckling.'
-            : 'Importera en CSV-fil från Avanza för att se din utveckling över tid.'}
+            : 'Importera CSV eller synka dina manuella innehav.'}
         </Text>
+        {data?.message !== 'Not logged in' && (
+          <Button mt={4} size="sm" colorScheme="blue" onClick={handleSync}>
+            🔄 Synka manuella innehav
+          </Button>
+        )}
       </Box>
     );
   }
