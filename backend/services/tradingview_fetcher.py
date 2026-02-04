@@ -437,47 +437,61 @@ class TradingViewFetcher:
 
 def get_fx_rates() -> Dict[str, float]:
     """
-    Fetch current FX rates for Nordic currencies to SEK.
-    Falls back to hardcoded rates if API fails.
+    Fetch current FX rates for Nordic currencies to SEK from TradingView.
+    Falls back to exchangerate-api.com, then hardcoded rates.
     
     Returns rates as: 1 local currency = X SEK
     """
-    # Reasonable default rates (updated Feb 2026)
     default_rates = {'SEK': 1.0, 'EUR': 11.4, 'NOK': 0.98, 'DKK': 1.53}
     
+    # Try TradingView first (same source as stock data)
     try:
-        # Use exchangerate-api.com (free tier)
-        response = requests.get(
-            'https://api.exchangerate-api.com/v4/latest/SEK',
+        response = requests.post(
+            'https://scanner.tradingview.com/forex/scan',
+            json={
+                'symbols': {'tickers': ['FX_IDC:EURSEK', 'FX_IDC:NOKSEK', 'FX_IDC:DKKSEK']},
+                'columns': ['close']
+            },
             timeout=10
         )
         if response.status_code == 200:
             data = response.json()
-            rates = data.get('rates', {})
+            rates = {'SEK': 1.0}
+            for item in data.get('data', []):
+                symbol = item.get('s', '')
+                close = item.get('d', [None])[0]
+                if close and close > 0:
+                    if 'EURSEK' in symbol:
+                        rates['EUR'] = close
+                    elif 'NOKSEK' in symbol:
+                        rates['NOK'] = close
+                    elif 'DKKSEK' in symbol:
+                        rates['DKK'] = close
             
-            # Validate rates are reasonable (within 50% of defaults)
-            fetched_rates = {
-                'SEK': 1.0,
-                'EUR': 1 / rates.get('EUR', 1/11.5),
-                'NOK': 1 / rates.get('NOK', 1/0.92),
-                'DKK': 1 / rates.get('DKK', 1/1.55),
-            }
-            
-            # Sanity check: rates should be within reasonable bounds
-            for currency, rate in fetched_rates.items():
-                if currency == 'SEK':
-                    continue
-                default = default_rates[currency]
-                if rate < default * 0.5 or rate > default * 2.0:
-                    logger.warning(f"FX rate for {currency} seems off: {rate:.4f} (default: {default})")
-                    return default_rates
-            
-            logger.info(f"FX rates fetched: EUR={fetched_rates['EUR']:.4f}, NOK={fetched_rates['NOK']:.4f}, DKK={fetched_rates['DKK']:.4f}")
-            return fetched_rates
-            
+            if len(rates) == 4:  # Got all rates
+                logger.info(f"FX rates from TradingView: EUR={rates['EUR']:.4f}, NOK={rates['NOK']:.4f}, DKK={rates['DKK']:.4f}")
+                return rates
     except Exception as e:
-        logger.warning(f"Failed to fetch FX rates, using defaults: {e}")
+        logger.warning(f"TradingView FX fetch failed: {e}")
     
+    # Fallback to exchangerate-api.com
+    try:
+        response = requests.get('https://api.exchangerate-api.com/v4/latest/SEK', timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            api_rates = data.get('rates', {})
+            rates = {
+                'SEK': 1.0,
+                'EUR': 1 / api_rates.get('EUR', 1/11.4),
+                'NOK': 1 / api_rates.get('NOK', 1/0.98),
+                'DKK': 1 / api_rates.get('DKK', 1/1.53),
+            }
+            logger.info(f"FX rates from exchangerate-api: EUR={rates['EUR']:.4f}, NOK={rates['NOK']:.4f}, DKK={rates['DKK']:.4f}")
+            return rates
+    except Exception as e:
+        logger.warning(f"exchangerate-api FX fetch failed: {e}")
+    
+    logger.warning("Using fallback FX rates")
     return default_rates
 
 
