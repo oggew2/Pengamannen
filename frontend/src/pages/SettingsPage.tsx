@@ -212,6 +212,25 @@ export default function SettingsPage() {
           </Flex>
         </VStack>
       </Box>
+
+      {/* App Info */}
+      <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="24px">
+        <Text fontSize="lg" fontWeight="semibold" color="fg" mb="16px">App Info</Text>
+        <VStack align="stretch" gap="8px">
+          <Flex justify="space-between">
+            <Text fontSize="sm" color="fg.muted">Version</Text>
+            <Text fontSize="sm" color="fg" fontFamily="mono">{__GIT_COMMIT__}</Text>
+          </Flex>
+          <Flex justify="space-between">
+            <Text fontSize="sm" color="fg.muted">Built</Text>
+            <Text fontSize="sm" color="fg">{new Date(__BUILD_TIME__).toLocaleString('sv-SE')}</Text>
+          </Flex>
+          <Flex justify="space-between">
+            <Text fontSize="sm" color="fg.muted">Last commit</Text>
+            <Text fontSize="sm" color="fg">{new Date(__GIT_DATE__).toLocaleString('sv-SE')}</Text>
+          </Flex>
+        </VStack>
+      </Box>
     </VStack>
   );
 }

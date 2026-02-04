@@ -1,6 +1,5 @@
 /// <reference types="vite/client" />
 
-declare module '*.module.css' {
-  const classes: { [key: string]: string };
-  export default classes;
-}
+declare const __BUILD_TIME__: string
+declare const __GIT_COMMIT__: string
+declare const __GIT_DATE__: string
