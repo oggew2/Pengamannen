@@ -4905,37 +4905,62 @@ def get_portfolio_performance_data(
     # Calculate current positions and value
     current_positions = calculate_positions(txn_list)
     
-    # Get live FX rates
-    from services.tradingview_fetcher import get_fx_rates_with_source
+    # Get live FX rates and prices from TradingView for current value
+    from services.tradingview_fetcher import TradingViewFetcher, get_fx_rates_with_source
     fx_result = get_fx_rates_with_source()
     currency_rates = fx_result.rates
     fx_is_fallback = fx_result.is_fallback
     
-    # Get latest prices for current value (use ISIN to find correct ticker)
+    # Get live prices from TradingView
+    try:
+        fetcher = TradingViewFetcher()
+        live_stocks = fetcher.fetch_nordic(min_market_cap_sek=2e9)
+        live_prices = {s['ticker']: s for s in live_stocks} if live_stocks else {}
+        live_by_isin = {s['isin']: s for s in live_stocks if s.get('isin')} if live_stocks else {}
+    except:
+        live_prices = {}
+        live_by_isin = {}
+    
+    # Get latest prices for current value (prefer live, fallback to DB)
     total_value = 0
     total_cost = 0
     missing_prices = []
     for ticker, pos in current_positions.items():
-        # Try to find price via ISIN first (handles Nordic stocks with suffixes)
         isin = pos.get('isin')
-        lookup_ticker = isin_to_ticker.get(isin, ticker) if isin else ticker
-        currency = isin_to_currency.get(isin, 'SEK') if isin else 'SEK'
         
-        if lookup_ticker in price_lookup and price_lookup[lookup_ticker]:
-            latest_date = max(price_lookup[lookup_ticker].keys())
-            latest_price = price_lookup[lookup_ticker][latest_date]
-            # Convert to SEK
+        # Try live price first (most accurate)
+        live_stock = None
+        if isin and isin in live_by_isin:
+            live_stock = live_by_isin[isin]
+        elif ticker in live_prices:
+            live_stock = live_prices[ticker]
+        elif ticker.replace(' ', '_') in live_prices:
+            live_stock = live_prices[ticker.replace(' ', '_')]
+        
+        if live_stock:
+            price = live_stock.get('close', 0)
+            currency = live_stock.get('currency', 'SEK')
             rate = currency_rates.get(currency, 1.0)
-            total_value += pos['shares'] * latest_price * rate
-        elif ticker in price_lookup and price_lookup[ticker]:
-            # Fallback to original ticker
-            latest_date = max(price_lookup[ticker].keys())
-            latest_price = price_lookup[ticker][latest_date]
-            total_value += pos['shares'] * latest_price
+            total_value += pos['shares'] * price * rate
         else:
-            # No price data - use cost as fallback value
-            total_value += pos['total_cost']
-            missing_prices.append(ticker)
+            # Fallback to DB prices
+            lookup_ticker = isin_to_ticker.get(isin, ticker) if isin else ticker
+            currency = isin_to_currency.get(isin, 'SEK') if isin else 'SEK'
+            
+            if lookup_ticker in price_lookup and price_lookup[lookup_ticker]:
+                latest_date = max(price_lookup[lookup_ticker].keys())
+                latest_price = price_lookup[lookup_ticker][latest_date]
+                rate = currency_rates.get(currency, 1.0)
+                total_value += pos['shares'] * latest_price * rate
+            elif ticker in price_lookup and price_lookup[ticker]:
+                latest_date = max(price_lookup[ticker].keys())
+                latest_price = price_lookup[ticker][latest_date]
+                total_value += pos['shares'] * latest_price
+            else:
+                # No price data - use cost as fallback value
+                total_value += pos['total_cost']
+                missing_prices.append(ticker)
+        
         total_cost += pos['total_cost']
     
     # Calculate returns
