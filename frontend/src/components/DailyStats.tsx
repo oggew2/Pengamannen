@@ -3,6 +3,13 @@ import { useState, useEffect } from 'react';
 import { AnimatedNumber } from './FintechEffects';
 import { useUIStyle } from '../contexts/UIStyleContext';
 
+interface FxAlert {
+  type: string;
+  message: string;
+  rates: { EUR?: number; NOK?: number; DKK?: number };
+  impact: string;
+}
+
 interface DailyStatsData {
   total_value: number;
   today_change: number;
@@ -11,6 +18,7 @@ interface DailyStatsData {
   month_change_pct: number;
   best_performer: { ticker: string; change_pct: number } | null;
   worst_performer: { ticker: string; change_pct: number } | null;
+  fx_alert: FxAlert | null;
 }
 
 export function DailyStats() {
@@ -64,6 +72,22 @@ export function DailyStats() {
   return (
     <Box bg="bg" borderRadius="xl" p={5} borderWidth="1px" borderColor="border" className={isModern ? 'glass shadow-soft-lg' : ''}>
       <VStack gap={4} align="stretch">
+        {/* FX Alert Banner */}
+        {data.fx_alert && (
+          <Box bg="rgba(251, 191, 36, 0.15)" p={3} borderRadius="lg" borderLeft="3px solid" borderColor="yellow.400">
+            <HStack gap={2} align="start">
+              <Text>⚠️</Text>
+              <VStack align="start" gap={1}>
+                <Text fontSize="sm" fontWeight="medium" color="yellow.200">{data.fx_alert.message}</Text>
+                <Text fontSize="xs" color="fg.muted">
+                  Kurser: EUR={data.fx_alert.rates.EUR?.toFixed(2)}, NOK={data.fx_alert.rates.NOK?.toFixed(2)}, DKK={data.fx_alert.rates.DKK?.toFixed(2)}
+                </Text>
+                <Text fontSize="xs" color="fg.muted">{data.fx_alert.impact}</Text>
+              </VStack>
+            </HStack>
+          </Box>
+        )}
+        
         {/* Greeting */}
         <Text color="fg.muted" fontSize="sm">{greeting}! 👋</Text>
         

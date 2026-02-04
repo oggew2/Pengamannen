@@ -239,8 +239,11 @@ class TradingViewFetcher:
             raise ValueError(f"No valid markets specified. Valid options: {list(NORDIC_MARKETS.keys())}")
         
         # Get current FX rates and store on self for callers to access
-        fx_rates = get_fx_rates()
+        fx_result = get_fx_rates_with_source()
+        fx_rates = fx_result.rates
         self._fx_rates = fx_rates
+        self._fx_source = fx_result.source
+        self._fx_is_fallback = fx_result.is_fallback
         
         all_stocks = []
         fetch_errors = []
@@ -435,16 +438,29 @@ class TradingViewFetcher:
         return list(seen.values())
 
 
+class FxRateResult:
+    """Result of FX rate fetch with source info for alerts."""
+    def __init__(self, rates: Dict[str, float], source: str, is_fallback: bool = False):
+        self.rates = rates
+        self.source = source
+        self.is_fallback = is_fallback
+
+
 def get_fx_rates() -> Dict[str, float]:
+    """Get FX rates (simple dict for backward compatibility)."""
+    return get_fx_rates_with_source().rates
+
+
+def get_fx_rates_with_source() -> FxRateResult:
     """
     Fetch current FX rates for Nordic currencies to SEK from TradingView.
     Falls back to exchangerate-api.com, then hardcoded rates.
     
-    Returns rates as: 1 local currency = X SEK
+    Returns FxRateResult with rates, source, and fallback flag.
     """
     default_rates = {'SEK': 1.0, 'EUR': 11.4, 'NOK': 0.98, 'DKK': 1.53}
     
-    # Try TradingView first (same source as stock data)
+    # Try TradingView first
     try:
         response = requests.post(
             'https://scanner.tradingview.com/forex/scan',
@@ -468,9 +484,9 @@ def get_fx_rates() -> Dict[str, float]:
                     elif 'DKKSEK' in symbol:
                         rates['DKK'] = close
             
-            if len(rates) == 4:  # Got all rates
+            if len(rates) == 4:
                 logger.info(f"FX rates from TradingView: EUR={rates['EUR']:.4f}, NOK={rates['NOK']:.4f}, DKK={rates['DKK']:.4f}")
-                return rates
+                return FxRateResult(rates, 'tradingview', False)
     except Exception as e:
         logger.warning(f"TradingView FX fetch failed: {e}")
     
@@ -487,12 +503,12 @@ def get_fx_rates() -> Dict[str, float]:
                 'DKK': 1 / api_rates.get('DKK', 1/1.53),
             }
             logger.info(f"FX rates from exchangerate-api: EUR={rates['EUR']:.4f}, NOK={rates['NOK']:.4f}, DKK={rates['DKK']:.4f}")
-            return rates
+            return FxRateResult(rates, 'exchangerate-api', False)
     except Exception as e:
         logger.warning(f"exchangerate-api FX fetch failed: {e}")
     
     logger.warning("Using fallback FX rates")
-    return default_rates
+    return FxRateResult(default_rates, 'fallback', True)
 
 
 def fetch_omxs30_performance() -> dict:

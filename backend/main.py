@@ -4525,10 +4525,14 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
         fetcher = TradingViewFetcher()
         stocks_data = fetcher.fetch_nordic(min_market_cap_sek=2e9)
         fx_rates = getattr(fetcher, '_fx_rates', {'EUR': 11.5, 'NOK': 1.0, 'DKK': 1.55, 'SEK': 1.0})
+        fx_source = getattr(fetcher, '_fx_source', 'unknown')
+        fx_is_fallback = getattr(fetcher, '_fx_is_fallback', False)
         ticker_to_data = {s['ticker']: s for s in stocks_data} if stocks_data else {}
         isin_to_data = {s['isin']: s for s in stocks_data if s.get('isin')} if stocks_data else {}
     except:
         fx_rates = {'SEK': 1.0, 'EUR': 11.4, 'DKK': 1.53, 'NOK': 0.98}
+        fx_source = 'fallback'
+        fx_is_fallback = True
         ticker_to_data = {}
         isin_to_data = {}
     
@@ -4604,6 +4608,16 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
     best = performers[0] if performers and performers[0]['change_pct'] != 0 else None
     worst = performers[-1] if performers and performers[-1]['change_pct'] != 0 else None
     
+    # FX alert info (only include if using fallback)
+    fx_alert = None
+    if fx_is_fallback:
+        fx_alert = {
+            "type": "fx_fallback",
+            "message": "Valutakurser kunde inte hämtas live",
+            "rates": {k: v for k, v in fx_rates.items() if k != 'SEK'},
+            "impact": "Portföljvärdet kan avvika ~1-2% från verkligt värde"
+        }
+    
     return {
         "total_value": round(total_value, 2),
         "today_change": round(today_change, 2),
@@ -4613,6 +4627,7 @@ def get_portfolio_daily_stats(request: Request, db: Session = Depends(get_db)):
         "best_performer": best,
         "worst_performer": worst,
         "holdings_count": len(holdings),
+        "fx_alert": fx_alert,
     }
 
 
