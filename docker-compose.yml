@@ -30,14 +30,14 @@ services:
       - "com.centurylinklabs.watchtower.enable=false"
 
   watchtower:
-    image: containrrr/watchtower
+    image: containrrr/watchtower:1.7.1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.docker/config.json:/config.json:ro  # For ghcr.io auth
+      - /root/.docker/config.json:/config.json:ro
     environment:
-      - WATCHTOWER_CLEANUP=true              # Remove old images after update
-      - WATCHTOWER_POLL_INTERVAL=300         # Check every 5 minutes
-      - WATCHTOWER_LABEL_ENABLE=true         # Only update labeled containers
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=300
+      - WATCHTOWER_LABEL_ENABLE=true
       - WATCHTOWER_INCLUDE_RESTARTING=true
     restart: unless-stopped
 
