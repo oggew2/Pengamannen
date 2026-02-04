@@ -488,13 +488,26 @@ def compute_nordic_momentum(db=None) -> dict:
         db.commit()
         logger.info(f"Saved Nordic momentum rankings to database")
     
+    # Build FX alert if using fallback rates
+    fx_alert = None
+    fx_is_fallback = getattr(fetcher, '_fx_is_fallback', False)
+    if fx_is_fallback:
+        fx_rates = getattr(fetcher, '_fx_rates', {})
+        fx_alert = {
+            "type": "fx_fallback",
+            "message": "Valutakurser kunde inte hämtas live",
+            "rates": {k: v for k, v in fx_rates.items() if k != 'SEK'},
+            "impact": "Priser i SEK kan avvika ~1-2% från verkligt värde"
+        }
+    
     return {
         'strategy': 'nordic_sammansatt_momentum',
         'computed_at': datetime.now().isoformat(),
         'total_universe': len(stocks),
         'after_filters': len(df_quality),
         'rankings': results,
-        'by_market': {m: sum(1 for r in results if r['market'] == m) for m in ['sweden', 'finland', 'norway', 'denmark']}
+        'by_market': {m: sum(1 for r in results if r['market'] == m) for m in ['sweden', 'finland', 'norway', 'denmark']},
+        'fx_alert': fx_alert,
     }
 
 

@@ -154,6 +154,7 @@ export function PortfolioTracker() {
   const [showImport, setShowImport] = useState(false);
   const [showRankings, setShowRankings] = useState(true);  // Default expanded for easy access
   const [rankings, setRankings] = useState<Array<{ticker: string; rank: number; name?: string; isin?: string}>>([]);
+  const [rankingsFxAlert, setRankingsFxAlert] = useState<{ type: string; message: string; rates: { EUR?: number; NOK?: number; DKK?: number }; impact: string } | null>(null);
   const [rebalanceData, setRebalanceData] = useState<{
     sells: RebalanceStock[];
     holds: RebalanceStock[];
@@ -281,6 +282,7 @@ export function PortfolioTracker() {
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (data?.rankings) setRankings(data.rankings.slice(0, 40));
+        if (data?.fx_alert) setRankingsFxAlert(data.fx_alert);
       })
       .catch(() => {});
     
@@ -964,7 +966,20 @@ export function PortfolioTracker() {
           <Text fontSize="xs" color="fg.muted">{showRankings ? '▲' : '▼'}</Text>
         </HStack>
         {showRankings && rankings.length > 0 && (
-          <SimpleGrid columns={{ base: 2, md: 4 }} gap="8px" mt="12px">
+          <>
+            {/* FX Alert Banner */}
+            {rankingsFxAlert && (
+              <Box bg="rgba(251, 191, 36, 0.15)" p="8px" borderRadius="md" borderLeft="3px solid" borderColor="yellow.400" mt="8px">
+                <HStack gap="6px" align="start">
+                  <Text fontSize="xs">⚠️</Text>
+                  <VStack align="start" gap="0">
+                    <Text fontSize="xs" fontWeight="medium" color="yellow.200">{rankingsFxAlert.message}</Text>
+                    <Text fontSize="2xs" color="fg.muted">{rankingsFxAlert.impact}</Text>
+                  </VStack>
+                </HStack>
+              </Box>
+            )}
+            <SimpleGrid columns={{ base: 2, md: 4 }} gap="8px" mt="12px">
             {rankings.map((r, i) => {
               const isOwned = holdings.some(h => h.ticker === r.ticker || (h.isin && h.isin === r.isin));
               return (
@@ -989,6 +1004,7 @@ export function PortfolioTracker() {
               );
             })}
           </SimpleGrid>
+          </>
         )}
       </Box>
 
