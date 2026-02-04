@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Box, Text, Button, VStack, HStack, SimpleGrid, Input, Skeleton } from '@chakra-ui/react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, useTransform, PanInfo } from 'framer-motion';
 import { api, type RebalanceResponse } from '../api/client';
 import { useRebalanceDates } from '../api/hooks';
 import { CsvImporter } from './CsvImporter';
@@ -10,6 +10,7 @@ import { InfoTooltip } from './InfoTooltip';
 import { HealthScore } from './HealthScore';
 import { toaster } from './toaster';
 import { haptic } from '../utils/interactions';
+import { useUIStyle } from '../contexts/UIStyleContext';
 
 interface LockedHolding {
   ticker: string;
@@ -105,6 +106,47 @@ END:VEVENT
 END:VCALENDAR`;
 }
 
+// Swipeable card for holdings (modern UI only)
+function SwipeableHoldingCard({ 
+  children, 
+  onDelete, 
+  enabled 
+}: { 
+  children: React.ReactNode; 
+  onDelete: () => void; 
+  enabled: boolean;
+}) {
+  const x = useMotionValue(0);
+  const background = useTransform(x, [-100, 0], ['rgba(239, 68, 68, 0.3)', 'rgba(0,0,0,0)']);
+  const deleteOpacity = useTransform(x, [-100, -50, 0], [1, 0.5, 0]);
+
+  const handleDragEnd = (_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    if (info.offset.x < -100) {
+      haptic.medium();
+      onDelete();
+    }
+  };
+
+  if (!enabled) return <>{children}</>;
+
+  return (
+    <Box position="relative" overflow="hidden" borderRadius="md">
+      <motion.div style={{ background, position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 16 }}>
+        <motion.span style={{ opacity: deleteOpacity, color: '#f87171', fontWeight: 'bold', fontSize: 12 }}>🗑 Ta bort</motion.span>
+      </motion.div>
+      <motion.div
+        drag="x"
+        dragConstraints={{ left: -120, right: 0 }}
+        dragElastic={0.1}
+        onDragEnd={handleDragEnd}
+        style={{ x }}
+      >
+        {children}
+      </motion.div>
+    </Box>
+  );
+}
+
 export function PortfolioTracker() {
   const [holdings, setHoldings] = useState<LockedHolding[]>([]);
   const [transactionHistory, setTransactionHistory] = useState<Transaction[]>([]);
@@ -139,6 +181,7 @@ export function PortfolioTracker() {
   const [manualDate, setManualDate] = useState('');
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const { celebrate } = useCelebration();
+  const { isModern } = useUIStyle();
   
   // Next rebalance countdown
   const { data: rebalanceDates } = useRebalanceDates();
@@ -1284,29 +1327,39 @@ export function PortfolioTracker() {
                 }
                 
                 return (
-                  <Box 
+                  <SwipeableHoldingCard 
                     key={h.ticker} 
-                    bg={isSellZone ? 'red.900/20' : isInDanger ? 'orange.900/20' : 'bg'} 
-                    px="8px" 
-                    py="4px" 
-                    borderRadius="md" 
-                    borderWidth="1px" 
-                    borderColor={isSellZone ? 'red.500' : isInDanger ? 'orange.500' : 'border'}
-                    cursor="pointer"
-                    onClick={() => startEditing(h)}
-                    title="Klicka för att redigera"
-                    transition="all 0.15s ease"
-                    _hover={{ borderColor: 'blue.400', transform: 'translateY(-1px)', shadow: 'sm' }}
+                    enabled={isModern} 
+                    onDelete={() => deleteHolding(h.ticker)}
                   >
-                    <Text fontWeight="medium">{h.ticker}</Text>
-                    <Text fontSize="xs" color={isSellZone ? 'red.400' : isInDanger ? 'orange.400' : 'fg.muted'}>
-                      {h.shares} st @ {(h.currency && h.currency !== 'SEK' && h.buyPriceLocal) 
-                        ? `${h.buyPriceLocal.toFixed(2)} ${h.currency} ≈${h.buyPrice.toFixed(0)} kr`
-                        : `${h.buyPrice.toFixed(2)} kr`}
-                      {' · '}#{rank}{rank !== h.rankAtPurchase && ` (var #${h.rankAtPurchase})`}
-                      {hasDrift && <Text as="span" color={drift > 0 ? 'green.400' : 'red.400'}> ({drift > 0 ? '+' : ''}{drift.toFixed(1)}%)</Text>}
-                    </Text>
-                  </Box>
+                    <Box 
+                      bg={isSellZone ? 'red.900/20' : isInDanger ? 'orange.900/20' : 'bg'} 
+                      px="8px" 
+                      py="4px" 
+                      borderRadius="md" 
+                      borderWidth="1px" 
+                      borderColor={isSellZone ? 'red.500' : isInDanger ? 'orange.500' : 'border'}
+                      cursor="pointer"
+                      onClick={() => startEditing(h)}
+                      title={isModern ? "Klicka för att redigera, svep vänster för att ta bort" : "Klicka för att redigera"}
+                      transition="all 0.15s ease"
+                      className={isModern ? 'shadow-soft-sm' : ''}
+                      _hover={{ borderColor: 'blue.400', transform: 'translateY(-1px)', shadow: 'sm' }}
+                    >
+                      <Text fontWeight="medium">{h.ticker}</Text>
+                      <Text fontSize="xs" color={isSellZone ? 'red.400' : isInDanger ? 'orange.400' : 'fg.muted'}>
+                        {h.shares} st @ {(h.currency && h.currency !== 'SEK' && h.buyPriceLocal) 
+                          ? `${h.buyPriceLocal.toFixed(2)} ${h.currency} ≈${h.buyPrice.toFixed(0)} kr`
+                          : `${h.buyPrice.toFixed(2)} kr`}
+                        {' · '}#{rank}{rank !== h.rankAtPurchase && ` (var #${h.rankAtPurchase})`}
+                        {hasDrift && (
+                          isModern 
+                            ? <Text as="span"> <AnimatedNumber value={drift} format="percent" showDirection colorize /></Text>
+                            : <Text as="span" color={drift > 0 ? 'green.400' : 'red.400'}> ({drift > 0 ? '+' : ''}{drift.toFixed(1)}%)</Text>
+                        )}
+                      </Text>
+                    </Box>
+                  </SwipeableHoldingCard>
                 );
               })}
             </HStack>

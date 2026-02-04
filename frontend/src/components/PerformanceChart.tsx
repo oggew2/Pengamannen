@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Box, Text, Button, VStack, HStack, Badge } from '@chakra-ui/react';
+import { AnimatedNumber } from './FintechEffects';
+import { useUIStyle } from '../contexts/UIStyleContext';
 
 interface PerformanceSummary {
   total_invested: number;
@@ -66,6 +68,7 @@ export function PerformanceChart() {
   const [showNet, setShowNet] = useState(true);
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
   const chartRef = useRef<SVGSVGElement>(null);
+  const { isModern } = useUIStyle();
 
   useEffect(() => {
     fetchPerformance();
@@ -190,16 +193,18 @@ export function PerformanceChart() {
       </HStack>
 
       {/* Main return display */}
-      <Box bg="gray.800" p={4} borderRadius="lg">
+      <Box bg="gray.800" p={4} borderRadius="lg" className={isModern ? 'glass shadow-soft-md' : ''}>
         <HStack justify="space-between" align="start">
           <VStack align="start" gap={1}>
             <Text color="gray.400" fontSize="sm">Avkastning</Text>
-            <Text
-              fontSize="3xl"
-              fontWeight="bold"
-              color={isPositive ? 'green.400' : 'red.400'}
-            >
-              {isPositive ? '+' : ''}{returnPct.toFixed(1)}%
+            <Text fontSize="3xl" fontWeight="bold">
+              {isModern ? (
+                <AnimatedNumber value={returnPct} format="percent" showDirection colorize />
+              ) : (
+                <span style={{ color: isPositive ? '#4ade80' : '#f87171' }}>
+                  {isPositive ? '+' : ''}{returnPct.toFixed(1)}%
+                </span>
+              )}
             </Text>
             <Text color="gray.500" fontSize="sm">
               {showNet ? 'netto, efter avgifter' : 'brutto'}

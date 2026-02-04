@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Box, Flex, Text, VStack, HStack, Button, Grid, NativeSelect } from '@chakra-ui/react';
 import { api } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { useUIStyle } from '../contexts/UIStyleContext';
 
 interface Settings {
   displayCurrency: string;
@@ -23,6 +24,7 @@ interface UserInfo {
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
+  const { style: uiStyle, setStyle: setUIStyle } = useUIStyle();
   const [settings, setSettings] = useState<Settings>(() => {
     const saved = localStorage.getItem('appSettings');
     return saved ? JSON.parse(saved) : {
@@ -164,6 +166,16 @@ export default function SettingsPage() {
       <Box bg="bg.subtle" borderColor="border" borderWidth="1px" borderRadius="lg" p="24px">
         <Text fontSize="lg" fontWeight="semibold" color="fg" mb="16px">Display Preferences</Text>
         <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap="16px">
+          <Flex justify="space-between" align="center">
+            <VStack align="start" gap="0">
+              <Text fontSize="sm" color="fg.muted">UI Style</Text>
+              <Text fontSize="xs" color="fg.subtle">Modern has glassmorphism & animations</Text>
+            </VStack>
+            <HStack gap="4px" bg="bg.muted" p="2px" borderRadius="md">
+              <Button size="xs" variant={uiStyle === 'classic' ? 'solid' : 'ghost'} colorPalette={uiStyle === 'classic' ? 'gray' : undefined} onClick={() => setUIStyle('classic')}>Classic</Button>
+              <Button size="xs" variant={uiStyle === 'modern' ? 'solid' : 'ghost'} colorPalette={uiStyle === 'modern' ? 'teal' : undefined} onClick={() => setUIStyle('modern')}>Modern</Button>
+            </HStack>
+          </Flex>
           <Flex justify="space-between" align="center">
             <Text fontSize="sm" color="fg.muted">Currency</Text>
             <SelectBox value={settings.displayCurrency} options={[{ value: 'SEK', label: 'SEK' }, { value: 'USD', label: 'USD' }, { value: 'EUR', label: 'EUR' }]} onChange={(v) => saveSettings({ ...settings, displayCurrency: v })} />

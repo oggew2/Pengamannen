@@ -1,6 +1,7 @@
 import { Box, HStack, VStack, Text } from '@chakra-ui/react';
 import { useState, useEffect } from 'react';
 import { AnimatedNumber } from './FintechEffects';
+import { useUIStyle } from '../contexts/UIStyleContext';
 
 interface DailyStatsData {
   total_value: number;
@@ -16,6 +17,7 @@ export function DailyStats() {
   const [data, setData] = useState<DailyStatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [greeting, setGreeting] = useState('');
+  const { isModern } = useUIStyle();
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -60,7 +62,7 @@ export function DailyStats() {
   const isPositive = data.today_change >= 0;
 
   return (
-    <Box bg="bg" borderRadius="xl" p={5} borderWidth="1px" borderColor="border">
+    <Box bg="bg" borderRadius="xl" p={5} borderWidth="1px" borderColor="border" className={isModern ? 'glass shadow-soft-lg' : ''}>
       <VStack gap={4} align="stretch">
         {/* Greeting */}
         <Text color="fg.muted" fontSize="sm">{greeting}! 👋</Text>
@@ -73,12 +75,14 @@ export function DailyStats() {
             </Text>
           </HStack>
           <HStack gap={2}>
-            <Text 
-              fontSize="lg" 
-              fontWeight="semibold"
-              color={isPositive ? 'green.400' : 'red.400'}
-            >
-              {isPositive ? '+' : ''}{data.today_change.toLocaleString('sv-SE')} kr
+            <Text fontSize="lg" fontWeight="semibold">
+              {isModern ? (
+                <AnimatedNumber value={data.today_change} format="currency" showDirection colorize />
+              ) : (
+                <span style={{ color: isPositive ? '#4ade80' : '#f87171' }}>
+                  {isPositive ? '+' : ''}{data.today_change.toLocaleString('sv-SE')} kr
+                </span>
+              )}
             </Text>
             <Text fontSize="xs" color="fg.muted" bg="gray.700" px={2} py={0.5} borderRadius="full">
               idag
@@ -88,9 +92,9 @@ export function DailyStats() {
 
         {/* Period stats */}
         <HStack gap={3} flexWrap="wrap">
-          <StatBox label="Idag" value={data.today_change_pct} />
-          <StatBox label="Vecka" value={data.week_change_pct} />
-          <StatBox label="Månad" value={data.month_change_pct} />
+          <StatBox label="Idag" value={data.today_change_pct} isModern={isModern} />
+          <StatBox label="Vecka" value={data.week_change_pct} isModern={isModern} />
+          <StatBox label="Månad" value={data.month_change_pct} isModern={isModern} />
         </HStack>
 
         {/* Best/Worst performers */}
@@ -101,7 +105,11 @@ export function DailyStats() {
                 <Text fontSize="xs" color="fg.muted">🏆 Bäst idag</Text>
                 <HStack justify="space-between">
                   <Text fontWeight="bold">{data.best_performer.ticker}</Text>
-                  <Text color="green.400" fontWeight="bold">+{data.best_performer.change_pct.toFixed(1)}%</Text>
+                  {isModern ? (
+                    <AnimatedNumber value={data.best_performer.change_pct} format="percent" showDirection colorize />
+                  ) : (
+                    <Text color="green.400" fontWeight="bold">+{data.best_performer.change_pct.toFixed(1)}%</Text>
+                  )}
                 </HStack>
               </Box>
             )}
@@ -110,7 +118,11 @@ export function DailyStats() {
                 <Text fontSize="xs" color="fg.muted">📉 Sämst idag</Text>
                 <HStack justify="space-between">
                   <Text fontWeight="bold">{data.worst_performer.ticker}</Text>
-                  <Text color="red.400" fontWeight="bold">{data.worst_performer.change_pct.toFixed(1)}%</Text>
+                  {isModern ? (
+                    <AnimatedNumber value={data.worst_performer.change_pct} format="percent" showDirection colorize />
+                  ) : (
+                    <Text color="red.400" fontWeight="bold">{data.worst_performer.change_pct.toFixed(1)}%</Text>
+                  )}
                 </HStack>
               </Box>
             )}
@@ -121,13 +133,18 @@ export function DailyStats() {
   );
 }
 
-function StatBox({ label, value }: { label: string; value: number }) {
-  const isPositive = value >= 0;
+function StatBox({ label, value, isModern }: { label: string; value: number; isModern: boolean }) {
   return (
-    <Box flex={1} minW="80px" bg="gray.800" p={3} borderRadius="lg" textAlign="center">
+    <Box flex={1} minW="80px" bg="gray.800" p={3} borderRadius="lg" textAlign="center" className={isModern ? 'shadow-soft-sm' : ''}>
       <Text fontSize="xs" color="fg.muted">{label}</Text>
-      <Text fontWeight="bold" color={isPositive ? 'green.400' : 'red.400'}>
-        {isPositive ? '+' : ''}{value.toFixed(1)}%
+      <Text fontWeight="bold">
+        {isModern ? (
+          <AnimatedNumber value={value} format="percent" showDirection colorize />
+        ) : (
+          <span style={{ color: value >= 0 ? '#4ade80' : '#f87171' }}>
+            {value >= 0 ? '+' : ''}{value.toFixed(1)}%
+          </span>
+        )}
       </Text>
     </Box>
   );

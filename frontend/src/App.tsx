@@ -6,6 +6,7 @@ import { Navigation } from './components/Navigation';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Dashboard } from './pages/Dashboard';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { UIStyleProvider } from './contexts/UIStyleContext';
 import { LoginPage } from './pages/LoginPage';
 import { Toaster } from './components/toaster';
 import { PageTransition } from './components/Animations';
@@ -73,10 +74,12 @@ export function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <CelebrationProvider>
-          <ProtectedApp />
-          <Toaster />
-        </CelebrationProvider>
+        <UIStyleProvider>
+          <CelebrationProvider>
+            <ProtectedApp />
+            <Toaster />
+          </CelebrationProvider>
+        </UIStyleProvider>
       </AuthProvider>
     </ErrorBoundary>
   );
