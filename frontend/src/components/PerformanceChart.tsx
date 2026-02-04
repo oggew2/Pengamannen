@@ -30,6 +30,13 @@ interface ChartPoint {
   value: number;
 }
 
+interface FxAlert {
+  type: string;
+  message: string;
+  rates: { EUR?: number; NOK?: number; DKK?: number };
+  impact: string;
+}
+
 interface PerformanceData {
   summary: PerformanceSummary | null;
   positions: Position[];
@@ -37,6 +44,7 @@ interface PerformanceData {
   message?: string;
   warning?: string;
   chart_data?: ChartPoint[];
+  fx_alert?: FxAlert;
 }
 
 type Period = '1M' | '3M' | '6M' | 'YTD' | '1Y' | 'ALL';
@@ -188,6 +196,22 @@ export function PerformanceChart() {
 
   return (
     <VStack gap={4} align="stretch">
+      {/* FX Alert Banner */}
+      {data.fx_alert && (
+        <Box bg="rgba(251, 191, 36, 0.15)" p={3} borderRadius="md" borderLeft="3px solid" borderLeftColor="yellow.400">
+          <HStack gap={2} align="start">
+            <Text>⚠️</Text>
+            <VStack align="start" gap={1}>
+              <Text fontSize="sm" fontWeight="medium" color="yellow.200">{data.fx_alert.message}</Text>
+              <Text fontSize="xs" color="gray.400">
+                Kurser: EUR={data.fx_alert.rates.EUR?.toFixed(2)}, NOK={data.fx_alert.rates.NOK?.toFixed(2)}, DKK={data.fx_alert.rates.DKK?.toFixed(2)}
+              </Text>
+              <Text fontSize="xs" color="gray.400">{data.fx_alert.impact}</Text>
+            </VStack>
+          </HStack>
+        </Box>
+      )}
+
       {/* Warning if price data missing */}
       {data.warning && (
         <Box bg="orange.900" p={3} borderRadius="md">
