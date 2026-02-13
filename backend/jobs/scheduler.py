@@ -200,8 +200,30 @@ async def tradingview_sync(db, force_refresh: bool = False) -> dict:
         db.commit()
         
         # Compute rankings using TradingView data
-        from services.ranking_cache import compute_all_rankings_tv
+        from services.ranking_cache import compute_all_rankings_tv, compute_nordic_momentum
         rankings_result = compute_all_rankings_tv(db)
+        
+        # Save daily rankings snapshot for historical rank tracking
+        from models import RankingsSnapshot
+        import json
+        try:
+            nordic_result = compute_nordic_momentum(db)
+            if 'rankings' in nordic_result:
+                # Store compact format: [{ticker, rank, isin}]
+                snapshot_data = [
+                    {'ticker': r['ticker'], 'rank': r['rank'], 'isin': r.get('isin')}
+                    for r in nordic_result['rankings']
+                ]
+                snapshot = RankingsSnapshot(
+                    strategy='nordic_sammansatt_momentum',
+                    snapshot_date=today,
+                    rankings_json=json.dumps(snapshot_data)
+                )
+                db.add(snapshot)
+                db.commit()
+                logger.info(f"Saved daily rankings snapshot: {len(snapshot_data)} stocks")
+        except Exception as e:
+            logger.warning(f"Failed to save rankings snapshot: {e}")
         
         elapsed = time.time() - start_time
         

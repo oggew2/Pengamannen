@@ -4,7 +4,7 @@ Called after daily sync to ensure rankings are ready for users.
 """
 import logging
 import gc
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import pandas as pd
 import yaml
 
@@ -365,6 +365,50 @@ def compute_all_rankings_tv(db) -> dict:
     return {"computed_date": today.isoformat(), "strategies": results, "source": "tradingview"}
 
 
+def get_historical_ranks(db, strategy: str = 'nordic_sammansatt_momentum') -> dict:
+    """
+    Get historical rank lookups for 1d, 1w, 1m ago.
+    Returns: {ticker: {rank_1d: X, rank_1w: Y, rank_1m: Z}, ...}
+    """
+    from models import RankingsSnapshot
+    import json
+    
+    today = date.today()
+    lookups = {
+        'rank_1d': today - timedelta(days=1),
+        'rank_1w': today - timedelta(days=7),
+        'rank_1m': today - timedelta(days=30),
+    }
+    
+    result = {}
+    
+    for key, target_date in lookups.items():
+        # Find closest snapshot on or before target date
+        snapshot = db.query(RankingsSnapshot).filter(
+            RankingsSnapshot.strategy == strategy,
+            RankingsSnapshot.snapshot_date <= target_date
+        ).order_by(RankingsSnapshot.snapshot_date.desc()).first()
+        
+        if snapshot:
+            try:
+                rankings = json.loads(snapshot.rankings_json)
+                for r in rankings:
+                    ticker = r.get('ticker')
+                    if ticker not in result:
+                        result[ticker] = {}
+                    result[ticker][key] = r.get('rank')
+                    # Also store by ISIN for reliable matching
+                    isin = r.get('isin')
+                    if isin:
+                        if isin not in result:
+                            result[isin] = {}
+                        result[isin][key] = r.get('rank')
+            except:
+                pass
+    
+    return result
+
+
 def compute_nordic_momentum(db=None) -> dict:
     """
     Compute Nordic Sammansatt Momentum rankings directly from TradingView.
@@ -438,13 +482,11 @@ def compute_nordic_momentum(db=None) -> dict:
         df_quality = df
     
     # Rank by momentum
-    df_ranked = df_quality.sort_values('momentum', ascending=False)
+    df_ranked = df_quality.sort_values('momentum', ascending=False).reset_index(drop=True)
     
-    # Get top 40 for display (top 10 for portfolio, 11-40 for reference)
-    top40 = df_ranked.head(40)
-    
+    # Return full quality universe (not just top 40) for complete rank visibility
     results = []
-    for rank, (_, row) in enumerate(top40.iterrows(), 1):
+    for rank, (_, row) in enumerate(df_ranked.iterrows(), 1):
         price_sek = row.get('price_sek') or row.get('close', 0)
         price_local = row.get('close', 0)
         results.append({
@@ -487,6 +529,17 @@ def compute_nordic_momentum(db=None) -> dict:
             db.add(signal)
         db.commit()
         logger.info(f"Saved Nordic momentum rankings to database")
+        
+        # Add historical rank data to results
+        historical = get_historical_ranks(db, 'nordic_momentum')
+        for r in results:
+            ticker = r['ticker']
+            isin = r.get('isin')
+            # Try ISIN first, then ticker
+            hist = historical.get(isin) or historical.get(ticker) or {}
+            r['rank_1d'] = hist.get('rank_1d')
+            r['rank_1w'] = hist.get('rank_1w')
+            r['rank_1m'] = hist.get('rank_1m')
     
     # Build FX alert if using fallback rates
     fx_alert = None

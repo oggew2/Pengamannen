@@ -22,6 +22,9 @@ interface LockedHolding {
   buyDate: string;
   rankAtPurchase: number;
   currentRank?: number | null;  // Dynamic rank from API
+  rank1d?: number | null;  // Rank 1 day ago
+  rank1w?: number | null;  // Rank 1 week ago
+  rank1m?: number | null;  // Rank 1 month ago
   fees?: number;  // Transaction fees paid (Avanza courtage)
 }
 
@@ -314,18 +317,31 @@ export function PortfolioTracker() {
         
         // Build lookup maps - prefer ISIN, fallback to normalized ticker
         const normalize = (t: string) => t.replace(/_/g, ' ').toUpperCase();
-        const isinMap = new Map<string, number>();
-        const tickerMap = new Map<string, number>();
+        type RankData = { rank: number; rank_1d?: number; rank_1w?: number; rank_1m?: number };
+        const isinMap = new Map<string, RankData>();
+        const tickerMap = new Map<string, RankData>();
         
         for (const r of data.rankings || []) {
-          if (r.isin) isinMap.set(r.isin, r.rank);
-          tickerMap.set(normalize(r.ticker), r.rank);
+          const rankData: RankData = { 
+            rank: r.rank, 
+            rank_1d: r.rank_1d, 
+            rank_1w: r.rank_1w, 
+            rank_1m: r.rank_1m 
+          };
+          if (r.isin) isinMap.set(r.isin, rankData);
+          tickerMap.set(normalize(r.ticker), rankData);
         }
         
         setHoldings(prev => prev.map(h => {
           // Try ISIN first (most reliable), then normalized ticker
-          const rank = (h.isin && isinMap.get(h.isin)) || tickerMap.get(normalize(h.ticker)) || null;
-          return { ...h, currentRank: rank };
+          const rankData = (h.isin && isinMap.get(h.isin)) || tickerMap.get(normalize(h.ticker));
+          return { 
+            ...h, 
+            currentRank: rankData?.rank ?? null,
+            rank1d: rankData?.rank_1d ?? null,
+            rank1w: rankData?.rank_1w ?? null,
+            rank1m: rankData?.rank_1m ?? null,
+          };
         }));
       } catch { /* ignore */ }
     };
@@ -1336,10 +1352,25 @@ export function PortfolioTracker() {
                 const hasDrift = Math.abs(drift) > 2;
                 const isEditing = editingTicker === h.ticker;
                 
-                // Display rank text
-                const rankDisplay = isNotInUniverse 
-                  ? 'Ej rankad' 
-                  : `#${rank}${rank !== h.rankAtPurchase ? ` (var #${h.rankAtPurchase})` : ''}`;
+                // Calculate rank change (use 1d if available, else 1w, else 1m)
+                const prevRank = h.rank1d ?? h.rank1w ?? h.rank1m;
+                const rankChange = (rank != null && prevRank != null) ? prevRank - rank : null;
+                
+                // Display rank with change indicator
+                const getRankDisplay = () => {
+                  if (isNotInUniverse) return 'Ej rankad';
+                  if (rankChange == null || rankChange === 0) return `#${rank}`;
+                  const arrow = rankChange > 0 ? '▲' : '▼';
+                  const color = rankChange > 0 ? 'green.400' : 'red.400';
+                  return (
+                    <>
+                      #{rank}{' '}
+                      <Text as="span" color={color} fontSize="10px">
+                        {arrow}{Math.abs(rankChange)}
+                      </Text>
+                    </>
+                  );
+                };
                 
                 if (isEditing) {
                   return (
@@ -1383,7 +1414,7 @@ export function PortfolioTracker() {
                         {h.shares} st @ {(h.currency && h.currency !== 'SEK' && h.buyPriceLocal) 
                           ? `${h.buyPriceLocal.toFixed(2)} ${h.currency} ≈${h.buyPrice.toFixed(0)} kr`
                           : `${h.buyPrice.toFixed(2)} kr`}
-                        {' · '}{rankDisplay}
+                        {' · '}{getRankDisplay()}
                         {hasDrift && (
                           isModern 
                             ? <Text as="span"> <AnimatedNumber value={drift} format="percent" showDirection colorize /></Text>
