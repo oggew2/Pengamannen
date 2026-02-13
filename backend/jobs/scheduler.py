@@ -215,7 +215,7 @@ async def tradingview_sync(db, force_refresh: bool = False) -> dict:
                     for r in nordic_result['rankings']
                 ]
                 snapshot = RankingsSnapshot(
-                    strategy='nordic_sammansatt_momentum',
+                    strategy='nordic_momentum',
                     snapshot_date=today,
                     rankings_json=json.dumps(snapshot_data)
                 )
