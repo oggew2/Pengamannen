@@ -1327,12 +1327,19 @@ export function PortfolioTracker() {
             )}
             <HStack gap="8px" flexWrap="wrap" className="stagger-children">
               {holdings.map(h => {
-                const rank = h.currentRank ?? h.rankAtPurchase;
-                const isInDanger = rank && rank > 15;
-                const isSellZone = rank && rank > 20;
+                // null/undefined currentRank means stock dropped out of universe - treat as sell zone
+                const isNotInUniverse = h.currentRank == null;
+                const rank = h.currentRank;
+                const isInDanger = rank != null && rank > 15;
+                const isSellZone = isNotInUniverse || (rank != null && rank > 20);
                 const drift = driftData.holdings.find(d => d.ticker === h.ticker)?.drift ?? 0;
                 const hasDrift = Math.abs(drift) > 2;
                 const isEditing = editingTicker === h.ticker;
+                
+                // Display rank text
+                const rankDisplay = isNotInUniverse 
+                  ? 'Ej rankad' 
+                  : `#${rank}${rank !== h.rankAtPurchase ? ` (var #${h.rankAtPurchase})` : ''}`;
                 
                 if (isEditing) {
                   return (
@@ -1376,7 +1383,7 @@ export function PortfolioTracker() {
                         {h.shares} st @ {(h.currency && h.currency !== 'SEK' && h.buyPriceLocal) 
                           ? `${h.buyPriceLocal.toFixed(2)} ${h.currency} ≈${h.buyPrice.toFixed(0)} kr`
                           : `${h.buyPrice.toFixed(2)} kr`}
-                        {' · '}#{rank}{rank !== h.rankAtPurchase && ` (var #${h.rankAtPurchase})`}
+                        {' · '}{rankDisplay}
                         {hasDrift && (
                           isModern 
                             ? <Text as="span"> <AnimatedNumber value={drift} format="percent" showDirection colorize /></Text>
@@ -1532,7 +1539,9 @@ export function PortfolioTracker() {
                     {rebalanceData.holds.map(h => (
                       <Box key={h.ticker} px="8px" py="4px" bg="bg" borderRadius="4px">
                         <Text fontSize="sm" fontWeight="medium" display="inline">{h.ticker}</Text>
-                        <Text fontSize="xs" color="fg.muted" display="inline" ml="4px">#{h.currentRank}</Text>
+                        <Text fontSize="xs" color="fg.muted" display="inline" ml="4px">
+                          {h.currentRank ? `#${h.currentRank}` : 'Ej rankad'}
+                        </Text>
                       </Box>
                     ))}
                   </HStack>
@@ -1570,7 +1579,7 @@ export function PortfolioTracker() {
                                 <Text fontWeight="medium" color="green.300" textDecoration="underline">{b.ticker}</Text>
                               </a>
                               <Text fontSize="xs" color={isTopup ? 'yellow.400' : 'fg.muted'}>
-                                #{b.currentRank} {isTopup && '↑'}
+                                {b.currentRank ? `#${b.currentRank}` : 'Ej rankad'} {isTopup && '↑'}
                               </Text>
                             </HStack>
                             <HStack gap="4px">

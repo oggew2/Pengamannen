@@ -388,7 +388,7 @@ export function AllocationCalculator() {
               <Text fontSize="sm" color="green.400" fontWeight="medium" mb="8px">KÖP ({formatSEK(rebalanceResult.summary.total_cash_used)})</Text>
               {rebalanceResult.buy.map(b => (
                 <HStack key={b.ticker} justify="space-between" fontSize="sm">
-                  <Text>{b.ticker} <Text as="span" color="fg.muted">(rank {b.rank})</Text></Text>
+                  <Text>{b.ticker} <Text as="span" color="fg.muted">(rank {b.rank ?? '—'})</Text></Text>
                   <Text fontWeight="semibold">{b.shares} st = {formatSEK(b.value)}</Text>
                 </HStack>
               ))}
@@ -413,7 +413,7 @@ export function AllocationCalculator() {
                 <Box as="tbody">
                   {rebalanceResult.final_portfolio.map(p => (
                     <Box as="tr" key={p.ticker} borderBottom="1px solid" borderColor="border">
-                      <Box as="td" py="6px" px="4px">{p.rank}</Box>
+                      <Box as="td" py="6px" px="4px">{p.rank ?? '—'}</Box>
                       <Box as="td" py="6px" px="4px" fontWeight="medium">{p.ticker}</Box>
                       <Box as="td" py="6px" px="4px" textAlign="right">{p.shares}</Box>
                       <Box as="td" py="6px" px="4px" textAlign="right">{formatSEK(p.value)}</Box>
